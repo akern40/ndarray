@@ -37,6 +37,7 @@ use crate::math_cell::MathCell;
 use crate::order::Order;
 use crate::shape_builder::ShapeArg;
 use crate::zip::{IntoNdProducer, Zip};
+use crate::ArrayRef;
 use crate::AxisDescription;
 use crate::{arraytraits, DimMax};
 
@@ -60,15 +61,14 @@ use crate::stacking::concatenate;
 use crate::{NdIndex, Slice, SliceInfoElem};
 
 /// # Methods For All Array Types
-impl<A, S, D> ArrayBase<S, D>
+impl<A, D> ArrayRef<A, D>
 where
-    S: RawData<Elem = A>,
     D: Dimension,
 {
     /// Return the total number of elements in the array.
     pub fn len(&self) -> usize
     {
-        self.dim.size()
+        self.meta().dim.size()
     }
 
     /// Return the length of `axis`.
@@ -80,7 +80,7 @@ where
     #[track_caller]
     pub fn len_of(&self, axis: Axis) -> usize
     {
-        self.dim[axis.index()]
+        self.meta().dim[axis.index()]
     }
 
     /// Return whether the array has any elements
@@ -92,7 +92,7 @@ where
     /// Return the number of dimensions (axes) in the array
     pub fn ndim(&self) -> usize
     {
-        self.dim.ndim()
+        self.meta().dim.ndim()
     }
 
     /// Return the shape of the array in its “pattern” form,
@@ -100,7 +100,7 @@ where
     /// and so on.
     pub fn dim(&self) -> D::Pattern
     {
-        self.dim.clone().into_pattern()
+        self.meta().dim.clone().into_pattern()
     }
 
     /// Return the shape of the array as it's stored in the array.
@@ -119,7 +119,7 @@ where
     /// ```
     pub fn raw_dim(&self) -> D
     {
-        self.dim.clone()
+        self.meta().dim.clone()
     }
 
     /// Return the shape of the array as a slice.
@@ -148,13 +148,13 @@ where
     /// ```
     pub fn shape(&self) -> &[usize]
     {
-        self.dim.slice()
+        self.meta().dim.slice()
     }
 
     /// Return the strides of the array as a slice.
     pub fn strides(&self) -> &[isize]
     {
-        let s = self.strides.slice();
+        let s = self.meta().strides.slice();
         // reinterpret unsigned integer as signed
         unsafe { slice::from_raw_parts(s.as_ptr() as *const _, s.len()) }
     }
@@ -169,23 +169,24 @@ where
     pub fn stride_of(&self, axis: Axis) -> isize
     {
         // strides are reinterpreted as isize
-        self.strides[axis.index()] as isize
+        self.meta().strides[axis.index()] as isize
     }
 
     /// Return a read-only view of the array
     pub fn view(&self) -> ArrayView<'_, A, D>
-    where S: Data
     {
-        debug_assert!(self.pointer_is_inbounds());
-        unsafe { ArrayView::new(self.ptr, self.dim.clone(), self.strides.clone()) }
+        // Can't do this debug assertion since ArrayRef doesn't have access to the .len
+        // debug_assert!(self.pointer_is_inbounds());
+        unsafe { ArrayView::new(self.meta().ptr, self.meta().dim.clone(), self.meta().strides.clone()) }
     }
 
     /// Return a read-write view of the array
     pub fn view_mut(&mut self) -> ArrayViewMut<'_, A, D>
-    where S: DataMut
     {
-        self.ensure_unique();
-        unsafe { ArrayViewMut::new(self.ptr, self.dim.clone(), self.strides.clone()) }
+        // SAFETY: The creation of a mutable view is only sound if the data that this
+        // `ArrayRef` refers to is unique; this is guaranteed by the `Deref` implementation
+        // that gets you an `&mut ArrayRef` calls `ArrayBase::ensure_unique`
+        unsafe { ArrayViewMut::new(self.meta().ptr, self.meta().dim.clone(), self.meta().strides.clone()) }
     }
 
     /// Return a shared view of the array with elements as if they were embedded in cells.
@@ -196,108 +197,8 @@ where
     /// The view acts "as if" the elements are temporarily in cells, and elements
     /// can be changed through shared references using the regular cell methods.
     pub fn cell_view(&mut self) -> ArrayView<'_, MathCell<A>, D>
-    where S: DataMut
     {
         self.view_mut().into_cell_view()
-    }
-
-    /// Return an uniquely owned copy of the array.
-    ///
-    /// If the input array is contiguous, then the output array will have the same
-    /// memory layout. Otherwise, the layout of the output array is unspecified.
-    /// If you need a particular layout, you can allocate a new array with the
-    /// desired memory layout and [`.assign()`](Self::assign) the data.
-    /// Alternatively, you can collectan iterator, like this for a result in
-    /// standard layout:
-    ///
-    /// ```
-    /// # use ndarray::prelude::*;
-    /// # let arr = Array::from_shape_vec((2, 2).f(), vec![1, 2, 3, 4]).unwrap();
-    /// # let owned = {
-    /// Array::from_shape_vec(arr.raw_dim(), arr.iter().cloned().collect()).unwrap()
-    /// # };
-    /// # assert!(owned.is_standard_layout());
-    /// # assert_eq!(arr, owned);
-    /// ```
-    ///
-    /// or this for a result in column-major (Fortran) layout:
-    ///
-    /// ```
-    /// # use ndarray::prelude::*;
-    /// # let arr = Array::from_shape_vec((2, 2), vec![1, 2, 3, 4]).unwrap();
-    /// # let owned = {
-    /// Array::from_shape_vec(arr.raw_dim().f(), arr.t().iter().cloned().collect()).unwrap()
-    /// # };
-    /// # assert!(owned.t().is_standard_layout());
-    /// # assert_eq!(arr, owned);
-    /// ```
-    pub fn to_owned(&self) -> Array<A, D>
-    where
-        A: Clone,
-        S: Data,
-    {
-        if let Some(slc) = self.as_slice_memory_order() {
-            unsafe { Array::from_shape_vec_unchecked(self.dim.clone().strides(self.strides.clone()), slc.to_vec()) }
-        } else {
-            self.map(A::clone)
-        }
-    }
-
-    /// Return a shared ownership (copy on write) array, cloning the array
-    /// elements if necessary.
-    pub fn to_shared(&self) -> ArcArray<A, D>
-    where
-        A: Clone,
-        S: Data,
-    {
-        S::to_shared(self)
-    }
-
-    /// Turn the array into a uniquely owned array, cloning the array elements
-    /// if necessary.
-    pub fn into_owned(self) -> Array<A, D>
-    where
-        A: Clone,
-        S: Data,
-    {
-        S::into_owned(self)
-    }
-
-    /// Converts the array into `Array<A, D>` if this is possible without
-    /// cloning the array elements. Otherwise, returns `self` unchanged.
-    ///
-    /// ```
-    /// use ndarray::{array, rcarr2, ArcArray2, Array2};
-    ///
-    /// // Reference-counted, clone-on-write `ArcArray`.
-    /// let a: ArcArray2<_> = rcarr2(&[[1., 2.], [3., 4.]]);
-    /// {
-    ///     // Another reference to the same data.
-    ///     let b: ArcArray2<_> = a.clone();
-    ///     // Since there are two references to the same data, `.into_owned()`
-    ///     // would require cloning the data, so `.try_into_owned_nocopy()`
-    ///     // returns `Err`.
-    ///     assert!(b.try_into_owned_nocopy().is_err());
-    /// }
-    /// // Here, since the second reference has been dropped, the `ArcArray`
-    /// // can be converted into an `Array` without cloning the data.
-    /// let unique: Array2<_> = a.try_into_owned_nocopy().unwrap();
-    /// assert_eq!(unique, array![[1., 2.], [3., 4.]]);
-    /// ```
-    pub fn try_into_owned_nocopy(self) -> Result<Array<A, D>, Self>
-    where S: Data
-    {
-        S::try_into_owned_nocopy(self)
-    }
-
-    /// Turn the array into a shared ownership (copy on write) array,
-    /// without any copying.
-    pub fn into_shared(self) -> ArcArray<A, D>
-    where S: DataOwned
-    {
-        let data = self.data.into_shared();
-        // safe because: equivalent unmoved data, ptr and dims remain valid
-        unsafe { ArrayBase::from_data_ptr(data, self.ptr).with_strides_dim(self.strides, self.dim) }
     }
 
     /// Returns a reference to the first element of the array, or `None` if it
@@ -316,7 +217,6 @@ where
     /// assert_eq!(b.first(), None);
     /// ```
     pub fn first(&self) -> Option<&A>
-    where S: Data
     {
         if self.is_empty() {
             None
@@ -341,7 +241,6 @@ where
     /// assert_eq!(b.first_mut(), None);
     /// ```
     pub fn first_mut(&mut self) -> Option<&mut A>
-    where S: DataMut
     {
         if self.is_empty() {
             None
@@ -366,7 +265,6 @@ where
     /// assert_eq!(b.last(), None);
     /// ```
     pub fn last(&self) -> Option<&A>
-    where S: Data
     {
         if self.is_empty() {
             None
@@ -395,7 +293,6 @@ where
     /// assert_eq!(b.last_mut(), None);
     /// ```
     pub fn last_mut(&mut self) -> Option<&mut A>
-    where S: DataMut
     {
         if self.is_empty() {
             None
@@ -415,9 +312,9 @@ where
     ///
     /// Iterator element type is `&A`.
     pub fn iter(&self) -> Iter<'_, A, D>
-    where S: Data
     {
-        debug_assert!(self.pointer_is_inbounds());
+        // Can't do this debug assertion since ArrayRef doesn't have access to the .len
+        // debug_assert!(self.pointer_is_inbounds());
         self.view().into_iter_()
     }
 
@@ -428,7 +325,6 @@ where
     ///
     /// Iterator element type is `&mut A`.
     pub fn iter_mut(&mut self) -> IterMut<'_, A, D>
-    where S: DataMut
     {
         self.view_mut().into_iter_()
     }
@@ -442,7 +338,6 @@ where
     ///
     /// See also [`Zip::indexed`]
     pub fn indexed_iter(&self) -> IndexedIter<'_, A, D>
-    where S: Data
     {
         IndexedIter::new(self.view().into_elements_base())
     }
@@ -454,7 +349,6 @@ where
     ///
     /// Iterator element type is `(D::Pattern, &mut A)`.
     pub fn indexed_iter_mut(&mut self) -> IndexedIterMut<'_, A, D>
-    where S: DataMut
     {
         IndexedIterMut::new(self.view_mut().into_elements_base())
     }
@@ -470,7 +364,6 @@ where
     pub fn slice<I>(&self, info: I) -> ArrayView<'_, A, I::OutDim>
     where
         I: SliceArg<D>,
-        S: Data,
     {
         self.view().slice_move(info)
     }
@@ -486,7 +379,6 @@ where
     pub fn slice_mut<I>(&mut self, info: I) -> ArrayViewMut<'_, A, I::OutDim>
     where
         I: SliceArg<D>,
-        S: DataMut,
     {
         self.view_mut().slice_move(info)
     }
@@ -518,65 +410,8 @@ where
     pub fn multi_slice_mut<'a, M>(&'a mut self, info: M) -> M::Output
     where
         M: MultiSliceArg<'a, A, D>,
-        S: DataMut,
     {
         info.multi_slice_move(self.view_mut())
-    }
-
-    /// Slice the array, possibly changing the number of dimensions.
-    ///
-    /// See [*Slicing*](#slicing) for full documentation.
-    /// See also [`s!`], [`SliceArg`], and [`SliceInfo`](crate::SliceInfo).
-    ///
-    /// **Panics** if an index is out of bounds or step size is zero.<br>
-    /// (**Panics** if `D` is `IxDyn` and `info` does not match the number of array axes.)
-    #[track_caller]
-    pub fn slice_move<I>(mut self, info: I) -> ArrayBase<S, I::OutDim>
-    where I: SliceArg<D>
-    {
-        assert_eq!(
-            info.in_ndim(),
-            self.ndim(),
-            "The input dimension of `info` must match the array to be sliced.",
-        );
-        let out_ndim = info.out_ndim();
-        let mut new_dim = I::OutDim::zeros(out_ndim);
-        let mut new_strides = I::OutDim::zeros(out_ndim);
-
-        let mut old_axis = 0;
-        let mut new_axis = 0;
-        info.as_ref().iter().for_each(|&ax_info| match ax_info {
-            SliceInfoElem::Slice { start, end, step } => {
-                // Slice the axis in-place to update the `dim`, `strides`, and `ptr`.
-                self.slice_axis_inplace(Axis(old_axis), Slice { start, end, step });
-                // Copy the sliced dim and stride to corresponding axis.
-                new_dim[new_axis] = self.dim[old_axis];
-                new_strides[new_axis] = self.strides[old_axis];
-                old_axis += 1;
-                new_axis += 1;
-            }
-            SliceInfoElem::Index(index) => {
-                // Collapse the axis in-place to update the `ptr`.
-                let i_usize = abs_index(self.len_of(Axis(old_axis)), index);
-                self.collapse_axis(Axis(old_axis), i_usize);
-                // Skip copying the axis since it should be removed. Note that
-                // removing this axis is safe because `.collapse_axis()` panics
-                // if the index is out-of-bounds, so it will panic if the axis
-                // is zero length.
-                old_axis += 1;
-            }
-            SliceInfoElem::NewAxis => {
-                // Set the dim and stride of the new axis.
-                new_dim[new_axis] = 1;
-                new_strides[new_axis] = 0;
-                new_axis += 1;
-            }
-        });
-        debug_assert_eq!(old_axis, self.ndim());
-        debug_assert_eq!(new_axis, out_ndim);
-
-        // safe because new dimension, strides allow access to a subset of old data
-        unsafe { self.with_strides_dim(new_strides, new_dim) }
     }
 
     /// Slice the array in place without changing the number of dimensions.
@@ -631,7 +466,6 @@ where
     #[track_caller]
     #[must_use = "slice_axis returns an array view with the sliced result"]
     pub fn slice_axis(&self, axis: Axis, indices: Slice) -> ArrayView<'_, A, D>
-    where S: Data
     {
         let mut view = self.view();
         view.slice_axis_inplace(axis, indices);
@@ -645,37 +479,10 @@ where
     #[track_caller]
     #[must_use = "slice_axis_mut returns an array view with the sliced result"]
     pub fn slice_axis_mut(&mut self, axis: Axis, indices: Slice) -> ArrayViewMut<'_, A, D>
-    where S: DataMut
     {
         let mut view_mut = self.view_mut();
         view_mut.slice_axis_inplace(axis, indices);
         view_mut
-    }
-
-    /// Slice the array in place along the specified axis.
-    ///
-    /// **Panics** if an index is out of bounds or step size is zero.<br>
-    /// **Panics** if `axis` is out of bounds.
-    #[track_caller]
-    pub fn slice_axis_inplace(&mut self, axis: Axis, indices: Slice)
-    {
-        let offset =
-            do_slice(&mut self.dim.slice_mut()[axis.index()], &mut self.strides.slice_mut()[axis.index()], indices);
-        unsafe {
-            self.ptr = self.ptr.offset(offset);
-        }
-        debug_assert!(self.pointer_is_inbounds());
-    }
-
-    /// Slice the array in place along the specified axis, then return the sliced array.
-    ///
-    /// **Panics** if an index is out of bounds or step size is zero.<br>
-    /// **Panics** if `axis` is out of bounds.
-    #[must_use = "slice_axis_move returns an array with the sliced result"]
-    pub fn slice_axis_move(mut self, axis: Axis, indices: Slice) -> Self
-    {
-        self.slice_axis_inplace(axis, indices);
-        self
     }
 
     /// Return a view of a slice of the array, with a closure specifying the
@@ -689,7 +496,6 @@ where
     pub fn slice_each_axis<F>(&self, f: F) -> ArrayView<'_, A, D>
     where
         F: FnMut(AxisDescription) -> Slice,
-        S: Data,
     {
         let mut view = self.view();
         view.slice_each_axis_inplace(f);
@@ -707,34 +513,10 @@ where
     pub fn slice_each_axis_mut<F>(&mut self, f: F) -> ArrayViewMut<'_, A, D>
     where
         F: FnMut(AxisDescription) -> Slice,
-        S: DataMut,
     {
         let mut view = self.view_mut();
         view.slice_each_axis_inplace(f);
         view
-    }
-
-    /// Slice the array in place, with a closure specifying the slice for each
-    /// axis.
-    ///
-    /// This is especially useful for code which is generic over the
-    /// dimensionality of the array.
-    ///
-    /// **Panics** if an index is out of bounds or step size is zero.
-    #[track_caller]
-    pub fn slice_each_axis_inplace<F>(&mut self, mut f: F)
-    where F: FnMut(AxisDescription) -> Slice
-    {
-        for ax in 0..self.ndim() {
-            self.slice_axis_inplace(
-                Axis(ax),
-                f(AxisDescription {
-                    axis: Axis(ax),
-                    len: self.dim[ax],
-                    stride: self.strides[ax] as isize,
-                }),
-            )
-        }
     }
 
     /// Return a reference to the element at `index`, or return `None`
@@ -757,7 +539,6 @@ where
     /// ```
     pub fn get<I>(&self, index: I) -> Option<&A>
     where
-        S: Data,
         I: NdIndex<D>,
     {
         unsafe { self.get_ptr(index).map(|ptr| &*ptr) }
@@ -779,9 +560,9 @@ where
     pub fn get_ptr<I>(&self, index: I) -> Option<*const A>
     where I: NdIndex<D>
     {
-        let ptr = self.ptr;
+        let ptr = self.meta().ptr;
         index
-            .index_checked(&self.dim, &self.strides)
+            .index_checked(&self.meta().dim, &self.meta().strides)
             .map(move |offset| unsafe { ptr.as_ptr().offset(offset) as *const _ })
     }
 
@@ -789,7 +570,6 @@ where
     /// if the index is out of bounds.
     pub fn get_mut<I>(&mut self, index: I) -> Option<&mut A>
     where
-        S: DataMut,
         I: NdIndex<D>,
     {
         unsafe { self.get_mut_ptr(index).map(|ptr| &mut *ptr) }
@@ -814,14 +594,13 @@ where
     /// ```
     pub fn get_mut_ptr<I>(&mut self, index: I) -> Option<*mut A>
     where
-        S: RawDataMut,
         I: NdIndex<D>,
     {
         // const and mut are separate to enforce &mutness as well as the
         // extra code in as_mut_ptr
         let ptr = self.as_mut_ptr();
         index
-            .index_checked(&self.dim, &self.strides)
+            .index_checked(&self.meta().dim, &self.meta().strides)
             .map(move |offset| unsafe { ptr.offset(offset) })
     }
 
@@ -837,12 +616,11 @@ where
     #[inline]
     pub unsafe fn uget<I>(&self, index: I) -> &A
     where
-        S: Data,
         I: NdIndex<D>,
     {
         arraytraits::debug_bounds_check(self, &index);
-        let off = index.index_unchecked(&self.strides);
-        &*self.ptr.as_ptr().offset(off)
+        let off = index.index_unchecked(&self.meta().strides);
+        &*self.meta().ptr.as_ptr().offset(off)
     }
 
     /// Perform *unchecked* array indexing.
@@ -862,13 +640,12 @@ where
     #[inline]
     pub unsafe fn uget_mut<I>(&mut self, index: I) -> &mut A
     where
-        S: DataMut,
         I: NdIndex<D>,
     {
         debug_assert!(self.data.is_unique());
         arraytraits::debug_bounds_check(self, &index);
-        let off = index.index_unchecked(&self.strides);
-        &mut *self.ptr.as_ptr().offset(off)
+        let off = index.index_unchecked(&self.meta().strides);
+        &mut *self.meta().ptr.as_ptr().offset(off)
     }
 
     /// Swap elements at indices `index1` and `index2`.
@@ -879,12 +656,11 @@ where
     #[track_caller]
     pub fn swap<I>(&mut self, index1: I, index2: I)
     where
-        S: DataMut,
         I: NdIndex<D>,
     {
         let ptr = self.as_mut_ptr();
-        let offset1 = index1.index_checked(&self.dim, &self.strides);
-        let offset2 = index2.index_checked(&self.dim, &self.strides);
+        let offset1 = index1.index_checked(&self.meta().dim, &self.meta().strides);
+        let offset2 = index2.index_checked(&self.meta().dim, &self.meta().strides);
         if let Some(offset1) = offset1 {
             if let Some(offset2) = offset2 {
                 unsafe {
@@ -912,21 +688,19 @@ where
     ///    for `Array` and `ArrayViewMut`, but not for `ArcArray` or `CowArray`.)
     pub unsafe fn uswap<I>(&mut self, index1: I, index2: I)
     where
-        S: DataMut,
         I: NdIndex<D>,
     {
         debug_assert!(self.data.is_unique());
         arraytraits::debug_bounds_check(self, &index1);
         arraytraits::debug_bounds_check(self, &index2);
-        let off1 = index1.index_unchecked(&self.strides);
-        let off2 = index2.index_unchecked(&self.strides);
-        std::ptr::swap(self.ptr.as_ptr().offset(off1), self.ptr.as_ptr().offset(off2));
+        let off1 = index1.index_unchecked(&self.meta().strides);
+        let off2 = index2.index_unchecked(&self.meta().strides);
+        std::ptr::swap(self.meta().ptr.as_ptr().offset(off1), self.meta().ptr.as_ptr().offset(off2));
     }
 
     // `get` for zero-dimensional arrays
     // panics if dimension is not zero. otherwise an element is always present.
     fn get_0d(&self) -> &A
-    where S: Data
     {
         assert!(self.ndim() == 0);
         unsafe { &*self.as_ptr() }
@@ -956,7 +730,6 @@ where
     #[track_caller]
     pub fn index_axis(&self, axis: Axis, index: usize) -> ArrayView<'_, A, D::Smaller>
     where
-        S: Data,
         D: RemoveAxis,
     {
         self.view().index_axis_move(axis, index)
@@ -989,37 +762,9 @@ where
     #[track_caller]
     pub fn index_axis_mut(&mut self, axis: Axis, index: usize) -> ArrayViewMut<'_, A, D::Smaller>
     where
-        S: DataMut,
         D: RemoveAxis,
     {
         self.view_mut().index_axis_move(axis, index)
-    }
-
-    /// Collapses the array to `index` along the axis and removes the axis.
-    ///
-    /// See [`.index_axis()`](Self::index_axis) and [*Subviews*](#subviews) for full documentation.
-    ///
-    /// **Panics** if `axis` or `index` is out of bounds.
-    #[track_caller]
-    pub fn index_axis_move(mut self, axis: Axis, index: usize) -> ArrayBase<S, D::Smaller>
-    where D: RemoveAxis
-    {
-        self.collapse_axis(axis, index);
-        let dim = self.dim.remove_axis(axis);
-        let strides = self.strides.remove_axis(axis);
-        // safe because new dimension, strides allow access to a subset of old data
-        unsafe { self.with_strides_dim(strides, dim) }
-    }
-
-    /// Selects `index` along the axis, collapsing the axis into length one.
-    ///
-    /// **Panics** if `axis` or `index` is out of bounds.
-    #[track_caller]
-    pub fn collapse_axis(&mut self, axis: Axis, index: usize)
-    {
-        let offset = dimension::do_collapse_axis(&mut self.dim, &self.strides, axis.index(), index);
-        self.ptr = unsafe { self.ptr.offset(offset) };
-        debug_assert!(self.pointer_is_inbounds());
     }
 
     /// Along `axis`, select arbitrary subviews corresponding to `indices`
@@ -1047,7 +792,6 @@ where
     pub fn select(&self, axis: Axis, indices: &[Ix]) -> Array<A, D>
     where
         A: Clone,
-        S: Data,
         D: RemoveAxis,
     {
         if self.ndim() == 1 {
@@ -1109,7 +853,6 @@ where
     /// }
     /// ```
     pub fn rows(&self) -> Lanes<'_, A, D::Smaller>
-    where S: Data
     {
         let mut n = self.ndim();
         if n == 0 {
@@ -1120,7 +863,6 @@ where
 
     #[deprecated(note = "Renamed to .rows()", since = "0.15.0")]
     pub fn genrows(&self) -> Lanes<'_, A, D::Smaller>
-    where S: Data
     {
         self.rows()
     }
@@ -1130,7 +872,6 @@ where
     ///
     /// Iterator element is `ArrayView1<A>` (1D read-write array view).
     pub fn rows_mut(&mut self) -> LanesMut<'_, A, D::Smaller>
-    where S: DataMut
     {
         let mut n = self.ndim();
         if n == 0 {
@@ -1141,7 +882,6 @@ where
 
     #[deprecated(note = "Renamed to .rows_mut()", since = "0.15.0")]
     pub fn genrows_mut(&mut self) -> LanesMut<'_, A, D::Smaller>
-    where S: DataMut
     {
         self.rows_mut()
     }
@@ -1173,7 +913,6 @@ where
     /// }
     /// ```
     pub fn columns(&self) -> Lanes<'_, A, D::Smaller>
-    where S: Data
     {
         Lanes::new(self.view(), Axis(0))
     }
@@ -1184,7 +923,6 @@ where
     /// Renamed to `.columns()`
     #[deprecated(note = "Renamed to .columns()", since = "0.15.0")]
     pub fn gencolumns(&self) -> Lanes<'_, A, D::Smaller>
-    where S: Data
     {
         self.columns()
     }
@@ -1194,7 +932,6 @@ where
     ///
     /// Iterator element is `ArrayView1<A>` (1D read-write array view).
     pub fn columns_mut(&mut self) -> LanesMut<'_, A, D::Smaller>
-    where S: DataMut
     {
         LanesMut::new(self.view_mut(), Axis(0))
     }
@@ -1205,7 +942,6 @@ where
     /// Renamed to `.columns_mut()`
     #[deprecated(note = "Renamed to .columns_mut()", since = "0.15.0")]
     pub fn gencolumns_mut(&mut self) -> LanesMut<'_, A, D::Smaller>
-    where S: DataMut
     {
         self.columns_mut()
     }
@@ -1239,7 +975,6 @@ where
     /// assert_eq!(inner2.into_iter().next().unwrap(), aview1(&[0, 1, 2]));
     /// ```
     pub fn lanes(&self, axis: Axis) -> Lanes<'_, A, D::Smaller>
-    where S: Data
     {
         Lanes::new(self.view(), axis)
     }
@@ -1249,7 +984,6 @@ where
     ///
     /// Iterator element is `ArrayViewMut1<A>` (1D read-write array view).
     pub fn lanes_mut(&mut self, axis: Axis) -> LanesMut<'_, A, D::Smaller>
-    where S: DataMut
     {
         LanesMut::new(self.view_mut(), axis)
     }
@@ -1263,7 +997,6 @@ where
     #[allow(deprecated)]
     pub fn outer_iter(&self) -> AxisIter<'_, A, D::Smaller>
     where
-        S: Data,
         D: RemoveAxis,
     {
         self.view().into_outer_iter()
@@ -1278,7 +1011,6 @@ where
     #[allow(deprecated)]
     pub fn outer_iter_mut(&mut self) -> AxisIterMut<'_, A, D::Smaller>
     where
-        S: DataMut,
         D: RemoveAxis,
     {
         self.view_mut().into_outer_iter()
@@ -1302,7 +1034,6 @@ where
     #[track_caller]
     pub fn axis_iter(&self, axis: Axis) -> AxisIter<'_, A, D::Smaller>
     where
-        S: Data,
         D: RemoveAxis,
     {
         AxisIter::new(self.view(), axis)
@@ -1318,7 +1049,6 @@ where
     #[track_caller]
     pub fn axis_iter_mut(&mut self, axis: Axis) -> AxisIterMut<'_, A, D::Smaller>
     where
-        S: DataMut,
         D: RemoveAxis,
     {
         AxisIterMut::new(self.view_mut(), axis)
@@ -1352,7 +1082,6 @@ where
     /// ```
     #[track_caller]
     pub fn axis_chunks_iter(&self, axis: Axis, size: usize) -> AxisChunksIter<'_, A, D>
-    where S: Data
     {
         AxisChunksIter::new(self.view(), axis, size)
     }
@@ -1365,7 +1094,6 @@ where
     /// **Panics** if `axis` is out of bounds or if `size` is zero.
     #[track_caller]
     pub fn axis_chunks_iter_mut(&mut self, axis: Axis, size: usize) -> AxisChunksIterMut<'_, A, D>
-    where S: DataMut
     {
         AxisChunksIterMut::new(self.view_mut(), axis, size)
     }
@@ -1385,7 +1113,6 @@ where
     pub fn exact_chunks<E>(&self, chunk_size: E) -> ExactChunks<'_, A, D>
     where
         E: IntoDimension<Dim = D>,
-        S: Data,
     {
         ExactChunks::new(self.view(), chunk_size)
     }
@@ -1426,7 +1153,6 @@ where
     pub fn exact_chunks_mut<E>(&mut self, chunk_size: E) -> ExactChunksMut<'_, A, D>
     where
         E: IntoDimension<Dim = D>,
-        S: DataMut,
     {
         ExactChunksMut::new(self.view_mut(), chunk_size)
     }
@@ -1441,7 +1167,6 @@ where
     pub fn windows<E>(&self, window_size: E) -> Windows<'_, A, D>
     where
         E: IntoDimension<Dim = D>,
-        S: Data,
     {
         Windows::new(self.view(), window_size)
     }
@@ -1494,7 +1219,6 @@ where
     pub fn windows_with_stride<E>(&self, window_size: E, stride: E) -> Windows<'_, A, D>
     where
         E: IntoDimension<Dim = D>,
-        S: Data,
     {
         Windows::new_with_stride(self.view(), window_size, stride)
     }
@@ -1521,7 +1245,6 @@ where
     /// }
     /// ```
     pub fn axis_windows(&self, axis: Axis, window_size: usize) -> Windows<'_, A, D>
-    where S: Data
     {
         let axis_index = axis.index();
 
@@ -1546,7 +1269,7 @@ where
     fn diag_params(&self) -> (Ix, Ixs)
     {
         /* empty shape has len 1 */
-        let len = self.dim.slice().iter().cloned().min().unwrap_or(1);
+        let len = self.meta().dim.slice().iter().cloned().min().unwrap_or(1);
         let stride = self.strides().iter().sum();
         (len, stride)
     }
@@ -1556,48 +1279,14 @@ where
     /// The diagonal is simply the sequence indexed by *(0, 0, .., 0)*,
     /// *(1, 1, ..., 1)* etc as long as all axes have elements.
     pub fn diag(&self) -> ArrayView1<'_, A>
-    where S: Data
     {
         self.view().into_diag()
     }
 
     /// Return a read-write view over the diagonal elements of the array.
     pub fn diag_mut(&mut self) -> ArrayViewMut1<'_, A>
-    where S: DataMut
     {
         self.view_mut().into_diag()
-    }
-
-    /// Return the diagonal as a one-dimensional array.
-    pub fn into_diag(self) -> ArrayBase<S, Ix1>
-    {
-        let (len, stride) = self.diag_params();
-        // safe because new len stride allows access to a subset of the current elements
-        unsafe { self.with_strides_dim(Ix1(stride as Ix), Ix1(len)) }
-    }
-
-    /// Try to make the array unshared.
-    ///
-    /// This is equivalent to `.ensure_unique()` if `S: DataMut`.
-    ///
-    /// This method is mostly only useful with unsafe code.
-    fn try_ensure_unique(&mut self)
-    where S: RawDataMut
-    {
-        debug_assert!(self.pointer_is_inbounds());
-        S::try_ensure_unique(self);
-        debug_assert!(self.pointer_is_inbounds());
-    }
-
-    /// Make the array unshared.
-    ///
-    /// This method is mostly only useful with unsafe code.
-    fn ensure_unique(&mut self)
-    where S: DataMut
-    {
-        debug_assert!(self.pointer_is_inbounds());
-        S::ensure_unique(self);
-        debug_assert!(self.pointer_is_inbounds());
     }
 
     /// Return `true` if the array data is laid out in contiguous “C order” in
@@ -1607,13 +1296,13 @@ where
     /// contiguous in memory, it has custom strides, etc.
     pub fn is_standard_layout(&self) -> bool
     {
-        dimension::is_layout_c(&self.dim, &self.strides)
+        dimension::is_layout_c(&self.meta().dim, &self.meta().strides)
     }
 
     /// Return true if the array is known to be contiguous.
     pub(crate) fn is_contiguous(&self) -> bool
     {
-        D::is_contiguous(&self.dim, &self.strides)
+        D::is_contiguous(&self.meta().dim, &self.meta().strides)
     }
 
     /// Return a standard-layout array containing the data, cloning if
@@ -1640,14 +1329,13 @@ where
     /// ```
     pub fn as_standard_layout(&self) -> CowArray<'_, A, D>
     where
-        S: Data<Elem = A>,
         A: Clone,
     {
         if self.is_standard_layout() {
             CowArray::from(self.view())
         } else {
             let v = crate::iterators::to_vec_mapped(self.iter(), A::clone);
-            let dim = self.dim.clone();
+            let dim = self.meta().dim.clone();
             debug_assert_eq!(v.len(), dim.size());
 
             unsafe {
@@ -1670,13 +1358,10 @@ where
     #[inline(always)]
     pub fn as_ptr(&self) -> *const A
     {
-        self.ptr.as_ptr() as *const A
+        self.meta().ptr.as_ptr() as *const A
     }
 
     /// Return a mutable pointer to the first element in the array.
-    ///
-    /// This method attempts to unshare the data. If `S: DataMut`, then the
-    /// data is guaranteed to be uniquely held on return.
     ///
     /// # Warning
     ///
@@ -1685,17 +1370,18 @@ where
     /// the data may change the strides.
     #[inline(always)]
     pub fn as_mut_ptr(&mut self) -> *mut A
-    where S: RawDataMut
     {
-        self.try_ensure_unique(); // for ArcArray
-        self.ptr.as_ptr()
+        // This ensure unique would have already been performed when the
+        // `ArrayRef` was created.
+        // self.try_ensure_unique(); // for ArcArray
+        self.meta().ptr.as_ptr()
     }
 
     /// Return a raw view of the array.
     #[inline]
     pub fn raw_view(&self) -> RawArrayView<A, D>
     {
-        unsafe { RawArrayView::new(self.ptr, self.dim.clone(), self.strides.clone()) }
+        unsafe { RawArrayView::new(self.meta().ptr, self.meta().dim.clone(), self.meta().strides.clone()) }
     }
 
     /// Return a raw mutable view of the array.
@@ -1704,20 +1390,11 @@ where
     /// data is guaranteed to be uniquely held on return.
     #[inline]
     pub fn raw_view_mut(&mut self) -> RawArrayViewMut<A, D>
-    where S: RawDataMut
     {
-        self.try_ensure_unique(); // for ArcArray
-        unsafe { RawArrayViewMut::new(self.ptr, self.dim.clone(), self.strides.clone()) }
-    }
-
-    /// Return a raw mutable view of the array.
-    ///
-    /// Safety: The caller must ensure that the owned array is unshared when this is called
-    #[inline]
-    pub(crate) unsafe fn raw_view_mut_unchecked(&mut self) -> RawArrayViewMut<A, D>
-    where S: DataOwned
-    {
-        RawArrayViewMut::new(self.ptr, self.dim.clone(), self.strides.clone())
+        // This ensure unique would have already been performed when the
+        // `ArrayRef` was created.
+        // self.try_ensure_unique(); // for ArcArray
+        unsafe { RawArrayViewMut::new(self.meta().ptr, self.meta().dim.clone(), self.meta().strides.clone()) }
     }
 
     /// Return the array’s data as a slice, if it is contiguous and in standard order.
@@ -1726,10 +1403,9 @@ where
     /// If this function returns `Some(_)`, then the element order in the slice
     /// corresponds to the logical order of the array’s elements.
     pub fn as_slice(&self) -> Option<&[A]>
-    where S: Data
     {
         if self.is_standard_layout() {
-            unsafe { Some(slice::from_raw_parts(self.ptr.as_ptr(), self.len())) }
+            unsafe { Some(slice::from_raw_parts(self.meta().ptr.as_ptr(), self.len())) }
         } else {
             None
         }
@@ -1738,11 +1414,12 @@ where
     /// Return the array’s data as a slice, if it is contiguous and in standard order.
     /// Return `None` otherwise.
     pub fn as_slice_mut(&mut self) -> Option<&mut [A]>
-    where S: DataMut
     {
         if self.is_standard_layout() {
-            self.ensure_unique();
-            unsafe { Some(slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len())) }
+            // This ensure unique would have already been performed when the
+            // `ArrayRef` was created.
+            // self.ensure_unique();
+            unsafe { Some(slice::from_raw_parts_mut(self.meta().ptr.as_ptr(), self.len())) }
         } else {
             None
         }
@@ -1754,11 +1431,10 @@ where
     /// If this function returns `Some(_)`, then the elements in the slice
     /// have whatever order the elements have in memory.
     pub fn as_slice_memory_order(&self) -> Option<&[A]>
-    where S: Data
     {
         if self.is_contiguous() {
-            let offset = offset_from_low_addr_ptr_to_logical_ptr(&self.dim, &self.strides);
-            unsafe { Some(slice::from_raw_parts(self.ptr.sub(offset).as_ptr(), self.len())) }
+            let offset = offset_from_low_addr_ptr_to_logical_ptr(&self.meta().dim, &self.meta().strides);
+            unsafe { Some(slice::from_raw_parts(self.meta().ptr.sub(offset).as_ptr(), self.len())) }
         } else {
             None
         }
@@ -1771,7 +1447,6 @@ where
     /// method unshares the data if necessary, but it preserves the existing
     /// strides.
     pub fn as_slice_memory_order_mut(&mut self) -> Option<&mut [A]>
-    where S: DataMut
     {
         self.try_as_slice_memory_order_mut().ok()
     }
@@ -1779,12 +1454,13 @@ where
     /// Return the array’s data as a slice if it is contiguous, otherwise
     /// return `self` in the `Err` variant.
     pub(crate) fn try_as_slice_memory_order_mut(&mut self) -> Result<&mut [A], &mut Self>
-    where S: DataMut
     {
         if self.is_contiguous() {
-            self.ensure_unique();
-            let offset = offset_from_low_addr_ptr_to_logical_ptr(&self.dim, &self.strides);
-            unsafe { Ok(slice::from_raw_parts_mut(self.ptr.sub(offset).as_ptr(), self.len())) }
+            // This ensure unique would have already been performed when the
+            // `ArrayRef` was created.
+            // self.ensure_unique();
+            let offset = offset_from_low_addr_ptr_to_logical_ptr(&self.meta().dim, &self.meta().strides);
+            unsafe { Ok(slice::from_raw_parts_mut(self.meta().ptr.sub(offset).as_ptr(), self.len())) }
         } else {
             Err(self)
         }
@@ -1849,7 +1525,6 @@ where
     where
         E: ShapeArg,
         A: Clone,
-        S: Data,
     {
         let (shape, order) = new_shape.into_shape_and_order();
         self.to_shape_order(shape, order.unwrap_or(Order::RowMajor))
@@ -1859,11 +1534,10 @@ where
     where
         E: Dimension,
         A: Clone,
-        S: Data,
     {
-        let len = self.dim.size();
+        let len = self.meta().dim.size();
         if size_of_shape_checked(&shape) != Ok(len) {
-            return Err(error::incompatible_shapes(&self.dim, &shape));
+            return Err(error::incompatible_shapes(&self.meta().dim, &shape));
         }
 
         // Create a view if the length is 0, safe because the array and new shape is empty.
@@ -1874,12 +1548,12 @@ where
         }
 
         // Try to reshape the array as a view into the existing data
-        match reshape_dim(&self.dim, &self.strides, &shape, order) {
+        match reshape_dim(&self.meta().dim, &self.meta().strides, &shape, order) {
             Ok(to_strides) => unsafe {
-                return Ok(CowArray::from(ArrayView::new(self.ptr, shape, to_strides)));
+                return Ok(CowArray::from(ArrayView::new(self.meta().ptr, shape, to_strides)));
             },
             Err(err) if err.kind() == ErrorKind::IncompatibleShape => {
-                return Err(error::incompatible_shapes(&self.dim, &shape));
+                return Err(error::incompatible_shapes(&self.meta().dim, &shape));
             }
             _otherwise => {}
         }
@@ -1892,6 +1566,802 @@ where
             };
             Ok(CowArray::from(Array::from_shape_trusted_iter_unchecked(shape, view.into_iter(), A::clone)))
         }
+    }
+
+    /// Act like a larger size and/or shape array by *broadcasting*
+    /// into a larger shape, if possible.
+    ///
+    /// Return `None` if shapes can not be broadcast together.
+    ///
+    /// ***Background***
+    ///
+    ///  * Two axes are compatible if they are equal, or one of them is 1.
+    ///  * In this instance, only the axes of the smaller side (self) can be 1.
+    ///
+    /// Compare axes beginning with the *last* axis of each shape.
+    ///
+    /// For example (1, 2, 4) can be broadcast into (7, 6, 2, 4)
+    /// because its axes are either equal or 1 (or missing);
+    /// while (2, 2) can *not* be broadcast into (2, 4).
+    ///
+    /// The implementation creates a view with strides set to zero for the
+    /// axes that are to be repeated.
+    ///
+    /// The broadcasting documentation for Numpy has more information.
+    ///
+    /// ```
+    /// use ndarray::{aview1, aview2};
+    ///
+    /// assert!(
+    ///     aview1(&[1., 0.]).broadcast((10, 2)).unwrap()
+    ///     == aview2(&[[1., 0.]; 10])
+    /// );
+    /// ```
+    pub fn broadcast<E>(&self, dim: E) -> Option<ArrayView<'_, A, E::Dim>>
+    where
+        E: IntoDimension,
+    {
+        /// Return new stride when trying to grow `from` into shape `to`
+        ///
+        /// Broadcasting works by returning a "fake stride" where elements
+        /// to repeat are in axes with 0 stride, so that several indexes point
+        /// to the same element.
+        ///
+        /// **Note:** Cannot be used for mutable iterators, since repeating
+        /// elements would create aliasing pointers.
+        fn upcast<D: Dimension, E: Dimension>(to: &D, from: &E, stride: &E) -> Option<D>
+        {
+            // Make sure the product of non-zero axis lengths does not exceed
+            // `isize::MAX`. This is the only safety check we need to perform
+            // because all the other constraints of `ArrayBase` are guaranteed
+            // to be met since we're starting from a valid `ArrayBase`.
+            let _ = size_of_shape_checked(to).ok()?;
+
+            let mut new_stride = to.clone();
+            // begin at the back (the least significant dimension)
+            // size of the axis has to either agree or `from` has to be 1
+            if to.ndim() < from.ndim() {
+                return None;
+            }
+
+            {
+                let mut new_stride_iter = new_stride.slice_mut().iter_mut().rev();
+                for ((er, es), dr) in from
+                    .slice()
+                    .iter()
+                    .rev()
+                    .zip(stride.slice().iter().rev())
+                    .zip(new_stride_iter.by_ref())
+                {
+                    /* update strides */
+                    if *dr == *er {
+                        /* keep stride */
+                        *dr = *es;
+                    } else if *er == 1 {
+                        /* dead dimension, zero stride */
+                        *dr = 0
+                    } else {
+                        return None;
+                    }
+                }
+
+                /* set remaining strides to zero */
+                for dr in new_stride_iter {
+                    *dr = 0;
+                }
+            }
+            Some(new_stride)
+        }
+        let dim = dim.into_dimension();
+
+        // Note: zero strides are safe precisely because we return an read-only view
+        let broadcast_strides = match upcast(&dim, &self.meta().dim, &self.meta().strides) {
+            Some(st) => st,
+            None => return None,
+        };
+        unsafe { Some(ArrayView::new(self.meta().ptr, dim, broadcast_strides)) }
+    }
+
+    /// For two arrays or views, find their common shape if possible and
+    /// broadcast them as array views into that shape.
+    ///
+    /// Return `ShapeError` if their shapes can not be broadcast together.
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn broadcast_with<'a, 'b, B, E>(
+        &'a self, other: &'b ArrayRef<B, E>,
+    ) -> Result<(ArrayView<'a, A, DimMaxOf<D, E>>, ArrayView<'b, B, DimMaxOf<D, E>>), ShapeError>
+    where
+        D: Dimension + DimMax<E>,
+        E: Dimension,
+    {
+        let shape = co_broadcast::<D, E, <D as DimMax<E>>::Output>(&self.meta().dim, &other.meta().dim)?;
+        let view1 = if shape.slice() == self.meta().dim.slice() {
+            self.view()
+                .into_dimensionality::<<D as DimMax<E>>::Output>()
+                .unwrap()
+        } else if let Some(view1) = self.broadcast(shape.clone()) {
+            view1
+        } else {
+            return Err(from_kind(ErrorKind::IncompatibleShape));
+        };
+        let view2 = if shape.slice() == other.meta().dim.slice() {
+            other
+                .view()
+                .into_dimensionality::<<D as DimMax<E>>::Output>()
+                .unwrap()
+        } else if let Some(view2) = other.broadcast(shape) {
+            view2
+        } else {
+            return Err(from_kind(ErrorKind::IncompatibleShape));
+        };
+        Ok((view1, view2))
+    }
+
+    /// Swap axes `ax` and `bx`.
+    ///
+    /// This does not move any data, it just adjusts the array’s dimensions
+    /// and strides.
+    ///
+    /// **Panics** if the axes are out of bounds.
+    ///
+    /// ```
+    /// use ndarray::arr2;
+    ///
+    /// let mut a = arr2(&[[1., 2., 3.]]);
+    /// a.swap_axes(0, 1);
+    /// assert!(
+    ///     a == arr2(&[[1.], [2.], [3.]])
+    /// );
+    /// ```
+    #[track_caller]
+    pub fn swap_axes(&mut self, ax: usize, bx: usize)
+    {
+        self.meta().dim.slice_mut().swap(ax, bx);
+        self.meta().strides.slice_mut().swap(ax, bx);
+    }
+
+    /// Return a transposed view of the array.
+    ///
+    /// This is a shorthand for `self.view().reversed_axes()`.
+    ///
+    /// See also the more general methods `.reversed_axes()` and `.swap_axes()`.
+    pub fn t(&self) -> ArrayView<'_, A, D>
+    {
+        self.view().reversed_axes()
+    }
+
+    /// Return an iterator over the length and stride of each axis.
+    pub fn axes(&self) -> Axes<'_, D>
+    {
+        axes_of(&self.meta().dim, &self.meta().strides)
+    }
+
+    /*
+    /// Return the axis with the least stride (by absolute value)
+    pub fn min_stride_axis(&self) -> Axis {
+        self.meta().dim.min_stride_axis(&self.meta().strides)
+    }
+    */
+
+    /// Return the axis with the greatest stride (by absolute value),
+    /// preferring axes with len > 1.
+    pub fn max_stride_axis(&self) -> Axis
+    {
+        self.meta().dim.max_stride_axis(&self.meta().strides)
+    }
+
+    /// Reverse the stride of `axis`.
+    ///
+    /// ***Panics*** if the axis is out of bounds.
+    #[track_caller]
+    pub fn invert_axis(&mut self, axis: Axis)
+    {
+        unsafe {
+            let s = self.meta().strides.axis(axis) as Ixs;
+            let m = self.meta().dim.axis(axis);
+            if m != 0 {
+                self.meta().ptr = self.meta().ptr.offset(stride_offset(m - 1, s as Ix));
+            }
+            self.meta().strides.set_axis(axis, (-s) as Ix);
+        }
+    }
+
+    /// If possible, merge in the axis `take` to `into`.
+    ///
+    /// Returns `true` iff the axes are now merged.
+    ///
+    /// This method merges the axes if movement along the two original axes
+    /// (moving fastest along the `into` axis) can be equivalently represented
+    /// as movement along one (merged) axis. Merging the axes preserves this
+    /// order in the merged axis. If `take` and `into` are the same axis, then
+    /// the axis is "merged" if its length is ≤ 1.
+    ///
+    /// If the return value is `true`, then the following hold:
+    ///
+    /// * The new length of the `into` axis is the product of the original
+    ///   lengths of the two axes.
+    ///
+    /// * The new length of the `take` axis is 0 if the product of the original
+    ///   lengths of the two axes is 0, and 1 otherwise.
+    ///
+    /// If the return value is `false`, then merging is not possible, and the
+    /// original shape and strides have been preserved.
+    ///
+    /// Note that the ordering constraint means that if it's possible to merge
+    /// `take` into `into`, it's usually not possible to merge `into` into
+    /// `take`, and vice versa.
+    ///
+    /// ```
+    /// use ndarray::Array3;
+    /// use ndarray::Axis;
+    ///
+    /// let mut a = Array3::<f64>::zeros((2, 3, 4));
+    /// assert!(a.merge_axes(Axis(1), Axis(2)));
+    /// assert_eq!(a.shape(), &[2, 1, 12]);
+    /// ```
+    ///
+    /// ***Panics*** if an axis is out of bounds.
+    #[track_caller]
+    pub fn merge_axes(&mut self, take: Axis, into: Axis) -> bool
+    {
+        merge_axes(&mut self.meta().dim, &mut self.meta().strides, take, into)
+    }
+
+    /// Perform an elementwise assigment to `self` from `rhs`.
+    ///
+    /// If their shapes disagree, `rhs` is broadcast to the shape of `self`.
+    ///
+    /// **Panics** if broadcasting isn’t possible.
+    #[track_caller]
+    pub fn assign<E: Dimension>(&mut self, rhs: &ArrayRef<A, E>)
+    where
+        A: Clone,
+    {
+        self.zip_mut_with(rhs, |x, y| x.clone_from(y));
+    }
+
+    /// Perform an elementwise assigment of values cloned from `self` into array or producer `to`.
+    ///
+    /// The destination `to` can be another array or a producer of assignable elements.
+    /// [`AssignElem`] determines how elements are assigned.
+    ///
+    /// **Panics** if shapes disagree.
+    #[track_caller]
+    pub fn assign_to<P>(&self, to: P)
+    where
+        P: IntoNdProducer<Dim = D>,
+        P::Item: AssignElem<A>,
+        A: Clone,
+    {
+        Zip::from(self).map_assign_into(to, A::clone);
+    }
+
+    /// Perform an elementwise assigment to `self` from element `x`.
+    pub fn fill(&mut self, x: A)
+    where
+        A: Clone,
+    {
+        self.map_inplace(move |elt| elt.clone_from(&x));
+    }
+
+    pub(crate) fn zip_mut_with_same_shape<B, E, F>(&mut self, rhs: &ArrayRef<B, E>, mut f: F)
+    where
+        E: Dimension,
+        F: FnMut(&mut A, &B),
+    {
+        debug_assert_eq!(self.shape(), rhs.shape());
+
+        if self.meta().dim.strides_equivalent(&self.meta().strides, &rhs.meta().strides) {
+            if let Some(self_s) = self.as_slice_memory_order_mut() {
+                if let Some(rhs_s) = rhs.as_slice_memory_order() {
+                    for (s, r) in self_s.iter_mut().zip(rhs_s) {
+                        f(s, r);
+                    }
+                    return;
+                }
+            }
+        }
+
+        // Otherwise, fall back to the outer iter
+        self.zip_mut_with_by_rows(rhs, f);
+    }
+
+    // zip two arrays where they have different layout or strides
+    #[inline(always)]
+    fn zip_mut_with_by_rows<B, E, F>(&mut self, rhs: &ArrayRef<B, E>, mut f: F)
+    where
+        E: Dimension,
+        F: FnMut(&mut A, &B),
+    {
+        debug_assert_eq!(self.shape(), rhs.shape());
+        debug_assert_ne!(self.ndim(), 0);
+
+        // break the arrays up into their inner rows
+        let n = self.ndim();
+        let dim = self.raw_dim();
+        Zip::from(LanesMut::new(self.view_mut(), Axis(n - 1)))
+            .and(Lanes::new(rhs.broadcast_assume(dim), Axis(n - 1)))
+            .for_each(move |s_row, r_row| Zip::from(s_row).and(r_row).for_each(|a, b| f(a, b)));
+    }
+
+    fn zip_mut_with_elem<B, F>(&mut self, rhs_elem: &B, mut f: F)
+    where
+        F: FnMut(&mut A, &B),
+    {
+        self.map_inplace(move |elt| f(elt, rhs_elem));
+    }
+
+    /// Traverse two arrays in unspecified order, in lock step,
+    /// calling the closure `f` on each element pair.
+    ///
+    /// If their shapes disagree, `rhs` is broadcast to the shape of `self`.
+    ///
+    /// **Panics** if broadcasting isn’t possible.
+    #[track_caller]
+    #[inline]
+    pub fn zip_mut_with<B, E, F>(&mut self, rhs: &ArrayRef<B, E>, f: F)
+    where
+        E: Dimension,
+        F: FnMut(&mut A, &B),
+    {
+        if rhs.meta().dim.ndim() == 0 {
+            // Skip broadcast from 0-dim array
+            self.zip_mut_with_elem(rhs.get_0d(), f);
+        } else if self.meta().dim.ndim() == rhs.meta().dim.ndim() && self.shape() == rhs.shape() {
+            self.zip_mut_with_same_shape(rhs, f);
+        } else {
+            let rhs_broadcast = rhs.broadcast_unwrap(self.raw_dim());
+            self.zip_mut_with_by_rows(&rhs_broadcast, f);
+        }
+    }
+
+    /// Traverse the array elements and apply a fold,
+    /// returning the resulting value.
+    ///
+    /// Elements are visited in arbitrary order.
+    pub fn fold<'a, F, B>(&'a self, init: B, f: F) -> B
+    where
+        F: FnMut(B, &'a A) -> B,
+        A: 'a,
+    {
+        if let Some(slc) = self.as_slice_memory_order() {
+            slc.iter().fold(init, f)
+        } else {
+            let mut v = self.view();
+            move_min_stride_axis_to_last(&mut v.meta().dim, &mut v.meta().strides);
+            v.into_elements_base().fold(init, f)
+        }
+    }
+
+    /// Call `f` by reference on each element and create a new array
+    /// with the new values.
+    ///
+    /// Elements are visited in arbitrary order.
+    ///
+    /// Return an array with the same shape as `self`.
+    ///
+    /// ```
+    /// use ndarray::arr2;
+    ///
+    /// let a = arr2(&[[ 0., 1.],
+    ///                [-1., 2.]]);
+    /// assert!(
+    ///     a.map(|x| *x >= 1.0)
+    ///     == arr2(&[[false, true],
+    ///               [false, true]])
+    /// );
+    /// ```
+    pub fn map<'a, B, F>(&'a self, f: F) -> Array<B, D>
+    where
+        F: FnMut(&'a A) -> B,
+        A: 'a,
+    {
+        unsafe {
+            if let Some(slc) = self.as_slice_memory_order() {
+                ArrayBase::from_shape_trusted_iter_unchecked(
+                    self.meta().dim.clone().strides(self.meta().strides.clone()),
+                    slc.iter(),
+                    f,
+                )
+            } else {
+                ArrayBase::from_shape_trusted_iter_unchecked(self.meta().dim.clone(), self.iter(), f)
+            }
+        }
+    }
+
+    /// Call `f` on a mutable reference of each element and create a new array
+    /// with the new values.
+    ///
+    /// Elements are visited in arbitrary order.
+    ///
+    /// Return an array with the same shape as `self`.
+    pub fn map_mut<'a, B, F>(&'a mut self, f: F) -> Array<B, D>
+    where
+        F: FnMut(&'a mut A) -> B,
+        A: 'a,
+    {
+        let dim = self.meta().dim.clone();
+        if self.is_contiguous() {
+            let strides = self.meta().strides.clone();
+            let slc = self.as_slice_memory_order_mut().unwrap();
+            unsafe { ArrayBase::from_shape_trusted_iter_unchecked(dim.meta().strides(strides), slc.iter_mut(), f) }
+        } else {
+            unsafe { ArrayBase::from_shape_trusted_iter_unchecked(dim, self.iter_mut(), f) }
+        }
+    }
+
+    /// Call `f` by **v**alue on each element and create a new array
+    /// with the new values.
+    ///
+    /// Elements are visited in arbitrary order.
+    ///
+    /// Return an array with the same shape as `self`.
+    ///
+    /// ```
+    /// use ndarray::arr2;
+    ///
+    /// let a = arr2(&[[ 0., 1.],
+    ///                [-1., 2.]]);
+    /// assert!(
+    ///     a.mapv(f32::abs) == arr2(&[[0., 1.],
+    ///                                [1., 2.]])
+    /// );
+    /// ```
+    pub fn mapv<B, F>(&self, mut f: F) -> Array<B, D>
+    where
+        F: FnMut(A) -> B,
+        A: Clone,
+    {
+        self.map(move |x| f(x.clone()))
+    }
+
+    /// Modify the array in place by calling `f` by mutable reference on each element.
+    ///
+    /// Elements are visited in arbitrary order.
+    pub fn map_inplace<'a, F>(&'a mut self, f: F)
+    where
+        A: 'a,
+        F: FnMut(&'a mut A),
+    {
+        match self.try_as_slice_memory_order_mut() {
+            Ok(slc) => slc.iter_mut().for_each(f),
+            Err(arr) => {
+                let mut v = arr.view_mut();
+                move_min_stride_axis_to_last(&mut v.meta().dim, &mut v.meta().strides);
+                v.into_elements_base().for_each(f);
+            }
+        }
+    }
+
+    /// Modify the array in place by calling `f` by **v**alue on each element.
+    /// The array is updated with the new values.
+    ///
+    /// Elements are visited in arbitrary order.
+    ///
+    /// ```
+    /// # #[cfg(feature = "approx")] {
+    /// use approx::assert_abs_diff_eq;
+    /// use ndarray::arr2;
+    ///
+    /// let mut a = arr2(&[[ 0., 1.],
+    ///                    [-1., 2.]]);
+    /// a.mapv_inplace(f32::exp);
+    /// assert_abs_diff_eq!(
+    ///     a,
+    ///     arr2(&[[1.00000, 2.71828],
+    ///            [0.36788, 7.38906]]),
+    ///     epsilon = 1e-5,
+    /// );
+    /// # }
+    /// ```
+    pub fn mapv_inplace<F>(&mut self, mut f: F)
+    where
+        F: FnMut(A) -> A,
+        A: Clone,
+    {
+        self.map_inplace(move |x| *x = f(x.clone()));
+    }
+
+    /// Call `f` for each element in the array.
+    ///
+    /// Elements are visited in arbitrary order.
+    pub fn for_each<'a, F>(&'a self, mut f: F)
+    where
+        F: FnMut(&'a A),
+        A: 'a,
+    {
+        self.fold((), move |(), elt| f(elt))
+    }
+
+    /// Visit each element in the array by calling `f` by reference
+    /// on each element.
+    ///
+    /// Elements are visited in arbitrary order.
+    #[deprecated(note = "Renamed to .for_each()", since = "0.15.0")]
+    pub fn visit<'a, F>(&'a self, f: F)
+    where
+        F: FnMut(&'a A),
+        A: 'a,
+    {
+        self.for_each(f)
+    }
+
+    /// Fold along an axis.
+    ///
+    /// Combine the elements of each subview with the previous using the `fold`
+    /// function and initial value `init`.
+    ///
+    /// Return the result as an `Array`.
+    ///
+    /// **Panics** if `axis` is out of bounds.
+    #[track_caller]
+    pub fn fold_axis<B, F>(&self, axis: Axis, init: B, mut fold: F) -> Array<B, D::Smaller>
+    where
+        D: RemoveAxis,
+        F: FnMut(&B, &A) -> B,
+        B: Clone,
+    {
+        let mut res = Array::from_elem(self.raw_dim().remove_axis(axis), init);
+        for subview in self.axis_iter(axis) {
+            res.zip_mut_with(&subview, |x, y| *x = fold(x, y));
+        }
+        res
+    }
+
+    /// Reduce the values along an axis into just one value, producing a new
+    /// array with one less dimension.
+    ///
+    /// Elements are visited in arbitrary order.
+    ///
+    /// Return the result as an `Array`.
+    ///
+    /// **Panics** if `axis` is out of bounds.
+    #[track_caller]
+    pub fn map_axis<'a, B, F>(&'a self, axis: Axis, mut mapping: F) -> Array<B, D::Smaller>
+    where
+        D: RemoveAxis,
+        F: FnMut(ArrayView1<'a, A>) -> B,
+        A: 'a,
+    {
+        if self.len_of(axis) == 0 {
+            let new_dim = self.meta().dim.remove_axis(axis);
+            Array::from_shape_simple_fn(new_dim, move || mapping(ArrayView::from(&[])))
+        } else {
+            Zip::from(self.lanes(axis)).map_collect(mapping)
+        }
+    }
+}
+
+impl<A, S, D> ArrayBase<S, D>
+where S: RawData<Elem = A>, D: Dimension
+{
+    /// Make the array unshared.
+    ///
+    /// This method is mostly only useful with unsafe code.
+    pub(crate) fn ensure_unique(&mut self)
+    {
+        debug_assert!(self.pointer_is_inbounds());
+        S::ensure_unique(self);
+        debug_assert!(self.pointer_is_inbounds());
+    }
+
+    /// Try to make the array unshared.
+    ///
+    /// This is equivalent to `.ensure_unique()` if `S: DataMut`.
+    ///
+    /// This method is mostly only useful with unsafe code.
+    fn try_ensure_unique(&mut self)
+    where S: RawDataMut
+    {
+        debug_assert!(self.pointer_is_inbounds());
+        S::try_ensure_unique(self);
+        debug_assert!(self.pointer_is_inbounds());
+    }
+
+    /// Return a raw mutable view of the array.
+    ///
+    /// Safety: The caller must ensure that the owned array is unshared when this is called
+    #[inline]
+    pub(crate) unsafe fn raw_view_mut_unchecked(&mut self) -> RawArrayViewMut<A, D>
+    {
+        RawArrayViewMut::new(self.meta.ptr, self.meta.dim.clone(), self.meta.strides.clone())
+    }
+
+    /// Return a shared ownership (copy on write) array, cloning the array
+    /// elements if necessary.
+    pub fn to_shared(&self) -> ArcArray<A, D>
+    where
+        A: Clone,
+        S: Data,
+    {
+        S::to_shared(self)
+    }
+
+    /// Turn the array into a uniquely owned array, cloning the array elements
+    /// if necessary.
+    pub fn into_owned(self) -> Array<A, D>
+    where
+        A: Clone,
+        S: Data,
+    {
+        S::into_owned(self)
+    }
+
+    /// Converts the array into `Array<A, D>` if this is possible without
+    /// cloning the array elements. Otherwise, returns `self` unchanged.
+    ///
+    /// ```
+    /// use ndarray::{array, rcarr2, ArcArray2, Array2};
+    ///
+    /// // Reference-counted, clone-on-write `ArcArray`.
+    /// let a: ArcArray2<_> = rcarr2(&[[1., 2.], [3., 4.]]);
+    /// {
+    ///     // Another reference to the same data.
+    ///     let b: ArcArray2<_> = a.clone();
+    ///     // Since there are two references to the same data, `.into_owned()`
+    ///     // would require cloning the data, so `.try_into_owned_nocopy()`
+    ///     // returns `Err`.
+    ///     assert!(b.try_into_owned_nocopy().is_err());
+    /// }
+    /// // Here, since the second reference has been dropped, the `ArcArray`
+    /// // can be converted into an `Array` without cloning the data.
+    /// let unique: Array2<_> = a.try_into_owned_nocopy().unwrap();
+    /// assert_eq!(unique, array![[1., 2.], [3., 4.]]);
+    /// ```
+    pub fn try_into_owned_nocopy(self) -> Result<Array<A, D>, Self>
+    where S: Data
+    {
+        S::try_into_owned_nocopy(self)
+    }
+
+    /// Turn the array into a shared ownership (copy on write) array,
+    /// without any copying.
+    pub fn into_shared(self) -> ArcArray<A, D>
+    where S: DataOwned
+    {
+        let data = self.data.into_shared();
+        // safe because: equivalent unmoved data, ptr and dims remain valid
+        unsafe { ArrayBase::from_data_ptr(data, self.meta.ptr).with_strides_dim(self.meta.strides, self.meta.dim) }
+    }
+
+    /// Slice the array, possibly changing the number of dimensions.
+    ///
+    /// See [*Slicing*](#slicing) for full documentation.
+    /// See also [`s!`], [`SliceArg`], and [`SliceInfo`](crate::SliceInfo).
+    ///
+    /// **Panics** if an index is out of bounds or step size is zero.<br>
+    /// (**Panics** if `D` is `IxDyn` and `info` does not match the number of array axes.)
+    #[track_caller]
+    pub fn slice_move<I>(mut self, info: I) -> ArrayBase<S, I::OutDim>
+    where I: SliceArg<D>
+    {
+        assert_eq!(
+            info.in_ndim(),
+            self.ndim(),
+            "The input dimension of `info` must match the array to be sliced.",
+        );
+        let out_ndim = info.out_ndim();
+        let mut new_dim = I::OutDim::zeros(out_ndim);
+        let mut new_strides = I::OutDim::zeros(out_ndim);
+
+        let mut old_axis = 0;
+        let mut new_axis = 0;
+        info.as_ref().iter().for_each(|&ax_info| match ax_info {
+            SliceInfoElem::Slice { start, end, step } => {
+                // Slice the axis in-place to update the `dim`, `strides`, and `ptr`.
+                self.slice_axis_inplace(Axis(old_axis), Slice { start, end, step });
+                // Copy the sliced dim and stride to corresponding axis.
+                new_dim[new_axis] = self.meta.dim[old_axis];
+                new_strides[new_axis] = self.meta.strides[old_axis];
+                old_axis += 1;
+                new_axis += 1;
+            }
+            SliceInfoElem::Index(index) => {
+                // Collapse the axis in-place to update the `ptr`.
+                let i_usize = abs_index(self.len_of(Axis(old_axis)), index);
+                self.collapse_axis(Axis(old_axis), i_usize);
+                // Skip copying the axis since it should be removed. Note that
+                // removing this axis is safe because `.collapse_axis()` panics
+                // if the index is out-of-bounds, so it will panic if the axis
+                // is zero length.
+                old_axis += 1;
+            }
+            SliceInfoElem::NewAxis => {
+                // Set the dim and stride of the new axis.
+                new_dim[new_axis] = 1;
+                new_strides[new_axis] = 0;
+                new_axis += 1;
+            }
+        });
+        debug_assert_eq!(old_axis, self.ndim());
+        debug_assert_eq!(new_axis, out_ndim);
+
+        // safe because new dimension, strides allow access to a subset of old data
+        unsafe { self.with_strides_dim(new_strides, new_dim) }
+    }
+
+    /// Slice the array in place along the specified axis.
+    ///
+    /// **Panics** if an index is out of bounds or step size is zero.<br>
+    /// **Panics** if `axis` is out of bounds.
+    #[track_caller]
+    pub fn slice_axis_inplace(&mut self, axis: Axis, indices: Slice)
+    {
+        let offset =
+            do_slice(&mut self.meta.dim.slice_mut()[axis.index()], &mut self.meta.strides.slice_mut()[axis.index()], indices);
+        unsafe {
+            self.meta.ptr = self.meta.ptr.offset(offset);
+        }
+        debug_assert!(self.pointer_is_inbounds());
+    }
+
+    /// Slice the array in place along the specified axis, then return the sliced array.
+    ///
+    /// **Panics** if an index is out of bounds or step size is zero.<br>
+    /// **Panics** if `axis` is out of bounds.
+    #[must_use = "slice_axis_move returns an array with the sliced result"]
+    pub fn slice_axis_move(mut self, axis: Axis, indices: Slice) -> Self
+    {
+        self.slice_axis_inplace(axis, indices);
+        self
+    }
+
+    /// Slice the array in place, with a closure specifying the slice for each
+    /// axis.
+    ///
+    /// This is especially useful for code which is generic over the
+    /// dimensionality of the array.
+    ///
+    /// **Panics** if an index is out of bounds or step size is zero.
+    #[track_caller]
+    pub fn slice_each_axis_inplace<F>(&mut self, mut f: F)
+    where F: FnMut(AxisDescription) -> Slice
+    {
+        for ax in 0..self.ndim() {
+            self.slice_axis_inplace(
+                Axis(ax),
+                f(AxisDescription {
+                    axis: Axis(ax),
+                    len: self.meta.dim[ax],
+                    stride: self.meta.strides[ax] as isize,
+                }),
+            )
+        }
+    }
+
+    /// Collapses the array to `index` along the axis and removes the axis.
+    ///
+    /// See [`.index_axis()`](Self::index_axis) and [*Subviews*](#subviews) for full documentation.
+    ///
+    /// **Panics** if `axis` or `index` is out of bounds.
+    #[track_caller]
+    pub fn index_axis_move(mut self, axis: Axis, index: usize) -> ArrayBase<S, D::Smaller>
+    where D: RemoveAxis
+    {
+        self.collapse_axis(axis, index);
+        let dim = self.meta.dim.remove_axis(axis);
+        let strides = self.meta.strides.remove_axis(axis);
+        // safe because new dimension, strides allow access to a subset of old data
+        unsafe { self.with_strides_dim(strides, dim) }
+    }
+
+    /// Selects `index` along the axis, collapsing the axis into length one.
+    ///
+    /// **Panics** if `axis` or `index` is out of bounds.
+    #[track_caller]
+    pub fn collapse_axis(&mut self, axis: Axis, index: usize)
+    {
+        let offset = dimension::do_collapse_axis(&mut self.meta.dim, &self.meta.strides, axis.index(), index);
+        self.meta.ptr = unsafe { self.meta.ptr.offset(offset) };
+        debug_assert!(self.pointer_is_inbounds());
+    }
+
+    /// Return the diagonal as a one-dimensional array.
+    pub fn into_diag(self) -> ArrayBase<S, Ix1>
+    {
+        let (len, stride) = self.diag_params();
+        // safe because new len stride allows access to a subset of the current elements
+        unsafe { self.with_strides_dim(Ix1(stride as Ix), Ix1(len)) }
     }
 
     /// Transform the array into `shape`; any shape with the same number of
@@ -1950,8 +2420,8 @@ where
     where E: Dimension
     {
         let shape = shape.into_dimension();
-        if size_of_shape_checked(&shape) != Ok(self.dim.size()) {
-            return Err(error::incompatible_shapes(&self.dim, &shape));
+        if size_of_shape_checked(&shape) != Ok(self.meta().dim.size()) {
+            return Err(error::incompatible_shapes(&self.meta().dim, &shape));
         }
 
         // Check if contiguous, then we can change shape
@@ -1995,8 +2465,8 @@ where
     where E: IntoDimension
     {
         let shape = shape.into_dimension();
-        if size_of_shape_checked(&shape) != Ok(self.dim.size()) {
-            return Err(error::incompatible_shapes(&self.dim, &shape));
+        if size_of_shape_checked(&shape) != Ok(self.meta().dim.size()) {
+            return Err(error::incompatible_shapes(&self.meta().dim, &shape));
         }
         // Check if contiguous, if not => copy all, else just adapt strides
         unsafe {
@@ -2043,9 +2513,9 @@ where
         A: Clone,
         E: Dimension,
     {
-        let len = self.dim.size();
+        let len = self.meta().dim.size();
         if size_of_shape_checked(&shape) != Ok(len) {
-            return Err(error::incompatible_shapes(&self.dim, &shape));
+            return Err(error::incompatible_shapes(&self.meta().dim, &shape));
         }
 
         // Safe because the array and new shape is empty.
@@ -2056,12 +2526,12 @@ where
         }
 
         // Try to reshape the array's current data
-        match reshape_dim(&self.dim, &self.strides, &shape, order) {
+        match reshape_dim(&self.meta().dim, &self.meta().strides, &shape, order) {
             Ok(to_strides) => unsafe {
                 return Ok(self.with_strides_dim(to_strides, shape));
             },
             Err(err) if err.kind() == ErrorKind::IncompatibleShape => {
-                return Err(error::incompatible_shapes(&self.dim, &shape));
+                return Err(error::incompatible_shapes(&self.meta().dim, &shape));
             }
             _otherwise => {}
         }
@@ -2112,10 +2582,10 @@ where
         E: IntoDimension,
     {
         let shape = shape.into_dimension();
-        if size_of_shape_checked(&shape) != Ok(self.dim.size()) {
+        if size_of_shape_checked(&shape) != Ok(self.meta().dim.size()) {
             panic!(
                 "ndarray: incompatible shapes in reshape, attempted from: {:?}, to: {:?}",
-                self.dim.slice(),
+                self.meta().dim.slice(),
                 shape.slice()
             )
         }
@@ -2143,7 +2613,7 @@ where
     {
         // safe because new dims equivalent
         unsafe {
-            ArrayBase::from_data_ptr(self.data, self.ptr).with_strides_dim(self.strides.into_dyn(), self.dim.into_dyn())
+            ArrayBase::from_data_ptr(self.data, self.meta().ptr).with_strides_dim(self.meta().strides.into_dyn(), self.meta().dim.into_dyn())
         }
     }
 
@@ -2169,175 +2639,20 @@ where
         unsafe {
             if D::NDIM == D2::NDIM {
                 // safe because D == D2
-                let dim = unlimited_transmute::<D, D2>(self.dim);
-                let strides = unlimited_transmute::<D, D2>(self.strides);
-                return Ok(ArrayBase::from_data_ptr(self.data, self.ptr).with_strides_dim(strides, dim));
+                let dim = unlimited_transmute::<D, D2>(self.meta().dim);
+                let strides = unlimited_transmute::<D, D2>(self.meta().strides);
+                return Ok(ArrayBase::from_data_ptr(self.data, self.meta().ptr).with_strides_dim(strides, dim));
             } else if D::NDIM.is_none() || D2::NDIM.is_none() {
                 // one is dynamic dim
                 // safe because dim, strides are equivalent under a different type
-                if let Some(dim) = D2::from_dimension(&self.dim) {
-                    if let Some(strides) = D2::from_dimension(&self.strides) {
+                if let Some(dim) = D2::from_dimension(&self.meta().dim) {
+                    if let Some(strides) = D2::from_dimension(&self.meta().strides) {
                         return Ok(self.with_strides_dim(strides, dim));
                     }
                 }
             }
         }
         Err(ShapeError::from_kind(ErrorKind::IncompatibleShape))
-    }
-
-    /// Act like a larger size and/or shape array by *broadcasting*
-    /// into a larger shape, if possible.
-    ///
-    /// Return `None` if shapes can not be broadcast together.
-    ///
-    /// ***Background***
-    ///
-    ///  * Two axes are compatible if they are equal, or one of them is 1.
-    ///  * In this instance, only the axes of the smaller side (self) can be 1.
-    ///
-    /// Compare axes beginning with the *last* axis of each shape.
-    ///
-    /// For example (1, 2, 4) can be broadcast into (7, 6, 2, 4)
-    /// because its axes are either equal or 1 (or missing);
-    /// while (2, 2) can *not* be broadcast into (2, 4).
-    ///
-    /// The implementation creates a view with strides set to zero for the
-    /// axes that are to be repeated.
-    ///
-    /// The broadcasting documentation for Numpy has more information.
-    ///
-    /// ```
-    /// use ndarray::{aview1, aview2};
-    ///
-    /// assert!(
-    ///     aview1(&[1., 0.]).broadcast((10, 2)).unwrap()
-    ///     == aview2(&[[1., 0.]; 10])
-    /// );
-    /// ```
-    pub fn broadcast<E>(&self, dim: E) -> Option<ArrayView<'_, A, E::Dim>>
-    where
-        E: IntoDimension,
-        S: Data,
-    {
-        /// Return new stride when trying to grow `from` into shape `to`
-        ///
-        /// Broadcasting works by returning a "fake stride" where elements
-        /// to repeat are in axes with 0 stride, so that several indexes point
-        /// to the same element.
-        ///
-        /// **Note:** Cannot be used for mutable iterators, since repeating
-        /// elements would create aliasing pointers.
-        fn upcast<D: Dimension, E: Dimension>(to: &D, from: &E, stride: &E) -> Option<D>
-        {
-            // Make sure the product of non-zero axis lengths does not exceed
-            // `isize::MAX`. This is the only safety check we need to perform
-            // because all the other constraints of `ArrayBase` are guaranteed
-            // to be met since we're starting from a valid `ArrayBase`.
-            let _ = size_of_shape_checked(to).ok()?;
-
-            let mut new_stride = to.clone();
-            // begin at the back (the least significant dimension)
-            // size of the axis has to either agree or `from` has to be 1
-            if to.ndim() < from.ndim() {
-                return None;
-            }
-
-            {
-                let mut new_stride_iter = new_stride.slice_mut().iter_mut().rev();
-                for ((er, es), dr) in from
-                    .slice()
-                    .iter()
-                    .rev()
-                    .zip(stride.slice().iter().rev())
-                    .zip(new_stride_iter.by_ref())
-                {
-                    /* update strides */
-                    if *dr == *er {
-                        /* keep stride */
-                        *dr = *es;
-                    } else if *er == 1 {
-                        /* dead dimension, zero stride */
-                        *dr = 0
-                    } else {
-                        return None;
-                    }
-                }
-
-                /* set remaining strides to zero */
-                for dr in new_stride_iter {
-                    *dr = 0;
-                }
-            }
-            Some(new_stride)
-        }
-        let dim = dim.into_dimension();
-
-        // Note: zero strides are safe precisely because we return an read-only view
-        let broadcast_strides = match upcast(&dim, &self.dim, &self.strides) {
-            Some(st) => st,
-            None => return None,
-        };
-        unsafe { Some(ArrayView::new(self.ptr, dim, broadcast_strides)) }
-    }
-
-    /// For two arrays or views, find their common shape if possible and
-    /// broadcast them as array views into that shape.
-    ///
-    /// Return `ShapeError` if their shapes can not be broadcast together.
-    #[allow(clippy::type_complexity)]
-    pub(crate) fn broadcast_with<'a, 'b, B, S2, E>(
-        &'a self, other: &'b ArrayBase<S2, E>,
-    ) -> Result<(ArrayView<'a, A, DimMaxOf<D, E>>, ArrayView<'b, B, DimMaxOf<D, E>>), ShapeError>
-    where
-        S: Data<Elem = A>,
-        S2: Data<Elem = B>,
-        D: Dimension + DimMax<E>,
-        E: Dimension,
-    {
-        let shape = co_broadcast::<D, E, <D as DimMax<E>>::Output>(&self.dim, &other.dim)?;
-        let view1 = if shape.slice() == self.dim.slice() {
-            self.view()
-                .into_dimensionality::<<D as DimMax<E>>::Output>()
-                .unwrap()
-        } else if let Some(view1) = self.broadcast(shape.clone()) {
-            view1
-        } else {
-            return Err(from_kind(ErrorKind::IncompatibleShape));
-        };
-        let view2 = if shape.slice() == other.dim.slice() {
-            other
-                .view()
-                .into_dimensionality::<<D as DimMax<E>>::Output>()
-                .unwrap()
-        } else if let Some(view2) = other.broadcast(shape) {
-            view2
-        } else {
-            return Err(from_kind(ErrorKind::IncompatibleShape));
-        };
-        Ok((view1, view2))
-    }
-
-    /// Swap axes `ax` and `bx`.
-    ///
-    /// This does not move any data, it just adjusts the array’s dimensions
-    /// and strides.
-    ///
-    /// **Panics** if the axes are out of bounds.
-    ///
-    /// ```
-    /// use ndarray::arr2;
-    ///
-    /// let mut a = arr2(&[[1., 2., 3.]]);
-    /// a.swap_axes(0, 1);
-    /// assert!(
-    ///     a == arr2(&[[1.], [2.], [3.]])
-    /// );
-    /// ```
-    #[track_caller]
-    pub fn swap_axes(&mut self, ax: usize, bx: usize)
-    {
-        self.dim.slice_mut().swap(ax, bx);
-        self.strides.slice_mut().swap(ax, bx);
     }
 
     /// Permute the axes.
@@ -2379,8 +2694,8 @@ where
         let mut new_dim = usage_counts; // reuse to avoid an allocation
         let mut new_strides = D::zeros(self.ndim());
         {
-            let dim = self.dim.slice();
-            let strides = self.strides.slice();
+            let dim = self.meta().dim.slice();
+            let strides = self.meta().strides.slice();
             for (new_axis, &axis) in axes.slice().iter().enumerate() {
                 new_dim[new_axis] = dim[axis];
                 new_strides[new_axis] = strides[axis];
@@ -2396,97 +2711,9 @@ where
     /// while retaining the same data.
     pub fn reversed_axes(mut self) -> ArrayBase<S, D>
     {
-        self.dim.slice_mut().reverse();
-        self.strides.slice_mut().reverse();
+        self.meta().dim.slice_mut().reverse();
+        self.meta().strides.slice_mut().reverse();
         self
-    }
-
-    /// Return a transposed view of the array.
-    ///
-    /// This is a shorthand for `self.view().reversed_axes()`.
-    ///
-    /// See also the more general methods `.reversed_axes()` and `.swap_axes()`.
-    pub fn t(&self) -> ArrayView<'_, A, D>
-    where S: Data
-    {
-        self.view().reversed_axes()
-    }
-
-    /// Return an iterator over the length and stride of each axis.
-    pub fn axes(&self) -> Axes<'_, D>
-    {
-        axes_of(&self.dim, &self.strides)
-    }
-
-    /*
-    /// Return the axis with the least stride (by absolute value)
-    pub fn min_stride_axis(&self) -> Axis {
-        self.dim.min_stride_axis(&self.strides)
-    }
-    */
-
-    /// Return the axis with the greatest stride (by absolute value),
-    /// preferring axes with len > 1.
-    pub fn max_stride_axis(&self) -> Axis
-    {
-        self.dim.max_stride_axis(&self.strides)
-    }
-
-    /// Reverse the stride of `axis`.
-    ///
-    /// ***Panics*** if the axis is out of bounds.
-    #[track_caller]
-    pub fn invert_axis(&mut self, axis: Axis)
-    {
-        unsafe {
-            let s = self.strides.axis(axis) as Ixs;
-            let m = self.dim.axis(axis);
-            if m != 0 {
-                self.ptr = self.ptr.offset(stride_offset(m - 1, s as Ix));
-            }
-            self.strides.set_axis(axis, (-s) as Ix);
-        }
-    }
-
-    /// If possible, merge in the axis `take` to `into`.
-    ///
-    /// Returns `true` iff the axes are now merged.
-    ///
-    /// This method merges the axes if movement along the two original axes
-    /// (moving fastest along the `into` axis) can be equivalently represented
-    /// as movement along one (merged) axis. Merging the axes preserves this
-    /// order in the merged axis. If `take` and `into` are the same axis, then
-    /// the axis is "merged" if its length is ≤ 1.
-    ///
-    /// If the return value is `true`, then the following hold:
-    ///
-    /// * The new length of the `into` axis is the product of the original
-    ///   lengths of the two axes.
-    ///
-    /// * The new length of the `take` axis is 0 if the product of the original
-    ///   lengths of the two axes is 0, and 1 otherwise.
-    ///
-    /// If the return value is `false`, then merging is not possible, and the
-    /// original shape and strides have been preserved.
-    ///
-    /// Note that the ordering constraint means that if it's possible to merge
-    /// `take` into `into`, it's usually not possible to merge `into` into
-    /// `take`, and vice versa.
-    ///
-    /// ```
-    /// use ndarray::Array3;
-    /// use ndarray::Axis;
-    ///
-    /// let mut a = Array3::<f64>::zeros((2, 3, 4));
-    /// assert!(a.merge_axes(Axis(1), Axis(2)));
-    /// assert_eq!(a.shape(), &[2, 1, 12]);
-    /// ```
-    ///
-    /// ***Panics*** if an axis is out of bounds.
-    #[track_caller]
-    pub fn merge_axes(&mut self, take: Axis, into: Axis) -> bool
-    {
-        merge_axes(&mut self.dim, &mut self.strides, take, into)
     }
 
     /// Insert new array axis at `axis` and return the result.
@@ -2516,8 +2743,8 @@ where
         assert!(axis.index() <= self.ndim());
         // safe because a new axis of length one does not affect memory layout
         unsafe {
-            let strides = self.strides.insert_axis(axis);
-            let dim = self.dim.insert_axis(axis);
+            let strides = self.meta().strides.insert_axis(axis);
+            let dim = self.meta().dim.insert_axis(axis);
             self.with_strides_dim(strides, dim)
         }
     }
@@ -2538,229 +2765,6 @@ where
     pub(crate) fn pointer_is_inbounds(&self) -> bool
     {
         self.data._is_pointer_inbounds(self.as_ptr())
-    }
-
-    /// Perform an elementwise assigment to `self` from `rhs`.
-    ///
-    /// If their shapes disagree, `rhs` is broadcast to the shape of `self`.
-    ///
-    /// **Panics** if broadcasting isn’t possible.
-    #[track_caller]
-    pub fn assign<E: Dimension, S2>(&mut self, rhs: &ArrayBase<S2, E>)
-    where
-        S: DataMut,
-        A: Clone,
-        S2: Data<Elem = A>,
-    {
-        self.zip_mut_with(rhs, |x, y| x.clone_from(y));
-    }
-
-    /// Perform an elementwise assigment of values cloned from `self` into array or producer `to`.
-    ///
-    /// The destination `to` can be another array or a producer of assignable elements.
-    /// [`AssignElem`] determines how elements are assigned.
-    ///
-    /// **Panics** if shapes disagree.
-    #[track_caller]
-    pub fn assign_to<P>(&self, to: P)
-    where
-        S: Data,
-        P: IntoNdProducer<Dim = D>,
-        P::Item: AssignElem<A>,
-        A: Clone,
-    {
-        Zip::from(self).map_assign_into(to, A::clone);
-    }
-
-    /// Perform an elementwise assigment to `self` from element `x`.
-    pub fn fill(&mut self, x: A)
-    where
-        S: DataMut,
-        A: Clone,
-    {
-        self.map_inplace(move |elt| elt.clone_from(&x));
-    }
-
-    pub(crate) fn zip_mut_with_same_shape<B, S2, E, F>(&mut self, rhs: &ArrayBase<S2, E>, mut f: F)
-    where
-        S: DataMut,
-        S2: Data<Elem = B>,
-        E: Dimension,
-        F: FnMut(&mut A, &B),
-    {
-        debug_assert_eq!(self.shape(), rhs.shape());
-
-        if self.dim.strides_equivalent(&self.strides, &rhs.strides) {
-            if let Some(self_s) = self.as_slice_memory_order_mut() {
-                if let Some(rhs_s) = rhs.as_slice_memory_order() {
-                    for (s, r) in self_s.iter_mut().zip(rhs_s) {
-                        f(s, r);
-                    }
-                    return;
-                }
-            }
-        }
-
-        // Otherwise, fall back to the outer iter
-        self.zip_mut_with_by_rows(rhs, f);
-    }
-
-    // zip two arrays where they have different layout or strides
-    #[inline(always)]
-    fn zip_mut_with_by_rows<B, S2, E, F>(&mut self, rhs: &ArrayBase<S2, E>, mut f: F)
-    where
-        S: DataMut,
-        S2: Data<Elem = B>,
-        E: Dimension,
-        F: FnMut(&mut A, &B),
-    {
-        debug_assert_eq!(self.shape(), rhs.shape());
-        debug_assert_ne!(self.ndim(), 0);
-
-        // break the arrays up into their inner rows
-        let n = self.ndim();
-        let dim = self.raw_dim();
-        Zip::from(LanesMut::new(self.view_mut(), Axis(n - 1)))
-            .and(Lanes::new(rhs.broadcast_assume(dim), Axis(n - 1)))
-            .for_each(move |s_row, r_row| Zip::from(s_row).and(r_row).for_each(|a, b| f(a, b)));
-    }
-
-    fn zip_mut_with_elem<B, F>(&mut self, rhs_elem: &B, mut f: F)
-    where
-        S: DataMut,
-        F: FnMut(&mut A, &B),
-    {
-        self.map_inplace(move |elt| f(elt, rhs_elem));
-    }
-
-    /// Traverse two arrays in unspecified order, in lock step,
-    /// calling the closure `f` on each element pair.
-    ///
-    /// If their shapes disagree, `rhs` is broadcast to the shape of `self`.
-    ///
-    /// **Panics** if broadcasting isn’t possible.
-    #[track_caller]
-    #[inline]
-    pub fn zip_mut_with<B, S2, E, F>(&mut self, rhs: &ArrayBase<S2, E>, f: F)
-    where
-        S: DataMut,
-        S2: Data<Elem = B>,
-        E: Dimension,
-        F: FnMut(&mut A, &B),
-    {
-        if rhs.dim.ndim() == 0 {
-            // Skip broadcast from 0-dim array
-            self.zip_mut_with_elem(rhs.get_0d(), f);
-        } else if self.dim.ndim() == rhs.dim.ndim() && self.shape() == rhs.shape() {
-            self.zip_mut_with_same_shape(rhs, f);
-        } else {
-            let rhs_broadcast = rhs.broadcast_unwrap(self.raw_dim());
-            self.zip_mut_with_by_rows(&rhs_broadcast, f);
-        }
-    }
-
-    /// Traverse the array elements and apply a fold,
-    /// returning the resulting value.
-    ///
-    /// Elements are visited in arbitrary order.
-    pub fn fold<'a, F, B>(&'a self, init: B, f: F) -> B
-    where
-        F: FnMut(B, &'a A) -> B,
-        A: 'a,
-        S: Data,
-    {
-        if let Some(slc) = self.as_slice_memory_order() {
-            slc.iter().fold(init, f)
-        } else {
-            let mut v = self.view();
-            move_min_stride_axis_to_last(&mut v.dim, &mut v.strides);
-            v.into_elements_base().fold(init, f)
-        }
-    }
-
-    /// Call `f` by reference on each element and create a new array
-    /// with the new values.
-    ///
-    /// Elements are visited in arbitrary order.
-    ///
-    /// Return an array with the same shape as `self`.
-    ///
-    /// ```
-    /// use ndarray::arr2;
-    ///
-    /// let a = arr2(&[[ 0., 1.],
-    ///                [-1., 2.]]);
-    /// assert!(
-    ///     a.map(|x| *x >= 1.0)
-    ///     == arr2(&[[false, true],
-    ///               [false, true]])
-    /// );
-    /// ```
-    pub fn map<'a, B, F>(&'a self, f: F) -> Array<B, D>
-    where
-        F: FnMut(&'a A) -> B,
-        A: 'a,
-        S: Data,
-    {
-        unsafe {
-            if let Some(slc) = self.as_slice_memory_order() {
-                ArrayBase::from_shape_trusted_iter_unchecked(
-                    self.dim.clone().strides(self.strides.clone()),
-                    slc.iter(),
-                    f,
-                )
-            } else {
-                ArrayBase::from_shape_trusted_iter_unchecked(self.dim.clone(), self.iter(), f)
-            }
-        }
-    }
-
-    /// Call `f` on a mutable reference of each element and create a new array
-    /// with the new values.
-    ///
-    /// Elements are visited in arbitrary order.
-    ///
-    /// Return an array with the same shape as `self`.
-    pub fn map_mut<'a, B, F>(&'a mut self, f: F) -> Array<B, D>
-    where
-        F: FnMut(&'a mut A) -> B,
-        A: 'a,
-        S: DataMut,
-    {
-        let dim = self.dim.clone();
-        if self.is_contiguous() {
-            let strides = self.strides.clone();
-            let slc = self.as_slice_memory_order_mut().unwrap();
-            unsafe { ArrayBase::from_shape_trusted_iter_unchecked(dim.strides(strides), slc.iter_mut(), f) }
-        } else {
-            unsafe { ArrayBase::from_shape_trusted_iter_unchecked(dim, self.iter_mut(), f) }
-        }
-    }
-
-    /// Call `f` by **v**alue on each element and create a new array
-    /// with the new values.
-    ///
-    /// Elements are visited in arbitrary order.
-    ///
-    /// Return an array with the same shape as `self`.
-    ///
-    /// ```
-    /// use ndarray::arr2;
-    ///
-    /// let a = arr2(&[[ 0., 1.],
-    ///                [-1., 2.]]);
-    /// assert!(
-    ///     a.mapv(f32::abs) == arr2(&[[0., 1.],
-    ///                                [1., 2.]])
-    /// );
-    /// ```
-    pub fn mapv<B, F>(&self, mut f: F) -> Array<B, D>
-    where
-        F: FnMut(A) -> B,
-        A: Clone,
-        S: Data,
-    {
-        self.map(move |x| f(x.clone()))
     }
 
     /// Call `f` by **v**alue on each element, update the array with the new values
@@ -2819,128 +2823,6 @@ where
         }
     }
 
-    /// Modify the array in place by calling `f` by mutable reference on each element.
-    ///
-    /// Elements are visited in arbitrary order.
-    pub fn map_inplace<'a, F>(&'a mut self, f: F)
-    where
-        S: DataMut,
-        A: 'a,
-        F: FnMut(&'a mut A),
-    {
-        match self.try_as_slice_memory_order_mut() {
-            Ok(slc) => slc.iter_mut().for_each(f),
-            Err(arr) => {
-                let mut v = arr.view_mut();
-                move_min_stride_axis_to_last(&mut v.dim, &mut v.strides);
-                v.into_elements_base().for_each(f);
-            }
-        }
-    }
-
-    /// Modify the array in place by calling `f` by **v**alue on each element.
-    /// The array is updated with the new values.
-    ///
-    /// Elements are visited in arbitrary order.
-    ///
-    /// ```
-    /// # #[cfg(feature = "approx")] {
-    /// use approx::assert_abs_diff_eq;
-    /// use ndarray::arr2;
-    ///
-    /// let mut a = arr2(&[[ 0., 1.],
-    ///                    [-1., 2.]]);
-    /// a.mapv_inplace(f32::exp);
-    /// assert_abs_diff_eq!(
-    ///     a,
-    ///     arr2(&[[1.00000, 2.71828],
-    ///            [0.36788, 7.38906]]),
-    ///     epsilon = 1e-5,
-    /// );
-    /// # }
-    /// ```
-    pub fn mapv_inplace<F>(&mut self, mut f: F)
-    where
-        S: DataMut,
-        F: FnMut(A) -> A,
-        A: Clone,
-    {
-        self.map_inplace(move |x| *x = f(x.clone()));
-    }
-
-    /// Call `f` for each element in the array.
-    ///
-    /// Elements are visited in arbitrary order.
-    pub fn for_each<'a, F>(&'a self, mut f: F)
-    where
-        F: FnMut(&'a A),
-        A: 'a,
-        S: Data,
-    {
-        self.fold((), move |(), elt| f(elt))
-    }
-
-    /// Visit each element in the array by calling `f` by reference
-    /// on each element.
-    ///
-    /// Elements are visited in arbitrary order.
-    #[deprecated(note = "Renamed to .for_each()", since = "0.15.0")]
-    pub fn visit<'a, F>(&'a self, f: F)
-    where
-        F: FnMut(&'a A),
-        A: 'a,
-        S: Data,
-    {
-        self.for_each(f)
-    }
-
-    /// Fold along an axis.
-    ///
-    /// Combine the elements of each subview with the previous using the `fold`
-    /// function and initial value `init`.
-    ///
-    /// Return the result as an `Array`.
-    ///
-    /// **Panics** if `axis` is out of bounds.
-    #[track_caller]
-    pub fn fold_axis<B, F>(&self, axis: Axis, init: B, mut fold: F) -> Array<B, D::Smaller>
-    where
-        D: RemoveAxis,
-        F: FnMut(&B, &A) -> B,
-        B: Clone,
-        S: Data,
-    {
-        let mut res = Array::from_elem(self.raw_dim().remove_axis(axis), init);
-        for subview in self.axis_iter(axis) {
-            res.zip_mut_with(&subview, |x, y| *x = fold(x, y));
-        }
-        res
-    }
-
-    /// Reduce the values along an axis into just one value, producing a new
-    /// array with one less dimension.
-    ///
-    /// Elements are visited in arbitrary order.
-    ///
-    /// Return the result as an `Array`.
-    ///
-    /// **Panics** if `axis` is out of bounds.
-    #[track_caller]
-    pub fn map_axis<'a, B, F>(&'a self, axis: Axis, mut mapping: F) -> Array<B, D::Smaller>
-    where
-        D: RemoveAxis,
-        F: FnMut(ArrayView1<'a, A>) -> B,
-        A: 'a,
-        S: Data,
-    {
-        if self.len_of(axis) == 0 {
-            let new_dim = self.dim.remove_axis(axis);
-            Array::from_shape_simple_fn(new_dim, move || mapping(ArrayView::from(&[])))
-        } else {
-            Zip::from(self.lanes(axis)).map_collect(mapping)
-        }
-    }
-
     /// Reduce the values along an axis into just one value, producing a new
     /// array with one less dimension.
     /// 1-dimensional lanes are passed as mutable references to the reducer,
@@ -2960,7 +2842,7 @@ where
         S: DataMut,
     {
         if self.len_of(axis) == 0 {
-            let new_dim = self.dim.remove_axis(axis);
+            let new_dim = self.meta().dim.remove_axis(axis);
             Array::from_shape_simple_fn(new_dim, move || mapping(ArrayViewMut::from(&mut [])))
         } else {
             Zip::from(self.lanes_mut(axis)).map_collect(mapping)
@@ -3064,3 +2946,48 @@ unsafe fn unlimited_transmute<A, B>(data: A) -> B
 }
 
 type DimMaxOf<A, B> = <A as DimMax<B>>::Output;
+
+impl<A, D> ToOwned for ArrayRef<A, D> {
+    type Owned = Array<A, D>;
+    
+    /// Return an uniquely owned copy of the array.
+    ///
+    /// If the input array is contiguous, then the output array will have the same
+    /// memory layout. Otherwise, the layout of the output array is unspecified.
+    /// If you need a particular layout, you can allocate a new array with the
+    /// desired memory layout and [`.assign()`](Self::assign) the data.
+    /// Alternatively, you can collectan iterator, like this for a result in
+    /// standard layout:
+    ///
+    /// ```
+    /// # use ndarray::prelude::*;
+    /// # let arr = Array::from_shape_vec((2, 2).f(), vec![1, 2, 3, 4]).unwrap();
+    /// # let owned = {
+    /// Array::from_shape_vec(arr.raw_dim(), arr.iter().cloned().collect()).unwrap()
+    /// # };
+    /// # assert!(owned.is_standard_layout());
+    /// # assert_eq!(arr, owned);
+    /// ```
+    ///
+    /// or this for a result in column-major (Fortran) layout:
+    ///
+    /// ```
+    /// # use ndarray::prelude::*;
+    /// # let arr = Array::from_shape_vec((2, 2), vec![1, 2, 3, 4]).unwrap();
+    /// # let owned = {
+    /// Array::from_shape_vec(arr.raw_dim().f(), arr.t().iter().cloned().collect()).unwrap()
+    /// # };
+    /// # assert!(owned.t().is_standard_layout());
+    /// # assert_eq!(arr, owned);
+    /// ```
+    fn to_owned(&self) -> Array<A, D>
+    where
+        A: Clone,
+    {
+        if let Some(slc) = self.as_slice_memory_order() {
+            unsafe { Array::from_shape_vec_unchecked(self.meta().dim.clone().strides(self.meta().strides.clone()), slc.to_vec()) }
+        } else {
+            self.map(A::clone)
+        }
+    }
+}
