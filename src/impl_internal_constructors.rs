@@ -31,7 +31,7 @@ where S: RawData<Elem = A>
                 ptr,
                 dim: Ix1(0),
                 strides: Ix1(1),
-            }
+            },
         };
         debug_assert!(array.pointer_is_inbounds());
         array
@@ -64,7 +64,7 @@ where
                 ptr: self.meta.ptr,
                 dim,
                 strides,
-            }
+            },
         }
     }
 }

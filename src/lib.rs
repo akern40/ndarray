@@ -240,7 +240,7 @@ pub type Ix = usize;
 pub type Ixs = isize;
 
 /// Meta information for an *n*-dimensional array.
-/// 
+///
 // # For Developers: See the documentation of ArrayBase for
 // information on requirements that `dim`, `strides`, and `ptr`
 // must meet.
@@ -1301,11 +1301,11 @@ where S: RawData
     data: S,
 }
 
-
 #[warn(missing_docs)]
-mod array_ref {
+mod array_ref
+{
     //! ArrayRef definition and core trait implementations.
-    //! 
+    //!
     //! This code is separated into the module in order to excise
     //! a few unsafe trait implementations from the rest of the codebase,
     //! as per [the ArrayRef RFC](https://github.com/rust-ndarray/ndarray/issues/879#issuecomment-756513770)
@@ -1316,7 +1316,7 @@ mod array_ref {
     use crate::{ArrayBase, ArrayMeta, Data, DataMut};
 
     /// A reference to an existing [`ArrayBase`].
-    /// 
+    ///
     /// The [`Array`](crate::Array) provided by `ndarray` is sort of like
     /// a multidimensional `Vec`: an allocated container for a collection
     /// of elements. Just like how `Vec` derefs to `slice`, `Array` derefs
@@ -1332,7 +1332,7 @@ mod array_ref {
     ///     arr.get(0)
     /// }
     /// ```
-    /// 
+    ///
     /// There are two major technical limitations of an `ArrayRef` that should be
     /// kept in mind (and which break the analogy to `Vec<A>`/`[A]`):
     ///     1. Unlike a slice, which can represent part of a `Vec` via direct indexing
@@ -1342,52 +1342,51 @@ mod array_ref {
     ///     2. The shape, strides, and pointer of an `ArrayRef` are immutable, and
     ///         so any operation or function which wants to mutate them must do so
     ///         on an `ArrayView`, not an `ArrayRef`.
-    /// 
+    ///
     /// As an advantage over views, it should be noted that lifetimes of `ArrayRef`
     /// will be automatically adjusted and there is no need for calls to
     /// [`.reborrow`](crate::ArrayView::reborrow).
-    /// 
+    ///
     /// Thanks to the trait bounds on the `Deref` implementation that allows the use
     /// of `ArrayRef` as a function argument, the elements of an `&ArrayRef` or
     /// `&mut ArrayRef` are safe to access in the public API.
     #[repr(transparent)]
-    pub struct ArrayRef<A, D> {
+    pub struct ArrayRef<A, D>
+    {
         meta: ArrayMeta<A, D>,
     }
 
-    impl<A, D> ArrayRef<A, D> {
-        pub(crate) fn meta(&self) -> &ArrayMeta<A, D> {
+    impl<A, D> ArrayRef<A, D>
+    {
+        pub(crate) fn meta(&self) -> &ArrayMeta<A, D>
+        {
             &self.meta
         }
     }
 
     impl<A, S, D> Deref for ArrayBase<S, D>
-    where
-        S: Data<Elem = A>,
+    where S: Data<Elem = A>
     {
         type Target = ArrayRef<A, D>;
 
-        fn deref(&self) -> &ArrayRef<A, D> {
+        fn deref(&self) -> &ArrayRef<A, D>
+        {
             let meta_ptr = &self.meta as *const ArrayMeta<A, D>;
-            unsafe {
-                &*meta_ptr.cast::<ArrayRef<A, D>>()
-            }
+            unsafe { &*meta_ptr.cast::<ArrayRef<A, D>>() }
         }
     }
 
     impl<A, S, D> DerefMut for ArrayBase<S, D>
-    where
-        S: DataMut<Elem = A>,
+    where S: DataMut<Elem = A>
     {
         /// Allow mutable dereferences from `ArrayBase` to `ArrayRef`.
-        /// 
+        ///
         /// This method unshares the data.
-        fn deref_mut(&mut self) -> &mut ArrayRef<A, D> {
+        fn deref_mut(&mut self) -> &mut ArrayRef<A, D>
+        {
             self.ensure_unique();
             let meta_ptr = &mut self.meta as *mut ArrayMeta<A, D>;
-            unsafe {
-                &mut *meta_ptr.cast::<ArrayRef<A, D>>()
-            }
+            unsafe { &mut *meta_ptr.cast::<ArrayRef<A, D>>() }
         }
     }
 }
@@ -1635,8 +1634,7 @@ mod impl_special_element_types;
 
 /// Private Methods on `ArrayRef`
 impl<A, D> ArrayRef<A, D>
-where
-    D: Dimension,
+where D: Dimension
 {
     #[inline]
     fn broadcast_unwrap<E>(&self, dim: E) -> ArrayView<'_, A, E>
@@ -1672,7 +1670,9 @@ where
         debug_assert_eq!(self.shape(), dim.slice());
         let ptr = self.ptr;
         let mut strides = dim.clone();
-        strides.slice_mut().copy_from_slice(self.meta().strides.slice());
+        strides
+            .slice_mut()
+            .copy_from_slice(self.meta().strides.slice());
         unsafe { ArrayView::new(ptr, dim, strides) }
     }
 }
