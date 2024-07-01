@@ -39,11 +39,11 @@ impl<A> Array<A, Ix0>
             // Any index in the `Vec` is fine since all elements are identical.
             self.data.into_vec().remove(0)
         } else {
-            // Find the index in the `Vec` corresponding to `self.ptr`.
+            // Find the index in the `Vec` corresponding to `self.meta.ptr`.
             // (This is necessary because the element in the array might not be
             // the first element in the `Vec`, such as if the array was created
             // by `array![1, 2, 3, 4].slice_move(s![2])`.)
-            let first = self.ptr.as_ptr() as usize;
+            let first = self.meta.ptr.as_ptr() as usize;
             let base = self.data.as_ptr() as usize;
             let index = (first - base) / size;
             debug_assert_eq!((first - base) % size, 0);
@@ -67,7 +67,7 @@ where D: Dimension
             return None;
         }
         if std::mem::size_of::<A>() == 0 {
-            Some(dimension::offset_from_low_addr_ptr_to_logical_ptr(&self.dim, &self.strides))
+            Some(dimension::offset_from_low_addr_ptr_to_logical_ptr(&self.meta.dim, &self.meta.strides))
         } else {
             let offset = unsafe { self.as_ptr().offset_from(self.data.as_ptr()) };
             debug_assert!(offset >= 0);
@@ -474,8 +474,8 @@ where D: Dimension
         } else {
             dim.slice_mut()[..=growing_axis.index()].rotate_right(1);
             new_array = Self::uninit(dim);
-            new_array.dim.slice_mut()[..=growing_axis.index()].rotate_left(1);
-            new_array.strides.slice_mut()[..=growing_axis.index()].rotate_left(1);
+            new_array.meta.dim.slice_mut()[..=growing_axis.index()].rotate_left(1);
+            new_array.meta.strides.slice_mut()[..=growing_axis.index()].rotate_left(1);
         }
 
         // self -> old_self.
@@ -629,7 +629,7 @@ where D: Dimension
             // either the dimension increment is zero, or there is an existing
             // zero in another axis in self.
             debug_assert_eq!(self.len(), new_len);
-            self.dim = res_dim;
+            self.meta.dim = res_dim;
             return Ok(());
         }
 
@@ -699,11 +699,11 @@ where D: Dimension
                     }
                 }
             });
-            let mut strides = self.strides.clone();
+            let mut strides = self.meta.strides.clone();
             strides[axis.index()] = new_stride as usize;
             strides
         } else {
-            self.strides.clone()
+            self.meta.strides.clone()
         };
 
         // grow backing storage and update head ptr
@@ -783,8 +783,8 @@ where D: Dimension
             drop(data_length_guard);
 
             // update array dimension
-            self.strides = strides;
-            self.dim = res_dim;
+            self.meta.strides = strides;
+            self.meta.dim = res_dim;
         }
         // multiple assertions after pointer & dimension update
         debug_assert_eq!(self.data.len(), self.len());
@@ -847,7 +847,7 @@ where D: Dimension
                 0
             };
             debug_assert!(data_to_array_offset >= 0);
-            self.ptr = self
+            self.meta.ptr = self
                 .data
                 .reserve(len_to_append)
                 .offset(data_to_array_offset);

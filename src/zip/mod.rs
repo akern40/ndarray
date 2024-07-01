@@ -83,7 +83,7 @@ where
 {
     pub(crate) fn layout_impl(&self) -> Layout
     {
-        array_layout(&self.dim, &self.strides)
+        array_layout(&self.meta.dim, &self.meta.strides)
     }
 }
 
@@ -97,7 +97,7 @@ where
     {
         #[allow(clippy::needless_borrow)]
         let res: ArrayView<'_, A, E::Dim> = (&self).broadcast_unwrap(shape.into_dimension());
-        unsafe { ArrayView::new(res.ptr, res.dim, res.strides) }
+        unsafe { ArrayView::new(res.meta.ptr, res.meta.dim, res.meta.strides) }
     }
     private_impl! {}
 }

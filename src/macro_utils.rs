@@ -61,7 +61,7 @@ macro_rules! expand_if {
 #[cfg(debug_assertions)]
 macro_rules! debug_bounds_check {
     ($self_:ident, $index:expr) => {
-        if $index.index_checked(&$self_.dim, &$self_.strides).is_none() {
+        if $index.index_checked(&$self_.meta().dim, &$self_.meta().strides).is_none() {
             panic!(
                 "ndarray: index {:?} is out of bounds for array of shape {:?}",
                 $index,

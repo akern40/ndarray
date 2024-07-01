@@ -11,6 +11,8 @@ use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 use rawpointer::PointerExt;
+use core::borrow::Borrow;
+use core::ops::Deref;
 use std::mem::{size_of, ManuallyDrop};
 
 use crate::imp_prelude::*;
@@ -410,51 +412,6 @@ where D: Dimension
         info.multi_slice_move(self.view_mut())
     }
 
-    /// Slice the array in place without changing the number of dimensions.
-    ///
-    /// In particular, if an axis is sliced with an index, the axis is
-    /// collapsed, as in [`.collapse_axis()`], rather than removed, as in
-    /// [`.slice_move()`] or [`.index_axis_move()`].
-    ///
-    /// [`.collapse_axis()`]: Self::collapse_axis
-    /// [`.slice_move()`]: Self::slice_move
-    /// [`.index_axis_move()`]: Self::index_axis_move
-    ///
-    /// See [*Slicing*](#slicing) for full documentation.
-    /// See also [`s!`], [`SliceArg`], and [`SliceInfo`](crate::SliceInfo).
-    ///
-    /// **Panics** in the following cases:
-    ///
-    /// - if an index is out of bounds
-    /// - if a step size is zero
-    /// - if [`SliceInfoElem::NewAxis`] is in `info`, e.g. if [`NewAxis`] was
-    ///   used in the [`s!`] macro
-    /// - if `D` is `IxDyn` and `info` does not match the number of array axes
-    #[track_caller]
-    pub fn slice_collapse<I>(&mut self, info: I)
-    where I: SliceArg<D>
-    {
-        assert_eq!(
-            info.in_ndim(),
-            self.ndim(),
-            "The input dimension of `info` must match the array to be sliced.",
-        );
-        let mut axis = 0;
-        info.as_ref().iter().for_each(|&ax_info| match ax_info {
-            SliceInfoElem::Slice { start, end, step } => {
-                self.slice_axis_inplace(Axis(axis), Slice { start, end, step });
-                axis += 1;
-            }
-            SliceInfoElem::Index(index) => {
-                let i_usize = abs_index(self.len_of(Axis(axis)), index);
-                self.collapse_axis(Axis(axis), i_usize);
-                axis += 1;
-            }
-            SliceInfoElem::NewAxis => panic!("`slice_collapse` does not support `NewAxis`."),
-        });
-        debug_assert_eq!(axis, self.ndim());
-    }
-
     /// Return a view of the array, sliced along the specified axis.
     ///
     /// **Panics** if an index is out of bounds or step size is zero.<br>
@@ -489,8 +446,8 @@ where D: Dimension
     ///
     /// **Panics** if an index is out of bounds or step size is zero.
     #[track_caller]
-    pub fn slice_each_axis<F>(&self, f: F) -> ArrayView<'_, A, D>
-    where F: FnMut(AxisDescription) -> Slice
+    pub fn slice_each_axis<'a, F>(&self, f: F) -> ArrayView<'a, A, D>
+    where F: FnMut(AxisDescription) -> Slice, ViewRepr<&'a A>: Data
     {
         let mut view = self.view();
         view.slice_each_axis_inplace(f);
@@ -631,7 +588,7 @@ where D: Dimension
     pub unsafe fn uget_mut<I>(&mut self, index: I) -> &mut A
     where I: NdIndex<D>
     {
-        debug_assert!(self.data.is_unique());
+        // debug_assert!(self.data.is_unique());
         arraytraits::debug_bounds_check(self, &index);
         let off = index.index_unchecked(&self.meta().strides);
         &mut *self.meta().ptr.as_ptr().offset(off)
@@ -677,7 +634,7 @@ where D: Dimension
     pub unsafe fn uswap<I>(&mut self, index1: I, index2: I)
     where I: NdIndex<D>
     {
-        debug_assert!(self.data.is_unique());
+        // debug_assert!(self.data.is_unique());
         arraytraits::debug_bounds_check(self, &index1);
         arraytraits::debug_bounds_check(self, &index2);
         let off1 = index1.index_unchecked(&self.meta().strides);
@@ -1807,7 +1764,7 @@ where D: Dimension
         P::Item: AssignElem<A>,
         A: Clone,
     {
-        Zip::from(self).map_assign_into(to, A::clone);
+        Zip::from(self.view()).map_assign_into(to, A::clone);
     }
 
     /// Perform an elementwise assigment to `self` from element `x`.
@@ -1960,7 +1917,7 @@ where D: Dimension
         if self.is_contiguous() {
             let strides = self.meta().strides.clone();
             let slc = self.as_slice_memory_order_mut().unwrap();
-            unsafe { ArrayBase::from_shape_trusted_iter_unchecked(dim.meta().strides(strides), slc.iter_mut(), f) }
+            unsafe { ArrayBase::from_shape_trusted_iter_unchecked(dim.strides(strides), slc.iter_mut(), f) }
         } else {
             unsafe { ArrayBase::from_shape_trusted_iter_unchecked(dim, self.iter_mut(), f) }
         }
@@ -2113,14 +2070,30 @@ where
     S: RawData<Elem = A>,
     D: Dimension,
 {
-    /// Make the array unshared.
+    // /// Return the number of dimensions (axes) in the array
+    // pub fn ndim(&self) -> usize
+    // {
+    //     self.meta.dim.ndim()
+    // }
+
+    /// Return the length of `axis`.
     ///
-    /// This method is mostly only useful with unsafe code.
-    pub(crate) fn ensure_unique(&mut self)
+    /// The axis should be in the range `Axis(` 0 .. *n* `)` where *n* is the
+    /// number of dimensions (axes) of the array.
+    ///
+    /// ***Panics*** if the axis is out of bounds.
+    #[track_caller]
+    pub fn len_of(&self, axis: Axis) -> usize
     {
-        debug_assert!(self.pointer_is_inbounds());
-        S::ensure_unique(self);
-        debug_assert!(self.pointer_is_inbounds());
+        self.meta.dim[axis.index()]
+    }
+
+    /// Return the shape of the array in its “pattern” form,
+    /// an integer in the one-dimensional case, tuple in the n-dimensional cases
+    /// and so on.
+    pub fn dim(&self) -> D::Pattern
+    {
+        self.meta.dim.clone().into_pattern()
     }
 
     /// Try to make the array unshared.
@@ -2133,6 +2106,17 @@ where
     {
         debug_assert!(self.pointer_is_inbounds());
         S::try_ensure_unique(self);
+        debug_assert!(self.pointer_is_inbounds());
+    }
+
+    /// Make the array unshared.
+    ///
+    /// This method is mostly only useful with unsafe code.
+    pub(crate) fn ensure_unique(&mut self)
+    where S: DataMut
+    {
+        debug_assert!(self.pointer_is_inbounds());
+        S::ensure_unique(self);
         debug_assert!(self.pointer_is_inbounds());
     }
 
@@ -2153,6 +2137,48 @@ where
         S: Data,
     {
         S::to_shared(self)
+    }
+
+        /// Return an uniquely owned copy of the array.
+    ///
+    /// If the input array is contiguous, then the output array will have the same
+    /// memory layout. Otherwise, the layout of the output array is unspecified.
+    /// If you need a particular layout, you can allocate a new array with the
+    /// desired memory layout and [`.assign()`](Self::assign) the data.
+    /// Alternatively, you can collectan iterator, like this for a result in
+    /// standard layout:
+    ///
+    /// ```
+    /// # use ndarray::prelude::*;
+    /// # let arr = Array::from_shape_vec((2, 2).f(), vec![1, 2, 3, 4]).unwrap();
+    /// # let owned = {
+    /// Array::from_shape_vec(arr.raw_dim(), arr.iter().cloned().collect()).unwrap()
+    /// # };
+    /// # assert!(owned.is_standard_layout());
+    /// # assert_eq!(arr, owned);
+    /// ```
+    ///
+    /// or this for a result in column-major (Fortran) layout:
+    ///
+    /// ```
+    /// # use ndarray::prelude::*;
+    /// # let arr = Array::from_shape_vec((2, 2), vec![1, 2, 3, 4]).unwrap();
+    /// # let owned = {
+    /// Array::from_shape_vec(arr.raw_dim().f(), arr.t().iter().cloned().collect()).unwrap()
+    /// # };
+    /// # assert!(owned.t().is_standard_layout());
+    /// # assert_eq!(arr, owned);
+    /// ```
+    pub fn to_owned(&self) -> Array<A, D>
+    where
+        A: Clone,
+        S: Data,
+    {
+        if let Some(slc) = self.as_slice_memory_order() {
+            unsafe { Array::from_shape_vec_unchecked(self.meta.dim.clone().strides(self.meta.strides.clone()), slc.to_vec()) }
+        } else {
+            self.map(A::clone)
+        }
     }
 
     /// Turn the array into a uniquely owned array, cloning the array elements
@@ -2296,7 +2322,7 @@ where
     /// **Panics** if an index is out of bounds or step size is zero.
     #[track_caller]
     pub fn slice_each_axis_inplace<F>(&mut self, mut f: F)
-    where F: FnMut(AxisDescription) -> Slice
+    where F: FnMut(AxisDescription) -> Slice, S: Data
     {
         for ax in 0..self.ndim() {
             self.slice_axis_inplace(
@@ -2326,6 +2352,51 @@ where
         unsafe { self.with_strides_dim(strides, dim) }
     }
 
+    /// Slice the array in place without changing the number of dimensions.
+    ///
+    /// In particular, if an axis is sliced with an index, the axis is
+    /// collapsed, as in [`.collapse_axis()`], rather than removed, as in
+    /// [`.slice_move()`] or [`.index_axis_move()`].
+    ///
+    /// [`.collapse_axis()`]: Self::collapse_axis
+    /// [`.slice_move()`]: Self::slice_move
+    /// [`.index_axis_move()`]: Self::index_axis_move
+    ///
+    /// See [*Slicing*](#slicing) for full documentation.
+    /// See also [`s!`], [`SliceArg`], and [`SliceInfo`](crate::SliceInfo).
+    ///
+    /// **Panics** in the following cases:
+    ///
+    /// - if an index is out of bounds
+    /// - if a step size is zero
+    /// - if [`SliceInfoElem::NewAxis`] is in `info`, e.g. if [`NewAxis`] was
+    ///   used in the [`s!`] macro
+    /// - if `D` is `IxDyn` and `info` does not match the number of array axes
+    #[track_caller]
+    pub fn slice_collapse<I>(&mut self, info: I)
+    where I: SliceArg<D>, S: DataMut
+    {
+        assert_eq!(
+            info.in_ndim(),
+            self.ndim(),
+            "The input dimension of `info` must match the array to be sliced.",
+        );
+        let mut axis = 0;
+        info.as_ref().iter().for_each(|&ax_info| match ax_info {
+            SliceInfoElem::Slice { start, end, step } => {
+                self.slice_axis_inplace(Axis(axis), Slice { start, end, step });
+                axis += 1;
+            }
+            SliceInfoElem::Index(index) => {
+                let i_usize = abs_index(self.len_of(Axis(axis)), index);
+                self.collapse_axis(Axis(axis), i_usize);
+                axis += 1;
+            }
+            SliceInfoElem::NewAxis => panic!("`slice_collapse` does not support `NewAxis`."),
+        });
+        debug_assert_eq!(axis, self.ndim());
+    }
+
     /// Selects `index` along the axis, collapsing the axis into length one.
     ///
     /// **Panics** if `axis` or `index` is out of bounds.
@@ -2339,6 +2410,7 @@ where
 
     /// Return the diagonal as a one-dimensional array.
     pub fn into_diag(self) -> ArrayBase<S, Ix1>
+    where S: Data
     {
         let (len, stride) = self.diag_params();
         // safe because new len stride allows access to a subset of the current elements
@@ -2391,18 +2463,18 @@ where
     /// );
     /// ```
     pub fn into_shape_with_order<E>(self, shape: E) -> Result<ArrayBase<S, E::Dim>, ShapeError>
-    where E: ShapeArg
+    where E: ShapeArg, S: Data
     {
         let (shape, order) = shape.into_shape_and_order();
         self.into_shape_with_order_impl(shape, order.unwrap_or(Order::RowMajor))
     }
 
     fn into_shape_with_order_impl<E>(self, shape: E, order: Order) -> Result<ArrayBase<S, E>, ShapeError>
-    where E: Dimension
+    where E: Dimension, S: Data
     {
         let shape = shape.into_dimension();
-        if size_of_shape_checked(&shape) != Ok(self.meta().dim.size()) {
-            return Err(error::incompatible_shapes(&self.meta().dim, &shape));
+        if size_of_shape_checked(&shape) != Ok(self.meta.dim.size()) {
+            return Err(error::incompatible_shapes(&self.meta.dim, &shape));
         }
 
         // Check if contiguous, then we can change shape
@@ -2411,7 +2483,7 @@ where
             match order {
                 Order::RowMajor if self.is_standard_layout() =>
                     Ok(self.with_strides_dim(shape.default_strides(), shape)),
-                Order::ColumnMajor if self.raw_view().reversed_axes().is_standard_layout() =>
+                Order::ColumnMajor if self.view().reversed_axes().is_standard_layout() =>
                     Ok(self.with_strides_dim(shape.fortran_strides(), shape)),
                 _otherwise => Err(error::from_kind(error::ErrorKind::IncompatibleLayout)),
             }
@@ -2443,18 +2515,18 @@ where
     /// ```
     #[deprecated = "Use `.into_shape_with_order()` or `.to_shape()`"]
     pub fn into_shape<E>(self, shape: E) -> Result<ArrayBase<S, E::Dim>, ShapeError>
-    where E: IntoDimension
+    where E: IntoDimension, S: Data
     {
         let shape = shape.into_dimension();
-        if size_of_shape_checked(&shape) != Ok(self.meta().dim.size()) {
-            return Err(error::incompatible_shapes(&self.meta().dim, &shape));
+        if size_of_shape_checked(&shape) != Ok(self.meta.dim.size()) {
+            return Err(error::incompatible_shapes(&self.meta.dim, &shape));
         }
         // Check if contiguous, if not => copy all, else just adapt strides
         unsafe {
             // safe because arrays are contiguous and len is unchanged
             if self.is_standard_layout() {
                 Ok(self.with_strides_dim(shape.default_strides(), shape))
-            } else if self.ndim() > 1 && self.raw_view().reversed_axes().is_standard_layout() {
+            } else if self.ndim() > 1 && self.view().reversed_axes().is_standard_layout() {
                 Ok(self.with_strides_dim(shape.fortran_strides(), shape))
             } else {
                 Err(error::from_kind(error::ErrorKind::IncompatibleLayout))
@@ -2594,8 +2666,8 @@ where
     {
         // safe because new dims equivalent
         unsafe {
-            ArrayBase::from_data_ptr(self.data, self.meta().ptr)
-                .with_strides_dim(self.meta().strides.into_dyn(), self.meta().dim.into_dyn())
+            ArrayBase::from_data_ptr(self.data, self.meta.ptr)
+                .with_strides_dim(self.meta.strides.into_dyn(), self.meta.dim.into_dyn())
         }
     }
 
@@ -2621,14 +2693,14 @@ where
         unsafe {
             if D::NDIM == D2::NDIM {
                 // safe because D == D2
-                let dim = unlimited_transmute::<D, D2>(self.meta().dim);
-                let strides = unlimited_transmute::<D, D2>(self.meta().strides);
-                return Ok(ArrayBase::from_data_ptr(self.data, self.meta().ptr).with_strides_dim(strides, dim));
+                let dim = unlimited_transmute::<D, D2>(self.meta.dim);
+                let strides = unlimited_transmute::<D, D2>(self.meta.strides);
+                return Ok(ArrayBase::from_data_ptr(self.data, self.meta.ptr).with_strides_dim(strides, dim));
             } else if D::NDIM.is_none() || D2::NDIM.is_none() {
                 // one is dynamic dim
                 // safe because dim, strides are equivalent under a different type
-                if let Some(dim) = D2::from_dimension(&self.meta().dim) {
-                    if let Some(strides) = D2::from_dimension(&self.meta().strides) {
+                if let Some(dim) = D2::from_dimension(&self.meta.dim) {
+                    if let Some(strides) = D2::from_dimension(&self.meta.strides) {
                         return Ok(self.with_strides_dim(strides, dim));
                     }
                 }
@@ -2661,7 +2733,7 @@ where
     /// ```
     #[track_caller]
     pub fn permuted_axes<T>(self, axes: T) -> ArrayBase<S, D>
-    where T: IntoDimension<Dim = D>
+    where T: IntoDimension<Dim = D>, S: Data
     {
         let axes = axes.into_dimension();
         // Ensure that each axis is used exactly once.
@@ -2693,8 +2765,8 @@ where
     /// while retaining the same data.
     pub fn reversed_axes(mut self) -> ArrayBase<S, D>
     {
-        self.meta().dim.slice_mut().reverse();
-        self.meta().strides.slice_mut().reverse();
+        self.meta.dim.slice_mut().reverse();
+        self.meta.strides.slice_mut().reverse();
         self
     }
 
@@ -2721,12 +2793,13 @@ where
     /// ***Panics*** if the axis is out of bounds.
     #[track_caller]
     pub fn insert_axis(self, axis: Axis) -> ArrayBase<S, D::Larger>
+    where S: Data
     {
         assert!(axis.index() <= self.ndim());
         // safe because a new axis of length one does not affect memory layout
         unsafe {
-            let strides = self.meta().strides.insert_axis(axis);
-            let dim = self.meta().dim.insert_axis(axis);
+            let strides = self.meta.strides.insert_axis(axis);
+            let dim = self.meta.dim.insert_axis(axis);
             self.with_strides_dim(strides, dim)
         }
     }
@@ -2742,6 +2815,21 @@ where
     where D: RemoveAxis
     {
         self.index_axis_move(axis, 0)
+    }
+
+    /// Return a pointer to the first element in the array.
+    ///
+    /// Raw access to array elements needs to follow the strided indexing
+    /// scheme: an element at multi-index *I* in an array with strides *S* is
+    /// located at offset
+    ///
+    /// *Σ<sub>0 ≤ k < d</sub> I<sub>k</sub> × S<sub>k</sub>*
+    ///
+    /// where *d* is `self.ndim()`.
+    #[inline(always)]
+    pub fn as_ptr(&self) -> *const A
+    {
+        self.meta.ptr.as_ptr() as *const A
     }
 
     pub(crate) fn pointer_is_inbounds(&self) -> bool
@@ -2854,6 +2942,27 @@ where
         self.slice_axis_inplace(axis, Slice::new(0, Some(-1), 1));
     }
 
+    /// Return a raw view of the array.
+    #[inline]
+    pub fn raw_view(&self) -> RawArrayView<A, D>
+    {
+        unsafe { RawArrayView::new(self.meta.ptr, self.meta.dim.clone(), self.meta.strides.clone()) }
+    }
+
+    /// Return a raw mutable view of the array.
+    ///
+    /// This method attempts to unshare the data. If `S: DataMut`, then the
+    /// data is guaranteed to be uniquely held on return.
+    #[inline]
+    pub fn raw_view_mut(&mut self) -> RawArrayViewMut<A, D>
+    {
+        // This ensure unique would have already been performed when the
+        // `ArrayRef` was created.
+        // self.try_ensure_unique(); // for ArcArray
+        unsafe { RawArrayViewMut::new(self.meta.ptr, self.meta.dim.clone(), self.meta.strides.clone()) }
+    }
+
+
     /// Iterates over pairs of consecutive elements along the axis.
     ///
     /// The first argument to the closure is an element, and the second
@@ -2929,7 +3038,15 @@ unsafe fn unlimited_transmute<A, B>(data: A) -> B
 
 type DimMaxOf<A, B> = <A as DimMax<B>>::Output;
 
+impl<A, D> Borrow<ArrayRef<A, D>> for Array<A, D>
+{
+    fn borrow(&self) -> &ArrayRef<A, D> {
+        self.deref()
+    }
+}
+
 impl<A, D> ToOwned for ArrayRef<A, D>
+where D: Dimension, A: Clone
 {
     type Owned = Array<A, D>;
 
@@ -2964,7 +3081,6 @@ impl<A, D> ToOwned for ArrayRef<A, D>
     /// # assert_eq!(arr, owned);
     /// ```
     fn to_owned(&self) -> Array<A, D>
-    where A: Clone
     {
         if let Some(slc) = self.as_slice_memory_order() {
             unsafe {

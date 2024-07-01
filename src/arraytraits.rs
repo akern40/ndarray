@@ -15,7 +15,7 @@ use std::ops::{Index, IndexMut};
 use std::{hash, mem::size_of};
 use std::{iter::FromIterator, slice};
 
-use crate::imp_prelude::*;
+use crate::{imp_prelude::*, ArrayRef};
 use crate::{
     dimension,
     iter::{Iter, IterMut},
@@ -33,11 +33,10 @@ pub(crate) fn array_out_of_bounds() -> !
 }
 
 #[inline(always)]
-pub fn debug_bounds_check<S, D, I>(_a: &ArrayBase<S, D>, _index: &I)
+pub fn debug_bounds_check<A, D, I>(_a: &ArrayRef<A, D>, _index: &I)
 where
     D: Dimension,
     I: NdIndex<D>,
-    S: Data,
 {
     debug_bounds_check!(_a, *_index);
 }
@@ -57,9 +56,9 @@ where
     {
         debug_bounds_check!(self, index);
         unsafe {
-            &*self.ptr.as_ptr().offset(
+            &*self.meta.ptr.as_ptr().offset(
                 index
-                    .index_checked(&self.dim, &self.strides)
+                    .index_checked(&self.meta.dim, &self.meta.strides)
                     .unwrap_or_else(|| array_out_of_bounds()),
             )
         }
@@ -82,7 +81,7 @@ where
         unsafe {
             &mut *self.as_mut_ptr().offset(
                 index
-                    .index_checked(&self.dim, &self.strides)
+                    .index_checked(&self.meta.dim, &self.meta.strides)
                     .unwrap_or_else(|| array_out_of_bounds()),
             )
         }

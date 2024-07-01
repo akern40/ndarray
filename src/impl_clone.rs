@@ -7,6 +7,7 @@
 // except according to those terms.
 
 use crate::imp_prelude::*;
+use crate::ArrayMeta;
 use crate::RawDataClone;
 
 impl<S: RawDataClone, D: Clone> Clone for ArrayBase<S, D>
@@ -15,12 +16,14 @@ impl<S: RawDataClone, D: Clone> Clone for ArrayBase<S, D>
     {
         // safe because `clone_with_ptr` promises to provide equivalent data and ptr
         unsafe {
-            let (data, ptr) = self.data.clone_with_ptr(self.ptr);
+            let (data, ptr) = self.data.clone_with_ptr(self.meta.ptr);
             ArrayBase {
                 data,
-                ptr,
-                dim: self.dim.clone(),
-                strides: self.strides.clone(),
+                meta: ArrayMeta {
+                    ptr,
+                    dim: self.meta.dim.clone(),
+                    strides: self.meta.strides.clone(),
+                }
             }
         }
     }
@@ -31,11 +34,14 @@ impl<S: RawDataClone, D: Clone> Clone for ArrayBase<S, D>
     fn clone_from(&mut self, other: &Self)
     {
         unsafe {
-            self.ptr = self.data.clone_from_with_ptr(&other.data, other.ptr);
-            self.dim.clone_from(&other.dim);
-            self.strides.clone_from(&other.strides);
+            self.meta.ptr = self.data.clone_from_with_ptr(&other.data, other.meta.ptr);
+            self.meta.dim.clone_from(&other.meta.dim);
+            self.meta.strides.clone_from(&other.meta.strides);
         }
     }
 }
 
-impl<S: RawDataClone + Copy, D: Copy> Copy for ArrayBase<S, D> {}
+impl<A: Clone, D: Copy> Copy for ArrayMeta<A, D> {}
+
+impl<S, D> Copy for ArrayBase<S, D>
+where S: RawDataClone + Copy, D: Copy, <S as RawData>::Elem: Copy {}

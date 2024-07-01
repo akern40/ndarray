@@ -32,8 +32,8 @@ where S: Data<Elem = A>
     pub fn insert_axis_inplace(&mut self, axis: Axis)
     {
         assert!(axis.index() <= self.ndim());
-        self.dim = self.dim.insert_axis(axis);
-        self.strides = self.strides.insert_axis(axis);
+        self.meta.dim = self.meta.dim.insert_axis(axis);
+        self.meta.strides = self.meta.strides.insert_axis(axis);
     }
 
     /// Collapses the array to `index` along the axis and removes the axis,
@@ -55,7 +55,7 @@ where S: Data<Elem = A>
     pub fn index_axis_inplace(&mut self, axis: Axis, index: usize)
     {
         self.collapse_axis(axis, index);
-        self.dim = self.dim.remove_axis(axis);
-        self.strides = self.strides.remove_axis(axis);
+        self.meta.dim = self.meta.dim.remove_axis(axis);
+        self.meta.strides = self.meta.strides.remove_axis(axis);
     }
 }

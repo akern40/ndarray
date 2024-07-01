@@ -244,6 +244,7 @@ pub type Ixs = isize;
 // # For Developers: See the documentation of ArrayBase for
 // information on requirements that `dim`, `strides`, and `ptr`
 // must meet.
+#[derive(Debug, Clone)]
 struct ArrayMeta<A, D>
 {
     /// The lengths of the axes.
@@ -1304,16 +1305,16 @@ where S: RawData
 #[warn(missing_docs)]
 mod array_ref
 {
-    //! ArrayRef definition and core trait implementations.
-    //!
-    //! This code is separated into the module in order to excise
-    //! a few unsafe trait implementations from the rest of the codebase,
-    //! as per [the ArrayRef RFC](https://github.com/rust-ndarray/ndarray/issues/879#issuecomment-756513770)
-    //! and the [Rust Design Patterns chapter](https://rust-unofficial.github.io/patterns/patterns/structural/unsafe-mods.html).
+    // ! ArrayRef definition and core trait implementations.
+    // !
+    // ! This code is separated into the module in order to excise
+    // ! a few unsafe trait implementations from the rest of the codebase,
+    // ! as per [the ArrayRef RFC](https://github.com/rust-ndarray/ndarray/issues/879#issuecomment-756513770)
+    // ! and the [Rust Design Patterns chapter](https://rust-unofficial.github.io/patterns/patterns/structural/unsafe-mods.html).
 
     use core::ops::{Deref, DerefMut};
 
-    use crate::{ArrayBase, ArrayMeta, Data, DataMut};
+    use crate::{ArrayBase, ArrayMeta, Data, DataMut, Dimension, RawArrayView};
 
     /// A reference to an existing [`ArrayBase`].
     ///
@@ -1322,7 +1323,7 @@ mod array_ref
     /// of elements. Just like how `Vec` derefs to `slice`, `Array` derefs
     /// to `ArrayRef`. This has a number of advantages for the `ndarray`
     /// ecosystem, but one of the most important uses of `ArrayRef` is as a
-    /// function argument. Similar to how must functions that want to operate
+    /// function argument. Similar to how most functions that want to operate
     /// on part of / all of a `Vec<A>` take in a `&[A]`, functions that want
     /// to operate on a `Array<A, D>` (of any kind) take in a `&ArrayRef<A, D>`.
     /// For example, a simple function that returns the first element of an array
@@ -1337,8 +1338,7 @@ mod array_ref
     /// kept in mind (and which break the analogy to `Vec<A>`/`[A]`):
     ///     1. Unlike a slice, which can represent part of a `Vec` via direct indexing
     ///         (e.g., `&v[1..]`), an `ArrayRef` that represents part of an `Array`
-    ///         must be obtained by first getting an `ArrayView` (by slicing, etc)
-    ///         and then by coercing that `ArrayView` to an `ArrayRef`.
+    ///         must be obtained by first getting an `ArrayView` (by slicing, etc).
     ///     2. The shape, strides, and pointer of an `ArrayRef` are immutable, and
     ///         so any operation or function which wants to mutate them must do so
     ///         on an `ArrayView`, not an `ArrayRef`.
@@ -1377,7 +1377,7 @@ mod array_ref
     }
 
     impl<A, S, D> DerefMut for ArrayBase<S, D>
-    where S: DataMut<Elem = A>
+    where S: DataMut<Elem = A>, D: Dimension
     {
         /// Allow mutable dereferences from `ArrayBase` to `ArrayRef`.
         ///
@@ -1656,7 +1656,7 @@ where D: Dimension
 
         match self.broadcast(dim.clone()) {
             Some(it) => it,
-            None => broadcast_panic(&self.dim, &dim),
+            None => broadcast_panic(&self.meta().dim, &dim),
         }
     }
 
@@ -1668,7 +1668,7 @@ where D: Dimension
     {
         let dim = dim.into_dimension();
         debug_assert_eq!(self.shape(), dim.slice());
-        let ptr = self.ptr;
+        let ptr = self.meta().ptr;
         let mut strides = dim.clone();
         strides
             .slice_mut()
@@ -1685,7 +1685,7 @@ where
     /// Remove array axis `axis` and return the result.
     fn try_remove_axis(self, axis: Axis) -> ArrayBase<S, D::Smaller>
     {
-        let d = self.dim.try_remove_axis(axis);
+        let d = self.meta.dim.try_remove_axis(axis);
         let s = self.meta().strides.try_remove_axis(axis);
         // safe because new dimension, strides allow access to a subset of old data
         unsafe { self.with_strides_dim(s, d) }
