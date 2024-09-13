@@ -123,6 +123,8 @@ extern crate cblas_sys;
 #[cfg(feature = "docs")]
 pub mod doc;
 
+pub mod core;
+
 #[cfg(target_has_atomic = "ptr")]
 use alloc::sync::Arc;
 
