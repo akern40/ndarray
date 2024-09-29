@@ -8,7 +8,7 @@
 
 use std::ptr::NonNull;
 
-use crate::imp_prelude::*;
+use crate::{core::{ndcore::Layout, Owner}, imp_prelude::*};
 
 // internal "builder-like" methods
 impl<A, S> ArrayBase<S, Ix1>
@@ -25,12 +25,12 @@ where S: RawData<Elem = A>
     #[inline]
     pub(crate) unsafe fn from_data_ptr(data: S, ptr: NonNull<A>) -> Self
     {
-        let array = ArrayBase {
-            data,
-            ptr,
-            dim: Ix1(0),
-            strides: Ix1(1),
-        };
+        let array = ArrayBase::new_unchecked(ptr, Layout { dim: Ix1(0), strides: Ix1(1) }, data);
+            // data,
+            // ptr,
+            // dim: Ix1(0),
+            // strides: Ix1(1),
+        // };
         debug_assert!(array.pointer_is_inbounds());
         array
     }
@@ -56,11 +56,12 @@ where
     where E: Dimension
     {
         debug_assert_eq!(strides.ndim(), dim.ndim());
-        ArrayBase {
-            data: self.data,
-            ptr: self.ptr,
-            dim,
-            strides,
-        }
+        self.with_layout(Layout {dim, strides})
+        // ArrayBase {
+        //     data: self.data,
+        //     ptr: self.ptr,
+        //     dim,
+        //     strides,
+        // }
     }
 }

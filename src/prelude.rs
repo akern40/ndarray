@@ -21,6 +21,9 @@
 pub use crate::{ArcArray, Array, ArrayBase, ArrayView, ArrayViewMut, CowArray, RawArrayView, RawArrayViewMut};
 
 #[doc(no_inline)]
+pub use crate::core::ndcore::{ArrayRef, RawArrayRef};
+
+#[doc(no_inline)]
 pub use crate::{Axis, Dim, Dimension};
 
 #[doc(no_inline)]

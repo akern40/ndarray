@@ -124,6 +124,7 @@ extern crate cblas_sys;
 pub mod doc;
 
 pub mod core;
+pub use core::ndcore::{ArrayBase, RawViewBase};
 
 #[cfg(target_has_atomic = "ptr")]
 use alloc::sync::Arc;
@@ -1279,20 +1280,20 @@ pub type Ixs = isize;
 // may change in the future.
 //
 // [`.offset()`]: https://doc.rust-lang.org/stable/std/primitive.pointer.html#method.offset-1
-pub struct ArrayBase<S, D>
-where S: RawData
-{
-    /// Data buffer / ownership information. (If owned, contains the data
-    /// buffer; if borrowed, contains the lifetime and mutability.)
-    data: S,
-    /// A non-null pointer into the buffer held by `data`; may point anywhere
-    /// in its range. If `S: Data`, this pointer must be aligned.
-    ptr: std::ptr::NonNull<S::Elem>,
-    /// The lengths of the axes.
-    dim: D,
-    /// The element count stride per axis. To be parsed as `isize`.
-    strides: D,
-}
+// pub struct ArrayBase<S, D>
+// where S: RawData
+// {
+//     /// Data buffer / ownership information. (If owned, contains the data
+//     /// buffer; if borrowed, contains the lifetime and mutability.)
+//     data: S,
+//     /// A non-null pointer into the buffer held by `data`; may point anywhere
+//     /// in its range. If `S: Data`, this pointer must be aligned.
+//     ptr: std::ptr::NonNull<S::Elem>,
+//     /// The lengths of the axes.
+//     dim: D,
+//     /// The element count stride per axis. To be parsed as `isize`.
+//     strides: D,
+// }
 
 /// An array where the data has shared ownership and is copy on write.
 ///
@@ -1406,7 +1407,7 @@ pub type ArrayViewMut<'a, A, D> = ArrayBase<ViewRepr<&'a mut A>, D>;
 ///
 /// You can't use this type with an arbitrary raw pointer; see
 /// [`from_shape_ptr`](#method.from_shape_ptr) for details.
-pub type RawArrayView<A, D> = ArrayBase<RawViewRepr<*const A>, D>;
+pub type RawArrayView<A, D> = RawViewBase<RawViewRepr<*const A>, D>;
 
 /// A mutable array view without a lifetime.
 ///
@@ -1429,7 +1430,7 @@ pub type RawArrayView<A, D> = ArrayBase<RawViewRepr<*const A>, D>;
 ///
 /// You can't use this type with an arbitrary raw pointer; see
 /// [`from_shape_ptr`](#method.from_shape_ptr) for details.
-pub type RawArrayViewMut<A, D> = ArrayBase<RawViewRepr<*mut A>, D>;
+pub type RawArrayViewMut<A, D> = RawViewBase<RawViewRepr<*mut A>, D>;
 
 pub use data_repr::OwnedRepr;
 
