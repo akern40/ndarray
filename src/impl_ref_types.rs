@@ -322,9 +322,7 @@ where
 }
 
 impl<A, D> ToOwned for ArrayRef<A, D>
-where
-    A: Clone,
-    D: Dimension,
+where A: Clone
 {
     type Owned = Array<A, D>;
 
