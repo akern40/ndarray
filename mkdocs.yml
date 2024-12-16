@@ -1,0 +1,51 @@
+site_name: ndarray
+site_url: https://ndarray-rust.github.io/ndarray
+repo_url: https://github.com/rust-ndarray/ndarray
+nav:
+  - Quickstart: index.md
+  - Extra Features:
+    - Serialization with serde: serde.md
+    - Approximate Equality with approx: approx.md
+    - Parallelization with rayon: rayon.md
+    - BLAS Support: blas.md
+    - Threading matrixmultiply: mm-threading.md
+  - Integration with `rand`: rand.md
+
+theme:
+  name: material
+
+  features:
+  - content.code.copy # Code copying
+  - navigation.sections # Unfold sections in navigation
+
+  palette:
+  # Palette toggle for automatic mode
+  - media: "(prefers-color-scheme)"
+    toggle:
+      icon: material/brightness-auto
+      name: Switch to light mode
+
+  # Palette toggle for light mode
+  - media: "(prefers-color-scheme: light)"
+    scheme: default 
+    toggle:
+      icon: material/brightness-7
+      name: Switch to dark mode
+
+  # Palette toggle for dark mode
+  - media: "(prefers-color-scheme: dark)"
+    scheme: slate
+    toggle:
+      icon: material/brightness-4
+      name: Switch to system preference
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+# extra:
+#   version:
+#     provider: mike
