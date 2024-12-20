@@ -6,7 +6,7 @@ use num_integer::{ExtendedGcd, Integer};
 use num_traits::{Euclid, Float, Inv, Pow, Signed};
 use paste::paste;
 
-use crate::{broadcast::Broadcastable, dimension::broadcast::co_broadcast, Array, ArrayRef, DimMax, Dimension, Zip};
+use crate::{dimension::broadcast::co_broadcast, Array, ArrayRef, DimMax, Dimension, Zip};
 
 /// Implement functions inside a generic scope that map another function to an array's elements.
 ///
@@ -142,11 +142,10 @@ macro_rules! impl_pairs {
 /// ```no_run
 /// use num::Integer;
 ///
-/// impl<A, D, T, const ARR: bool> ArrayRef<A, D>
+/// impl<A, D> ArrayRef<A, D>
 /// where
 ///     A: Integer + Clone,
 ///     D: Dimension,
-///     T: Broadcastable<A, ARR>,
 /// {
 ///     impl_broadcast_singles!(Integer, "ref", (is_multiple_of, other, bool));
 /// }
@@ -155,15 +154,21 @@ macro_rules! impl_pairs {
 /// ```no_run
 /// use num::Integer;
 ///
-/// impl<A, D, T, const ARR: bool> ArrayRef<A, D>
+/// impl<A, D> ArrayRef<A, D>
 /// where
 ///     A: Integer + Clone,
 ///     D: Dimension,
-///     T: Broadcastable<A, ARR>,
 /// {
-///     fn is_multiple_of(&self, other: &T) -> Array<bool, D> {
-///         Zip::from(self)
-///             .and(other.maybe_broadcast(self.raw_dim()).unwrap())
+///     fn is_multiple_of<E>(&self, other: &ArrayRef<A, E>) -> Array<bool, <D as DimMax<E>>::Output>
+///     where
+///         E: Dimension,
+///         D: DimMax<E>
+///     {
+///         let shape = co_broadcast::<_, _, <D as DimMax<E>>::Output>(
+///             &self.raw_dim(), &other.raw_dim()
+///         ).unwrap();
+///         Zip::from(self.broadcast(shape.clone()).unwrap())
+///             .and(other.broadcast(shape).unwrap())
 ///             .map_collect(Integer::is_multiple_of)
 ///     }
 /// }
@@ -178,16 +183,16 @@ macro_rules! impl_broadcast_singles {
     ($mod:ident, "ref", ($(($fn:ident, $arg:ident, $output:ty)),+)) => {
         $(
             #[must_use = "method returns a new array and does not mutate the original value"]
-            fn $fn<B, const ARR: bool>(&self, $arg: &B) -> Array<$output, <D as DimMax<B::PseudoDim>>::Output>
+            fn $fn<E>(&self, $arg: &ArrayRef<A, E>) -> Array<$output, <D as DimMax<E>>::Output>
             where
-                B: Broadcastable<A, ARR>,
-                D: DimMax<B::PseudoDim>
+                E: Dimension,
+                D: DimMax<E>
             {
-                let shape = co_broadcast::<_, _, <D as DimMax<B::PseudoDim>>::Output>(
-                    &self.raw_dim(), &$arg.broadcast_dim()
+                let shape = co_broadcast::<_, _, <D as DimMax<E>>::Output>(
+                    &self.raw_dim(), &$arg.raw_dim()
                 ).unwrap();
                 Zip::from(self.broadcast(shape.clone()).unwrap())
-                    .and($arg.maybe_broadcast(shape).unwrap())
+                    .and($arg.broadcast(shape).unwrap())
                     .map_collect($mod::$fn)
             }
         )+
@@ -195,16 +200,16 @@ macro_rules! impl_broadcast_singles {
     ($mod:ident, "owned", ($(($fn:ident, $arg:ident, $output:ty)),+)) => {
         $(
             #[must_use = "method returns a new array and does not mutate the original value"]
-            fn $fn<B, const ARR: bool>(&self, $arg: &B) -> Array<$output, <D as DimMax<B::PseudoDim>>::Output>
+            fn $fn<E>(&self, $arg: &ArrayRef<A, E>) -> Array<$output, <D as DimMax<E>>::Output>
             where
-                B: Broadcastable<A, ARR>,
-                D: DimMax<B::PseudoDim>
+                E: Dimension,
+                D: DimMax<E>
             {
-                let shape = co_broadcast::<_, _, <D as DimMax<B::PseudoDim>>::Output>(
-                    &self.raw_dim(), &$arg.broadcast_dim()
+                let shape = co_broadcast::<_, _, <D as DimMax<E>>::Output>(
+                    &self.raw_dim(), &$arg.raw_dim()
                 ).unwrap();
                 Zip::from(self.broadcast(shape.clone()).unwrap())
-                    .and($arg.maybe_broadcast(shape).unwrap())
+                    .and($arg.broadcast(shape).unwrap())
                     .map_collect(|s, a| s.$fn(*a))
             }
         )+
@@ -269,10 +274,10 @@ macro_rules! impl_broadcast_pairs {
         impl_broadcast_singles!($mod, "ref", ($(($fn, $arg, A)),+));
         $(
             paste! {
-                fn [<$fn _assign>]<B, const ARR: bool>(&mut self, $arg: &B)
-                where B: Broadcastable<A, ARR>
+                fn [<$fn _assign>]<E>(&mut self, $arg: &ArrayRef<A, E>)
+                where E: Dimension
                 {
-                    self.zip_mut_with(&$arg.maybe_broadcast(self.raw_dim()).unwrap(), |s, o| {
+                    self.zip_mut_with(&$arg.broadcast(self.raw_dim()).unwrap(), |s, o| {
                         *s = s.$fn(o)
                     });
                 }
@@ -283,10 +288,10 @@ macro_rules! impl_broadcast_pairs {
         impl_broadcast_singles!($mod, "owned", ($(($fn, $arg, A)),+));
         $(
             paste! {
-                fn [<$fn _assign>]<B, const ARR: bool>(&mut self, $arg: &B)
-                where B: Broadcastable<A, ARR>
+                fn [<$fn _assign>]<E>(&mut self, $arg: &ArrayRef<A, E>)
+                where E: Dimension
                 {
-                    self.zip_mut_with(&$arg.maybe_broadcast(self.raw_dim()).unwrap(), |s, o| {
+                    self.zip_mut_with(&$arg.broadcast(self.raw_dim()).unwrap(), |s, o| {
                         *s = s.$fn(*o)
                     });
                 }
@@ -310,27 +315,26 @@ where
 impl<A, D> ArrayRef<A, D>
 where D: Dimension
 {
-    fn pow<B, C, const ARR: bool>(&self, rhs: &C) -> Array<A::Output, <D as DimMax<C::PseudoDim>>::Output>
+    fn pow<B, E>(&self, rhs: &ArrayRef<B, E>) -> Array<A::Output, <D as DimMax<E>>::Output>
     where
         A: Pow<B> + Clone,
         B: Clone,
-        C: Broadcastable<B, ARR>,
-        D: DimMax<C::PseudoDim>,
+        E: Dimension,
+        D: DimMax<E>,
     {
-        let shape =
-            co_broadcast::<_, _, <D as DimMax<C::PseudoDim>>::Output>(&self.raw_dim(), &rhs.broadcast_dim()).unwrap();
+        let shape = co_broadcast::<_, _, <D as DimMax<E>>::Output>(&self.raw_dim(), &rhs.raw_dim()).unwrap();
         Zip::from(self.broadcast(shape.clone()).unwrap())
-            .and(rhs.maybe_broadcast(shape).unwrap())
+            .and(rhs.broadcast(shape).unwrap())
             .map_collect(|s, r| s.clone().pow(r.clone()))
     }
 
-    fn pow_assign<B, C, const ARR: bool>(&mut self, rhs: &C)
+    fn pow_assign<B, E>(&mut self, rhs: &ArrayRef<B, E>)
     where
         A: Pow<B, Output = A> + Clone,
         B: Clone,
-        C: Broadcastable<B, ARR>,
+        E: Dimension,
     {
-        self.zip_mut_with(&rhs.maybe_broadcast(self.raw_dim()).unwrap(), |s, r| *s = s.clone().pow(r.clone()));
+        self.zip_mut_with(&rhs.broadcast(self.raw_dim()).unwrap(), |s, r| *s = s.clone().pow(r.clone()));
     }
 }
 
@@ -374,52 +378,50 @@ where
         )
     );
 
-    fn mul_add<B, T, const ARR: bool, const ARR2: bool>(
-        &self, a: &B, b: &T,
-    ) -> Array<A, <<D as DimMax<B::PseudoDim>>::Output as DimMax<T::PseudoDim>>::Output>
+    fn mul_add<E, F>(
+        &self, a: &ArrayRef<A, E>, b: &ArrayRef<A, F>,
+    ) -> Array<A, <<D as DimMax<E>>::Output as DimMax<F>>::Output>
     where
-        B: Broadcastable<A, ARR>,
-        T: Broadcastable<A, ARR2>,
-        D: DimMax<B::PseudoDim>,
-        <D as DimMax<B::PseudoDim>>::Output: DimMax<T::PseudoDim>,
+        E: Dimension,
+        F: Dimension,
+        D: DimMax<E>,
+        <D as DimMax<E>>::Output: DimMax<F>,
     {
-        let shape =
-            co_broadcast::<_, _, <D as DimMax<B::PseudoDim>>::Output>(&self.raw_dim(), &a.broadcast_dim()).unwrap();
-        let shape: <<D as DimMax<B::PseudoDim>>::Output as DimMax<T::PseudoDim>>::Output =
-            co_broadcast(&shape, &b.broadcast_dim()).unwrap();
+        let shape = co_broadcast::<_, _, <D as DimMax<E>>::Output>(&self.raw_dim(), &a.raw_dim()).unwrap();
+        let shape: <<D as DimMax<E>>::Output as DimMax<F>>::Output = co_broadcast(&shape, &b.raw_dim()).unwrap();
         Zip::from(self.broadcast(shape.clone()).unwrap())
-            .and(&a.maybe_broadcast(shape.clone()).unwrap())
-            .and(&b.maybe_broadcast(shape).unwrap())
+            .and(&a.broadcast(shape.clone()).unwrap())
+            .and(&b.broadcast(shape).unwrap())
             .map_collect(|s, a, b| s.mul_add(*a, *b))
     }
 
-    fn mul_add_assign<B, C, const ARR: bool, const ARR2: bool>(&mut self, a: &B, b: &C)
+    fn mul_add_assign<E, F>(&mut self, a: &ArrayRef<A, E>, b: &ArrayRef<A, F>)
     where
-        B: Broadcastable<A, ARR>,
-        C: Broadcastable<A, ARR2>,
+        E: Dimension,
+        F: Dimension,
     {
         let shape = self.raw_dim();
         Zip::from(self)
-            .and(&a.maybe_broadcast(shape.clone()).unwrap())
-            .and(&b.maybe_broadcast(shape).unwrap())
+            .and(&a.broadcast(shape.clone()).unwrap())
+            .and(&b.broadcast(shape).unwrap())
             .map_collect(|s, a, b| s.mul_add(*a, *b));
     }
 
-    fn powi<B, const ARR: bool>(&self, n: &B) -> Array<A, <D as DimMax<B::PseudoDim>>::Output>
+    fn powi<E>(&self, n: &ArrayRef<i32, E>) -> Array<A, <D as DimMax<E>>::Output>
     where
-        B: Broadcastable<i32, ARR>,
-        D: DimMax<B::PseudoDim>,
+        E: Dimension,
+        D: DimMax<E>,
     {
-        let shape: <D as DimMax<B::PseudoDim>>::Output = co_broadcast(&self.raw_dim(), &n.broadcast_dim()).unwrap();
+        let shape: <D as DimMax<E>>::Output = co_broadcast(&self.raw_dim(), &n.raw_dim()).unwrap();
         Zip::from(self.broadcast(shape.clone()).unwrap())
-            .and(&n.maybe_broadcast(shape).unwrap())
+            .and(&n.broadcast(shape).unwrap())
             .map_collect(|s, n| s.powi(*n))
     }
 
-    fn powi_assign<B, const ARR: bool>(&mut self, n: &B)
-    where B: Broadcastable<i32, ARR>
+    fn powi_assign<E>(&mut self, n: &ArrayRef<i32, E>)
+    where E: Dimension
     {
-        self.zip_mut_with(&n.maybe_broadcast(self.raw_dim()).unwrap(), |s, n| *s = s.powi(*n));
+        self.zip_mut_with(&n.broadcast(self.raw_dim()).unwrap(), |s, n| *s = s.powi(*n));
     }
 }
 
@@ -468,22 +470,20 @@ where
         )
     );
 
-    fn extended_gcd_lcm<B, const ARR: bool>(
-        &self, other: &B,
-    ) -> Array<(ExtendedGcd<A>, A), <D as DimMax<B::PseudoDim>>::Output>
+    fn extended_gcd_lcm<E>(&self, other: &ArrayRef<A, E>) -> Array<(ExtendedGcd<A>, A), <D as DimMax<E>>::Output>
     where
         Self: Clone + Signed,
-        B: Broadcastable<A, ARR>,
-        D: DimMax<B::PseudoDim>,
+        E: Dimension,
+        D: DimMax<E>,
     {
-        let shape: <D as DimMax<B::PseudoDim>>::Output = co_broadcast(&self.raw_dim(), &other.broadcast_dim()).unwrap();
+        let shape: <D as DimMax<E>>::Output = co_broadcast(&self.raw_dim(), &other.raw_dim()).unwrap();
         Zip::from(
             self.broadcast(shape.clone())
                 .expect("Shape derived from co_broadcast should be ok"),
         )
         .and(
             &other
-                .maybe_broadcast(shape)
+                .broadcast(shape)
                 .expect("Shape derived from co_broadcast should be ok"),
         )
         .map_collect(|s, o| (s.extended_gcd(o), s.lcm(o)))
