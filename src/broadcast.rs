@@ -1,5 +1,8 @@
-use crate::{ArrayBase, ArrayRef, ArrayView, Data, Dimension, Ix1, ShapeBuilder};
+use crate::{ArrayBase, ArrayRef, ArrayView, Data, Dimension, Ix0, ShapeBuilder};
 
+/// A trait for broadcastable arguments to array functions.
+///
+///
 pub trait Broadcastable<A, const ARR: bool>
 {
     type PseudoDim: Dimension;
@@ -10,11 +13,13 @@ pub trait Broadcastable<A, const ARR: bool>
         A: Clone;
 
     fn broadcast_dim(&self) -> Self::PseudoDim;
+
+    private_decl!();
 }
 
 impl<A> Broadcastable<A, false> for A
 {
-    type PseudoDim = Ix1;
+    type PseudoDim = Ix0;
 
     fn maybe_broadcast<E>(&self, shape: E) -> Option<ArrayView<'_, A, E>>
     where
@@ -32,8 +37,10 @@ impl<A> Broadcastable<A, false> for A
 
     fn broadcast_dim(&self) -> Self::PseudoDim
     {
-        Ix1(1)
+        Ix0()
     }
+
+    private_impl!();
 }
 
 impl<A, D> Broadcastable<A, true> for ArrayRef<A, D>
@@ -53,6 +60,8 @@ where D: Dimension
     {
         self.raw_dim()
     }
+
+    private_impl!();
 }
 
 impl<S, A, D> Broadcastable<A, true> for ArrayBase<S, D>
@@ -74,4 +83,6 @@ where
     {
         self.raw_dim()
     }
+
+    private_impl!();
 }
