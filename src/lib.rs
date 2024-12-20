@@ -213,6 +213,7 @@ mod low_level_util;
 mod zip;
 
 mod dimension;
+mod broadcast;
 
 pub use crate::zip::{FoldWhile, IntoNdProducer, NdProducer, Zip};
 

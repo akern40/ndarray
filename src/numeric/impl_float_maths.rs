@@ -59,80 +59,82 @@ where
     A: 'static + Float,
     D: Dimension,
 {
-    boolean_ops! {
-        /// If the number is `NaN` (not a number), then `true` is returned for each element.
-        fn is_nan
-        /// Return `true` if all elements are `NaN` (not a number).
-        fn is_all_nan
-        /// Return `true` if any element is `NaN` (not a number).
-        fn is_any_nan
-    }
-    boolean_ops! {
-        /// If the number is infinity, then `true` is returned for each element.
-        fn is_infinite
-        /// Return `true` if all elements are infinity.
-        fn is_all_infinite
-        /// Return `true` if any element is infinity.
-        fn is_any_infinite
-    }
+    // boolean_ops! {
+    //     /// If the number is `NaN` (not a number), then `true` is returned for each element.
+    //     fn is_nan
+    //     /// Return `true` if all elements are `NaN` (not a number).
+    //     fn is_all_nan
+    //     /// Return `true` if any element is `NaN` (not a number).
+    //     fn is_any_nan
+    // }
+    // boolean_ops! {
+    //     /// If the number is infinity, then `true` is returned for each element.
+    //     fn is_infinite
+    //     /// Return `true` if all elements are infinity.
+    //     fn is_all_infinite
+    //     /// Return `true` if any element is infinity.
+    //     fn is_any_infinite
+    // }
+    // unary_ops! {
+    //     /// The largest integer less than or equal to each element.
+    //     fn floor
+    //     /// The smallest integer less than or equal to each element.
+    //     fn ceil
+    //     /// The nearest integer of each element.
+    //     fn round
+    //     /// The integer part of each element.
+    //     fn trunc
+    //     /// The fractional part of each element.
+    //     fn fract
+    //     /// Absolute of each element.
+    //     fn abs
+    //     /// Sign number of each element.
+    //     ///
+    //     /// + `1.0` for all positive numbers.
+    //     /// + `-1.0` for all negative numbers.
+    //     /// + `NaN` for all `NaN` (not a number).
+    //     fn signum
+    //     /// The reciprocal (inverse) of each element, `1/x`.
+    //     fn recip
+    //     /// Square root of each element.
+    //     fn sqrt
+    //     /// `e^x` of each element (exponential function).
+    //     fn exp
+    //     /// `2^x` of each element.
+    //     fn exp2
+    //     /// Natural logarithm of each element.
+    //     fn ln
+    //     /// Base 2 logarithm of each element.
+    //     fn log2
+    //     /// Base 10 logarithm of each element.
+    //     fn log10
+    //     /// Cubic root of each element.
+    //     fn cbrt
+    //     /// Sine of each element (in radians).
+    //     fn sin
+    //     /// Cosine of each element (in radians).
+    //     fn cos
+    //     /// Tangent of each element (in radians).
+    //     fn tan
+    // }
     unary_ops! {
-        /// The largest integer less than or equal to each element.
-        fn floor
-        /// The smallest integer less than or equal to each element.
-        fn ceil
-        /// The nearest integer of each element.
-        fn round
-        /// The integer part of each element.
-        fn trunc
-        /// The fractional part of each element.
-        fn fract
-        /// Absolute of each element.
-        fn abs
-        /// Sign number of each element.
-        ///
-        /// + `1.0` for all positive numbers.
-        /// + `-1.0` for all negative numbers.
-        /// + `NaN` for all `NaN` (not a number).
-        fn signum
-        /// The reciprocal (inverse) of each element, `1/x`.
-        fn recip
-        /// Square root of each element.
-        fn sqrt
-        /// `e^x` of each element (exponential function).
-        fn exp
-        /// `2^x` of each element.
-        fn exp2
-        /// Natural logarithm of each element.
-        fn ln
-        /// Base 2 logarithm of each element.
-        fn log2
-        /// Base 10 logarithm of each element.
-        fn log10
-        /// Cubic root of each element.
-        fn cbrt
-        /// Sine of each element (in radians).
-        fn sin
-        /// Cosine of each element (in radians).
-        fn cos
-        /// Tangent of each element (in radians).
-        fn tan
         /// Converts radians to degrees for each element.
         fn to_degrees
         /// Converts degrees to radians for each element.
         fn to_radians
     }
-    binary_ops! {
-        /// Integer power of each element.
-        ///
-        /// This function is generally faster than using float power.
-        fn powi(i32)
-        /// Float power of each element.
-        fn powf(A)
-        /// Logarithm of each element with respect to an arbitrary base.
-        fn log(A)
-        /// The positive difference between given number and each element.
-        fn abs_sub(A)
-    }
+    // binary_ops! {
+    //     /// Integer power of each element.
+    //     ///
+    //     /// This function is generally faster than using float power.
+    //     fn powi(i32)
+    //     /// Float power of each element.
+    //     fn powf(A)
+    //     /// Logarithm of each element with respect to an arbitrary base.
+    //     fn log(A)
+    //     /// The positive difference between given number and each element.
+    //     fn abs_sub(A)
+    // }
 
     /// Square (two powers) of each element.
     #[must_use = "method returns a new array and does not mutate the original value"]
