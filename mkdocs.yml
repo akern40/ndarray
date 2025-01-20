@@ -2,14 +2,18 @@ site_name: ndarray
 site_url: https://ndarray-rust.github.io/ndarray
 repo_url: https://github.com/rust-ndarray/ndarray
 nav:
-  - Quickstart: index.md
+  - Overview: index.md
+  - Quickstart: quickstart.md
+  - For NumPy Users: numpy.md
   - Extra Features:
     - Serialization with serde: serde.md
     - Approximate Equality with approx: approx.md
     - Parallelization with rayon: rayon.md
     - BLAS Support: blas.md
     - Threading matrixmultiply: mm-threading.md
-  - Integration with `rand`: rand.md
+  - ndarray Ecosystem:
+    - Integration with `rand`: rand.md
+    - Linear Algebra: linalg.md
 
 theme:
   name: material
@@ -38,6 +42,7 @@ theme:
     toggle:
       icon: material/brightness-4
       name: Switch to system preference
+
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
@@ -46,6 +51,7 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
-# extra:
-#   version:
-#     provider: mike
+
+extra:
+  version:
+    provider: mike

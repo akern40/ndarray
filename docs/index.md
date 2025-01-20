@@ -1,20 +1,8 @@
-# Quickstart
+# Overview
 
 The `ndarray` crate provides an *n*-dimensional container in Rust.
 
-### Installing
-<!-- We'll start by creating an executable binary.
-From your command line, navigate to wherever you want to put the starting activity and run
-``` shell
->>> cargo init --bin ndstart
-    Creating binary (application) package
-note: see more `Cargo.toml` keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-```
-to create the general Rust project structure, followed by
-```
->>> cd ndstart
-```
-to navigate into the created folder. -->
+## Installing
 `ndarray` is installed using [Cargo](https://doc.rust-lang.org/cargo/), Rust's package manager.
 Add `ndarray` as a dependency by running
 ``` shell
@@ -35,7 +23,7 @@ Add `ndarray` as a dependency by running
     Updating crates.io index
      Locking 10 packages to latest compatible versions
 ```
-The `-` signs are extra features that `ndarray` has; they're discussed more in the [Extra Features](extras.md) section.
+The `-` signs are extra features that `ndarray` has; they're discussed more in the Extra Featuressection.
 Alternatively, you can add `ndarray` into your `Cargo.toml` by hand under the `[dependencies]` section:
 ``` toml
 [dependencies]
