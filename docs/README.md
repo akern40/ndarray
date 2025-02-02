@@ -1,4 +1,4 @@
-# `ndarray` Documentation
+# Documentation about `ndarray` Documentation
 `ndarray` maintains two kinds of documentation: API docs and a website.
 While much of the information overlaps, each has its place.
 
@@ -6,7 +6,7 @@ While much of the information overlaps, each has its place.
 The API docs are hosted on [crates.io](https://docs.rs/ndarray/latest/ndarray/) and are generated from doc comments embedded in the `ndarray` source code.
 As a result, any documentation that is specific to a particular struct, trait, function, or method will appear there.
 These docs are the "reference" material: they try to succinctly describe the library's various components.
-However, this is not the right venue for all kinds of documentation, and that's where the website comes in.
+However, that is not the right venue for all kinds of documentation, and that's where the website comes in.
 
 ## Website
 The website is hosted using GitHub pages and is generated from markdown files that are separate from the source code itself.
