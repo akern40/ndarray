@@ -1286,14 +1286,14 @@ pub type Ixs = isize;
 // may change in the future.
 //
 // [`.offset()`]: https://doc.rust-lang.org/stable/std/primitive.pointer.html#method.offset-1
-pub struct ArrayBase<S, D>
-where S: RawData
+pub struct ArrayBase<S, D, A = <S as RawData>::Elem>
+where S: RawData<Elem = A>
 {
     /// Data buffer / ownership information. (If owned, contains the data
     /// buffer; if borrowed, contains the lifetime and mutability.)
     data: S,
     /// The dimension, strides, and pointer to inside of `data`
-    layout: LayoutRef<S::Elem, D>,
+    layout: LayoutRef<A, D>,
 }
 
 /// A reference to the layout of an *n*-dimensional array.
