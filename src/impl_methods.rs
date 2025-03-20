@@ -3184,6 +3184,68 @@ impl<A, D: Dimension> ArrayRef<A, D>
             f(&*prev, &mut *curr)
         });
     }
+
+    /// Takes the maximum across two arrays.
+    ///
+    /// # Example
+    /// ```
+    /// use ndarray::prelude::*;
+    ///
+    /// let a = array![
+    ///     [ 1,  2,  3],
+    ///     [11, 12, 13],
+    /// ]
+    /// ;
+    /// let b = array![4, 5, 6];
+    /// assert_eq!(a.maximum(&b), array![
+    ///     [ 4,  5,  6],
+    ///     [11, 12, 13],
+    /// ]);
+    /// ```
+    ///
+    /// ***Panics*** if the arrays cannot be broadcast to the same shape.
+    pub fn maximum<E>(&self, other: &ArrayRef<A, E>) -> Array<A, <D as DimMax<E>>::Output>
+    where
+        A: Ord + Clone,
+        E: Dimension,
+        D: DimMax<E>,
+    {
+        let (self_, other) = self.broadcast_with(other).unwrap();
+        Zip::from(self_)
+            .and_broadcast(other)
+            .map_collect(|a, b| (a.max(b)).clone())
+    }
+
+    /// Takes the minimum across two arrays.
+    ///
+    /// # Example
+    /// ```
+    /// use ndarray::prelude::*;
+    ///
+    /// let a = array![
+    ///     [ 1,  2,  3],
+    ///     [11, 12, 13],
+    /// ]
+    /// ;
+    /// let b = array![4, 5, 6];
+    /// assert_eq!(a.minimum(&b), array![
+    ///     [1, 2, 3],
+    ///     [4, 5, 6],
+    /// ]);
+    /// ```
+    ///
+    /// ***Panics*** if the arrays cannot be broadcast to the same shape.
+    pub fn minimum<E>(&self, other: &ArrayRef<A, E>) -> Array<A, <D as DimMax<E>>::Output>
+    where
+        A: Ord + Clone,
+        E: Dimension,
+        D: DimMax<E>,
+    {
+        let (self_, other) = self.broadcast_with(other).unwrap();
+        Zip::from(self_)
+            .and_broadcast(other)
+            .map_collect(|a, b| (a.min(b)).clone())
+    }
 }
 
 /// Transmute from A to B.
