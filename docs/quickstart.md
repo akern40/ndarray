@@ -311,20 +311,96 @@ fn main() {
 ```
 
 ### Stacking and Concatenating
-The `stack!` and `concatenate!` macros are helpful for stacking/concatenating arrays.
+The `stack!` and `concatenate!` macros are helpful for joining arrays together.
 The `stack!` macro stacks arrays along a new axis, while the `concatenate!` macro concatenates arrays along an existing axis:
 ```rust
 use ndarray::prelude::*;
+use ndarray::{concatenate, stack};
 
 fn main() {
     let a = array![1, 2, 3];
     let b = array![4, 5, 6];
     
-    assert_eq!(stack![Axis(0), a, b], array![])
+    assert_eq!(stack!(Axis(0), a, b), array![
+        [1, 2, 3],
+        [4, 5, 6],
+    ]);
+    assert_eq!(stack!(Axis(1), a, b), array![
+        [1, 4],
+        [2, 5],
+        [3, 6],
+    ]);
 
-    println!("stack, axis 1:\n{:?}\n", stack![Axis(1), a, b]);
-    println!("stack, axis 2:\n{:?}\n", stack![Axis(2), a, b]);
-    println!("concatenate, axis 0:\n{:?}\n", concatenate![Axis(0), a, b]);
-    println!("concatenate, axis 1:\n{:?}\n", concatenate![Axis(1), a, b]);
+    assert_eq!(concatenate!(Axis(0), a, b), array![1, 2, 3, 4, 5, 6]);
+}
+```
+
+### Splitting Arrays
+Of course, arrays can also be split into smaller pieces via the `split_at` method:
+```rust
+use ndarray::prelude::*;
+
+fn main() {
+    let a = array![
+        [1, 2, 3],
+        [4, 5, 6],
+    ];
+    let (first_row, second_row) = a.view().split_at(Axis(0), 1);
+    assert_eq!(first_row, array![[1, 2, 3]]);
+    assert_eq!(second_row, array![[4, 5, 6]]);
+
+    let (first_col, other_cols) = a.view().split_at(Axis(1), 1);
+    assert_eq!(first_col, array![
+        [1],
+        [4],
+    ]);
+    assert_eq!(other_cols, array![
+        [2, 3],
+        [5, 6],
+    ]);
+}
+```
+Two interesting note: first, notice that splitting does not remove axes.
+This is because we cannot know at runtime whether either or both parts of a split will be "collapsible", and we therefore just keep length-one axes.
+
+Second, we again run across the `ArrayView`s, this time via the `.view()` method.
+This is because we cannot just "split" a single allocation into two allocations; instead, we can split a view into a single allocation into two views into the same allocation.
+This is an excellent time to dig more deeply into this topic.
+
+## Views and Copies
+A few times in this quickstart guide, we've run across the concept of a "view": a look into an an array, perhaps from a slice or a split.
+Other array libraries in other languages, like Python's NumPy, also have this concept, although it's not so explicitly dealt with.
+But the concepts of array views and references are critical to extending Rust's ownership models to multidimensional arrays.
+
+### Array Views
+Views are immutable borrows of a _portion_ of an array, so when we have a view of an array, we can't mutate it until we've released the view:
+```rust
+use ndarray::prelude::*;
+
+fn main() {
+    let mut a = array![
+        [0, 1, 2, 3],
+        [4, 5, 6, 7]
+    ];
+
+    {
+        // Get views of `a`
+        let (s1, s2) = a.view().split_at(Axis(1), 2);
+        
+        // with s as a view sharing the ref of a, we cannot update a here
+        // a.slice_mut(s![1, 1]).fill(1234.);
+        
+        println!("Split a from Axis(0), at index 1:");
+        println!("s1  = \n{}", s1);
+        println!("s2  = \n{}\n", s2);
+    }
+    
+    // now we can update a again here, as views of s1, s2 are dropped already
+    a.slice_mut(s![1, 1]).fill(1234.);
+    
+    let (s1, s2) = a.view().split_at(Axis(1), 2);
+    println!("Split a from Axis(0), at index 1:");
+    println!("s1  = \n{}", s1);
+    println!("s2  = \n{}\n", s2);
 }
 ```
