@@ -226,14 +226,14 @@ fn main() {
          [11, 13, 15]]
     ];
 
-    let tens: ArrayView = a.slice(s![1, .., ..]);
+    let tens: ArrayView::<_, _> = a.slice(s![1, .., ..]);
     assert_eq!(tens, array![
         [10, 12, 14],
         [11, 13, 15]
     ]);
 
     // Get every other element from each row
-    let first_last: ArrayView = a.slice(s![.., .., ..;2]);
+    let first_last = a.slice(s![.., .., ..;2]);
     assert_eq!(first_last, array![
         [[ 0,  4],
          [ 1,  5]],
@@ -271,5 +271,60 @@ fn main() {
     assert_eq!(sum, a.sum());
 
     let mut max = Array::from_elem((2, 3), i32::MIN);
+    for mat in a.outer_iter() {
+        *max = max.maximum(mat);
+    }
+    assert_eq!(max, array![
+        [10, 12, 13],
+        [11, 13, 15]
+    ]);
+}
+```
+
+## Shape Manipulation
+Multidimensional arrays in `ndarray` can have their shapes changed as well as their elements.
+This includes reshaping, stacking, and splitting.
+
+### Changing Shapes
+The easiest way to change shapes is via methods such as `into_shape_with_order` or `flatten`:
+```rust
+use ndarray::prelude::*;
+
+fn main() {
+    let a = array![
+        [1, 2, 3, 4],
+        [5, 6, 7, 8],
+    ];
+    
+    let b = a.flatten();
+    assert_eq!(b, Array1::<i32>::range(1, 9, 1));
+
+    // Consume `b` and generate `c` with new shape
+    let c = b.into_shape_with_order((4, 2)).unwrap();
+    assert_eq!(c, array![
+        [1, 2],
+        [3, 4],
+        [5, 6],
+        [7, 8]
+    ]);
+}
+```
+
+### Stacking and Concatenating
+The `stack!` and `concatenate!` macros are helpful for stacking/concatenating arrays.
+The `stack!` macro stacks arrays along a new axis, while the `concatenate!` macro concatenates arrays along an existing axis:
+```rust
+use ndarray::prelude::*;
+
+fn main() {
+    let a = array![1, 2, 3];
+    let b = array![4, 5, 6];
+    
+    assert_eq!(stack![Axis(0), a, b], array![])
+
+    println!("stack, axis 1:\n{:?}\n", stack![Axis(1), a, b]);
+    println!("stack, axis 2:\n{:?}\n", stack![Axis(2), a, b]);
+    println!("concatenate, axis 0:\n{:?}\n", concatenate![Axis(0), a, b]);
+    println!("concatenate, axis 1:\n{:?}\n", concatenate![Axis(1), a, b]);
 }
 ```
