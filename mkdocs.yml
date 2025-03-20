@@ -5,6 +5,10 @@ nav:
   - Overview: index.md
   - Quickstart: quickstart.md
   - For NumPy Users: numpy.md
+  - How-To Guides:
+    - Writing Functions: how-to/functions.md
+  - Explanations:
+    - Reference Types: explain/reference.md
   - Extra Features:
     - Serialization with serde: serde.md
     - Approximate Equality with approx: approx.md
