@@ -5,19 +5,23 @@ nav:
   - Overview: index.md
   - Quickstart: quickstart.md
   - For NumPy Users: numpy.md
-  - How-To Guides:
-    - Writing Functions: how-to/functions.md
   - Explanations:
-    - Reference Types: explain/reference.md
-  - Extra Features:
-    - Serialization with serde: serde.md
-    - Approximate Equality with approx: approx.md
-    - Parallelization with rayon: rayon.md
-    - BLAS Support: blas.md
-    - Threading matrixmultiply: mm-threading.md
+    - Array Types: explain/reference.md
+  - How-To Guides:
+    - Slicing: how-to/slice.md
+    - Iteration: how-to/iterate.md
+    - Writing Functions: how-to/functions.md
+  - Features Flags:
+    - Serialization with serde: features/serde.md
+    - Approximate Equality with approx: features/approx.md
+    - Parallelization with rayon: features/rayon.md
+    - BLAS Support: features/blas.md
+    - Threading matrixmultiply: features/mm-threading.md
+    - Portable Atomics Critical: features/pacs.md
   - ndarray Ecosystem:
-    - Integration with `rand`: rand.md
+    - Integration with rand: rand.md
     - Linear Algebra: linalg.md
+  - Glossary: glossary.md
 
 theme:
   name: material

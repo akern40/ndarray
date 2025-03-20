@@ -76,7 +76,6 @@ portable-atomic-util = { version = "0.2.0", features = [ "alloc" ] }
 members = [
     "ndarray-rand",
     "crates/*",
-    "docs/ndstart"
 ]
 default-members = [
     ".",
