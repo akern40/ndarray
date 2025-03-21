@@ -10,6 +10,7 @@ use alloc::slice;
 use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+use num_traits::Zero;
 #[allow(unused_imports)]
 use rawpointer::PointerExt;
 use std::mem::{size_of, ManuallyDrop};
@@ -3206,17 +3207,31 @@ impl<A, D: Dimension> ArrayRef<A, D>
     /// ***Panics*** if the arrays cannot be broadcast to the same shape.
     pub fn maximum<E>(&self, other: &ArrayRef<A, E>) -> Array<A, <D as DimMax<E>>::Output>
     where
-        A: Ord + Clone,
+        A: PartialOrd + Clone + Zero,
         E: Dimension,
         D: DimMax<E>,
     {
         let (self_, other) = self.broadcast_with(other).unwrap();
         Zip::from(self_)
-            .and_broadcast(other)
-            .map_collect(|a, b| (a.max(b)).clone())
+            .and(other)
+            .map_collect(|a, b| match a.partial_cmp(b) {
+                Some(o) => match o {
+                    core::cmp::Ordering::Less => b.clone(),
+                    core::cmp::Ordering::Equal => a.clone(),
+                    core::cmp::Ordering::Greater => a.clone(),
+                },
+                None =>
+                    if let None = a.partial_cmp(&A::zero()) {
+                        a.clone()
+                    } else if let None = b.partial_cmp(&A::zero()) {
+                        b.clone()
+                    } else {
+                        unreachable!("One of the two must return None for partial_cmp to zero")
+                    },
+            })
     }
 
-    /// Takes the minimum across two arrays.
+    /// Takes the minimum across two arrays, propagating NaNs.
     ///
     /// # Example
     /// ```
@@ -3237,14 +3252,28 @@ impl<A, D: Dimension> ArrayRef<A, D>
     /// ***Panics*** if the arrays cannot be broadcast to the same shape.
     pub fn minimum<E>(&self, other: &ArrayRef<A, E>) -> Array<A, <D as DimMax<E>>::Output>
     where
-        A: Ord + Clone,
+        A: PartialOrd + Clone + Zero,
         E: Dimension,
         D: DimMax<E>,
     {
         let (self_, other) = self.broadcast_with(other).unwrap();
         Zip::from(self_)
-            .and_broadcast(other)
-            .map_collect(|a, b| (a.min(b)).clone())
+            .and(other)
+            .map_collect(|a, b| match a.partial_cmp(b) {
+                Some(o) => match o {
+                    core::cmp::Ordering::Less => a.clone(),
+                    core::cmp::Ordering::Equal => a.clone(),
+                    core::cmp::Ordering::Greater => b.clone(),
+                },
+                None =>
+                    if let None = a.partial_cmp(&A::zero()) {
+                        a.clone()
+                    } else if let None = b.partial_cmp(&A::zero()) {
+                        b.clone()
+                    } else {
+                        unreachable!("One of the two must return None for partial_cmp to zero")
+                    },
+            })
     }
 }
 
@@ -3338,5 +3367,14 @@ mod tests
         let a = ArcArray::from(base.clone());
         let _a2 = a.clone();
         assert_first!(a);
+    }
+
+    #[test]
+    fn test_minim_maxim()
+    {
+        let a = array![1, 5, 3];
+        let b = array![4, 2, 6];
+        assert_eq!(a.minimum(&b), array![1, 2, 3]);
+        assert_eq!(a.maximum(&b), array![4, 5, 6]);
     }
 }
