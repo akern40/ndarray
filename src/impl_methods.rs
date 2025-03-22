@@ -3186,33 +3186,35 @@ impl<A, D: Dimension> ArrayRef<A, D>
         });
     }
 
-    /// Takes the maximum across two arrays.
+    /// Takes the maximum across two arrays, propagating NaNs.
+    ///
+    /// For custom element types, this method will try to perform
+    /// a maximum operation; if `self[i].partial_cmp(other[i])` is `None`,
+    /// then
+    /// 1. If `self[i] != self[i]`, select `self[i]`
+    /// 2. Otherwise, select `other[i]`
+    ///
+    /// This is equivalent to NaN propagation logic, but the details
+    /// may be important for custom types.
     ///
     /// # Example
     /// ```
     /// use ndarray::prelude::*;
+    /// use core::f64::NAN;
     ///
-    /// let a = array![
-    ///     [ 1,  2,  3],
-    ///     [11, 12, 13],
-    /// ]
-    /// ;
-    /// let b = array![4, 5, 6];
-    /// assert_eq!(a.maximum(&b), array![
-    ///     [ 4,  5,  6],
-    ///     [11, 12, 13],
-    /// ]);
+    /// let a = array![1., 2., 3.];
+    /// let b = array![4., NAN, 6.];
+    /// let min = a.maximum(&b);
+    /// assert_eq!(min[0], 4.);
+    /// assert!(min[1].is_nan());
+    /// assert_eq!(min[2], 6.);
     /// ```
     ///
     /// ***Panics*** if the arrays cannot be broadcast to the same shape.
-    pub fn maximum<E>(&self, other: &ArrayRef<A, E>) -> Array<A, <D as DimMax<E>>::Output>
-    where
-        A: PartialOrd + Clone + Zero,
-        E: Dimension,
-        D: DimMax<E>,
+    pub fn maximum(&self, other: &ArrayRef<A, D>) -> Array<A, D>
+    where A: PartialOrd + Clone + Zero
     {
-        let (self_, other) = self.broadcast_with(other).unwrap();
-        Zip::from(self_)
+        Zip::from(self)
             .and(other)
             .map_collect(|a, b| match a.partial_cmp(b) {
                 Some(o) => match o {
@@ -3221,43 +3223,44 @@ impl<A, D: Dimension> ArrayRef<A, D>
                     core::cmp::Ordering::Greater => a.clone(),
                 },
                 None =>
-                    if let None = a.partial_cmp(&A::zero()) {
+                    if a != a {
                         a.clone()
-                    } else if let None = b.partial_cmp(&A::zero()) {
-                        b.clone()
                     } else {
-                        unreachable!("One of the two must return None for partial_cmp to zero")
+                        b.clone()
                     },
             })
     }
 
     /// Takes the minimum across two arrays, propagating NaNs.
     ///
+    /// For custom element types, this method will try to perform
+    /// a minimum operation; if `self[i].partial_cmp(other[i])` is `None`,
+    /// then
+    /// 1. If `self[i] != self[i]`, select `self[i]`
+    /// 2. Otherwise, select `other[i]`
+    ///
+    /// This is equivalent to NaN propagation logic, but the details
+    /// may be important for custom types.
+    ///
     /// # Example
     /// ```
     /// use ndarray::prelude::*;
+    /// use core::f64::NAN;
     ///
-    /// let a = array![
-    ///     [ 1,  2,  3],
-    ///     [11, 12, 13],
-    /// ]
-    /// ;
-    /// let b = array![4, 5, 6];
-    /// assert_eq!(a.minimum(&b), array![
-    ///     [1, 2, 3],
-    ///     [4, 5, 6],
-    /// ]);
+    /// let a = array![1., 2., 3.];
+    /// let b = array![4., NAN, 6.];
+    /// let min = a.minimum(&b);
+    /// assert_eq!(min[0], 1.);
+    /// assert!(min[1].is_nan());
+    /// assert_eq!(min[2], 3.);
     /// ```
     ///
     /// ***Panics*** if the arrays cannot be broadcast to the same shape.
-    pub fn minimum<E>(&self, other: &ArrayRef<A, E>) -> Array<A, <D as DimMax<E>>::Output>
-    where
-        A: PartialOrd + Clone + Zero,
-        E: Dimension,
-        D: DimMax<E>,
+    #[inline(never)]
+    pub fn minimum(&self, other: &ArrayRef<A, D>) -> Array<A, D>
+    where A: PartialOrd + Clone + Zero
     {
-        let (self_, other) = self.broadcast_with(other).unwrap();
-        Zip::from(self_)
+        Zip::from(self)
             .and(other)
             .map_collect(|a, b| match a.partial_cmp(b) {
                 Some(o) => match o {
@@ -3266,12 +3269,10 @@ impl<A, D: Dimension> ArrayRef<A, D>
                     core::cmp::Ordering::Greater => b.clone(),
                 },
                 None =>
-                    if let None = a.partial_cmp(&A::zero()) {
+                    if a != a {
                         a.clone()
-                    } else if let None = b.partial_cmp(&A::zero()) {
-                        b.clone()
                     } else {
-                        unreachable!("One of the two must return None for partial_cmp to zero")
+                        b.clone()
                     },
             })
     }
