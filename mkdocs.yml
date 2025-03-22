@@ -6,50 +6,51 @@ nav:
   - Quickstart: quickstart.md
   - For NumPy Users: numpy.md
   - Explanations:
-    - Array Types: explain/reference.md
+      - Array Types: explain/reference.md
+      - Panics: explain/panics.md
   - How-To Guides:
-    - Slicing: how-to/slice.md
-    - Iteration: how-to/iterate.md
-    - Writing Functions: how-to/functions.md
+      - Slicing: how-to/slice.md
+      - Iteration: how-to/iterate.md
+      - Writing Functions: how-to/functions.md
   - Features Flags:
-    - Serialization with serde: features/serde.md
-    - Approximate Equality with approx: features/approx.md
-    - Parallelization with rayon: features/rayon.md
-    - BLAS Support: features/blas.md
-    - Threading matrixmultiply: features/mm-threading.md
-    - Portable Atomics Critical: features/pacs.md
+      - Serialization with serde: features/serde.md
+      - Approximate Equality with approx: features/approx.md
+      - Parallelization with rayon: features/rayon.md
+      - BLAS Support: features/blas.md
+      - Threading matrixmultiply: features/mm-threading.md
+      - Portable Atomics Critical: features/pacs.md
   - ndarray Ecosystem:
-    - Integration with rand: rand.md
-    - Linear Algebra: linalg.md
+      - Integration with rand: rand.md
+      - Linear Algebra: linalg.md
   - Glossary: glossary.md
 
 theme:
   name: material
 
   features:
-  - content.code.copy # Code copying
-  - navigation.sections # Unfold sections in navigation
+    - content.code.copy # Code copying
+    - navigation.sections # Unfold sections in navigation
 
   palette:
-  # Palette toggle for automatic mode
-  - media: "(prefers-color-scheme)"
-    toggle:
-      icon: material/brightness-auto
-      name: Switch to light mode
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
 
-  # Palette toggle for light mode
-  - media: "(prefers-color-scheme: light)"
-    scheme: default 
-    toggle:
-      icon: material/brightness-7
-      name: Switch to dark mode
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
 
-  # Palette toggle for dark mode
-  - media: "(prefers-color-scheme: dark)"
-    scheme: slate
-    toggle:
-      icon: material/brightness-4
-      name: Switch to system preference
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
 
 markdown_extensions:
   - pymdownx.highlight:
