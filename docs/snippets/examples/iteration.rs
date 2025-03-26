@@ -1,4 +1,4 @@
-use ndarray::prelude::*;
+use ndarray::{array, Array};
 
 fn main()
 {
@@ -16,9 +16,15 @@ fn main()
     assert_eq!(sum, a.sum());
 
     let mut max = Array::from_elem((2, 3), i32::MIN);
-    max.zip_mut_with(&mat, |x, a| {
-        *x = (*x).max(*a);
-    });
+    for arr in a.outer_iter() {
+        // Calculate the element-by-element maximum
+        max.zip_mut_with(&arr, |x, a| {
+            *x = (*x).max(*a);
+        });
+    }
+    // max.zip_mut_with(&a, |x, a| {
+    //     *x = (*x).max(*a);
+    // });
     assert_eq!(max, array![
         [10, 12, 14],
         [11, 13, 15]

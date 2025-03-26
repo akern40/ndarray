@@ -13,6 +13,7 @@ nav:
       - Slicing: how-to/slice.md
       - Iteration: how-to/iterate.md
       - Writing Functions: how-to/functions.md
+      - Broadcasting: how-to/broadcast.md
   - Features Flags:
       - no_std Support: features/no-std.md
       - Serialization with serde: features/serde.md
