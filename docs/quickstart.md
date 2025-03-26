@@ -271,11 +271,11 @@ fn main() {
     assert_eq!(sum, a.sum());
 
     let mut max = Array::from_elem((2, 3), i32::MIN);
-    for mat in a.outer_iter() {
-        *max = max.maximum(mat);
-    }
+    max.zip_mut_with(&mat, |x, a| {
+        *x = (*x).max(*a);
+    });
     assert_eq!(max, array![
-        [10, 12, 13],
+        [10, 12, 14],
         [11, 13, 15]
     ]);
 }
@@ -373,34 +373,133 @@ Other array libraries in other languages, like Python's NumPy, also have this co
 But the concepts of array views and references are critical to extending Rust's ownership models to multidimensional arrays.
 
 ### Array Views
-Views are immutable borrows of a _portion_ of an array, so when we have a view of an array, we can't mutate it until we've released the view:
+Views are immutable borrows of a _portion_ of an array, so when we have a view of an array, we can't mutate that array until we've released the view:
 ```rust
-use ndarray::prelude::*;
+use ndarray::{array, Axis};
 
 fn main() {
-    let mut a = array![
-        [0, 1, 2, 3],
-        [4, 5, 6, 7]
-    ];
+    let mut a = array![[0, 1, 2, 3], [4, 5, 6, 7]];
 
     {
         // Get views of `a`
         let (s1, s2) = a.view().split_at(Axis(1), 2);
-        
-        // with s as a view sharing the ref of a, we cannot update a here
-        // a.slice_mut(s![1, 1]).fill(1234.);
-        
-        println!("Split a from Axis(0), at index 1:");
-        println!("s1  = \n{}", s1);
-        println!("s2  = \n{}\n", s2);
+
+        // With s as a view sharing the ref of a, we cannot update a here
+        //
+        // a[[1, 1]] = 8;
+        //
+        // error[E0502]: cannot borrow `a` as mutable because it is also borrowed as immutable
+        // --> src/main.rs:11:9
+        //    |
+        // 8  |         let (s1, s2) = a.view().split_at(Axis(1), 2);
+        //    |                        - immutable borrow occurs here
+        // ...
+        // 12 |         a[[1, 1]] = 8;
+        //    |         ^ mutable borrow occurs here
+        // 25 |         assert_eq!(s1, array![[0, 1], [4, 5]]);
+        //    |         -------------------------------------- immutable borrow later used here
+
+        assert_eq!(s1, array![[0, 1], [4, 5]]);
+        assert_eq!(s2, array![[2, 3], [6, 7]]);
     }
-    
-    // now we can update a again here, as views of s1, s2 are dropped already
-    a.slice_mut(s![1, 1]).fill(1234.);
-    
+
+    // Now we can update a again here, as views of s1, s2 are dropped already
+    a[[1, 1]] = 8;
+
     let (s1, s2) = a.view().split_at(Axis(1), 2);
-    println!("Split a from Axis(0), at index 1:");
-    println!("s1  = \n{}", s1);
-    println!("s2  = \n{}\n", s2);
+    assert_eq!(s1, array![[0, 1], [4, 8]]);
+    assert_eq!(s2, array![[2, 3], [6, 7]]);
 }
 ```
+Mutable views are also possible, and similarly "lock" the array until the mutable view is released.
+
+Views that cover the entire array - available through the `::view()` and `::view_mut()` functions - are essentially "shallow" copies.
+They do not copy the data, but they have their own shape and stride information that can be independently altered from the original array.
+
+### Array References
+The other major array type in `ndarray` is `ArrayRef`, the array reference type.
+You can read more about its relationship to the other array types in the [Array Types](explain/array-types.md) documentation.
+Its main use is for writing functions, which is covered in the [Functions How-To Guide](how-to/functions.md).
+
+### Deep Copies
+Deep copies - copies of the underlying array data - are available via the usual `::clone()` method:
+```rust
+use ndarray::array;
+
+fn main() {
+    let mut a = array![[0, 1], [2, 3]];
+    let b = a.clone();
+
+    assert_eq!(a, b);
+
+    a[[1, 1]] = 5;
+
+    assert_eq!(a, array![[0, 1], [2, 5]]);
+    assert_eq!(b, array![[0, 1], [2, 3]]);
+}
+```
+Cloning an `ArrayView`, on the other hand, will not copy the underlying elements; it will act more like cloning a pointer.
+Getting a "cloned" array from a view can be done via `::to_owned`.
+
+## Broadcasting
+Arrays support limited broadcasting, where arithmetic operations with array operands of different sizes can be carried out by repeating the elements of the array with fewer dimensions. 
+
+```rust
+use ndarray::array;
+
+fn main() {
+    let a = array![
+        [1., 1.], 
+        [1., 2.], 
+        [0., 3.], 
+        [0., 4.]
+    ];
+
+    let b = array![[0., 1.]];
+
+    let c = array![
+        [1., 2.], 
+        [1., 3.], 
+        [0., 4.], 
+        [0., 5.]
+    ];
+    
+    // We can add because the shapes are compatible even if not equal.
+    // The `b` array is shape 1 × 2 but acts like a 4 × 2 array.
+    assert!(c == a + b);
+}
+```
+
+See [.broadcast()](https://docs.rs/ndarray/latest/ndarray/struct.ArrayBase.html#method.broadcast) for a more detailed description.
+
+And here is a short example of it:
+```rust
+use ndarray::prelude::*;
+
+fn main() {
+    let a = array![
+        [1., 2.],
+        [3., 4.],
+    ];
+    
+    let b =  a.broadcast((3, 2, 2)).unwrap();
+    assert_eq!(b, array![
+        [
+            [1, 2],
+            [3, 4],
+        ],
+        [
+            [1, 2],
+            [3, 4],
+        ],
+        [
+            [1, 2],
+            [3, 4],
+        ]
+    ])
+}
+```
+
+## Want to learn more?
+That concludes the quickstart guide!
+To learn more, check out the How-To Guides and Explainers on this website, or the [API documentation at docs.rs](https://docs.rs/ndarray/latest/ndarray).
