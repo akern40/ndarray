@@ -1,6 +1,6 @@
 # `ndarray` for NumPy users.
 
-This is an introductory guide to `ndarray` for people with experience using [NumPy](numpy.org), although it may also be useful to others.
+This is an introductory guide to `ndarray` for people with experience using [NumPy](https://numpy.org), although it may also be useful to others.
 
 ## Similarities
 

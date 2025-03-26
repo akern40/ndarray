@@ -76,6 +76,7 @@ portable-atomic-util = { version = "0.2.0", features = [ "alloc" ] }
 members = [
     "ndarray-rand",
     "crates/*",
+    "docs/snippets",
 ]
 default-members = [
     ".",
@@ -84,6 +85,7 @@ default-members = [
     "crates/numeric-tests",
     "crates/serialization-tests",
     # exclude blas-tests and blas-mock-tests that activate "blas" feature
+    # also exclude the docs/snippets
 ]
 
 [workspace.dependencies]

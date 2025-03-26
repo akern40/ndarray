@@ -20,6 +20,7 @@ Add `ndarray` as a dependency by navigating to your project directory and runnin
              - serde
     ...
 ```
+The `+` sign next to `std` indicates that the `std` feature is turned on; this is true by default.
 The `-` signs are extra features that `ndarray` has; they're discussed more in the Feature Flags sections.
 
 ## Getting Started

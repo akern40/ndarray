@@ -1,24 +1,12 @@
 # Quickstart
 This guide covers the basics of `ndarray` and common operations that users are likely to immediately need.
+All of the examples used here can be found as binaries on the `ndarray` GitHub under `docs/snippets`, with a few simple exceptions.
 If you are familiar with Python's NumPy, you can also check out [`ndarray` for NumPy Users](numpy.md) after this quickstart.
 
 ## The Basics
 You can create your first 2x3 floating-point multidimensional as follows: 
 ```rust
-use ndarray::prelude::*;
-
-fn main() {
-    let a = array![
-        [1., 2., 3.],
-        [5., 5., 6.],
-    ];
-    assert_eq!(a.ndim(), 2);         // The number of dimensions (dimensionality) of `a`
-    assert_eq!(a.len(), 6);          // The number of elements in `a`
-    assert_eq!(a.shape(), [2, 3]);   // The shape of `a`
-    assert_eq!(a.is_empty(), false); // Check if the array has any elements
-
-    println!("{:?}", a); // Print a debug representation of `a`
-}
+--8<-- "docs/quickstart/src/bin/basics.rs"
 ```
 which outputs
 ```
@@ -55,12 +43,7 @@ error[E0283]: type annotations needed for `ArrayBase<OwnedRepr<_>, Dim<[usize; 3
 Notice that we don't indicate anywhere what _type_ of element we want the our array to contain, and there is no "default" element type.
 To fix this, we can provide the element type via turbofish syntax:
 ```rust
-use ndarray::prelude::*;
-
-fn main() {
-    let a = Array::<f64, _>::zeros((3, 2, 4));
-    println!("{:?}", a);
-}
+--8<-- "docs/quickstart/src/bin/elem-type.rs
 ```
 which outputs what we wanted: a `(3, 2, 4)` array of 64-bit floating point zeros:
 ```
@@ -83,23 +66,13 @@ That's Rust's type system hard at work, trying to catch errors before runtime.
 ### Other Initial Values and Types
 Of course, we can also initialize arrays by filling them with other values, using the [`from_elem`](https://docs.rs/ndarray/latest/ndarray/struct.ArrayBase.html#method.from_elem) method:
 ```rust
-use ndarray::Array;
-
-fn main() {
-    let a = Array::from_elem((3, 2, 4), false);
-    println!("{:?}", a);
-}
+--8<-- "docs/quickstart/src/bin/elem-type.rs
 ```
 
 ### Common Constructor Functions
 There are also a number of common "constructor functions" which create more complex initializations than just a single element; for example, [`linspace`](https://docs.rs/ndarray/latest/ndarray/struct.ArrayBase.html#method.linspace) creates a 1D array with `N` elements in "linear space" from some starting value to some stopping value (exclusive):
 ```rust
-use ndarray::prelude::*;
-
-fn main() {
-    let a = Array::linspace(0., 5., 11);
-    println!("{:?}", a);
-}
+--8<-- "docs/quickstart/src/bin/linspace.rs
 ```
 which outputs
 ```
@@ -117,30 +90,7 @@ Other methods include, for example
 All of `ndarray`'s binary operators are element-wise; matrix products (next section) and other kinds of operations require specific method calls.
 Generally, if an array's element type supports an operation (like `+`), then the array itself does as well:
 ```rust
-use ndarray::prelude::*;
-use std::f64::INFINITY as inf;
-
-fn main() {
-    let a = array![
-        [10., 20., 30., 40.],
-    ];
-    let b = Array::range(0., 4., 1.); // [0., 1., 2., 3.]
-
-    // Each of these allocates a new array
-    assert_eq!(&a + &b, array![[10., 21., 32., 43.]]);
-    assert_eq!(&a - &b, array![[10., 19., 28., 37.]]);
-    assert_eq!(&a * &b, array![[0., 20., 60., 120.,]]);
-
-    // But if we pass in `a` instead of `&a`,
-    // it will reuse `a` to avoid allocation...
-    let a_location = a.as_ptr();
-    let c = a / &b;
-    assert_eq!(c, array![[inf, 20., 15., 13.333333333333334,]]);
-    // ... so that `c` is now equal to the quotient
-    assert_eq!(c, array![[inf, 20., 15., 13.333333333333334,]]);
-    // ... and `c` still points to the same allocation that `a` did
-    assert_eq!(c.as_ptr(), a_location);
-}
+--8<-- "docs/quickstart/src/bin/arithmetic.rs
 ```
 
 `ndarray` tries to be as efficient as possible, including avoiding array allocations, and will consume an owned array (`Array`) type during an operation.
@@ -153,48 +103,22 @@ The rules are as follows, for any binary operator `@`:
 
 If you try removing all of the `&` signs in front of `a` and `b` above, you'll notice that `rustc` will tell you that `a` and `b` have been moved and are no longer available.
 
-For more information, check out the [guide on binary operations](#explain/binary-ops.md).
+For more information, check out the [guide on binary operations](explain/binary-ops.md).
 
 ### Reducing Operations
 `ndarray` also has reducing operations, such as `sum`, which can "reduce" the array by summing all of its elements:
 ```rust
-use ndarray::prelude::*;
-
-fn main() {
-    let a = array![[1., 2., 3., 4.]];
-    assert_eq!(a.sum(), 10.);
-}
+--8<-- "docs/quickstart/src/bin/reduce.rs
 ```
 These methods also tend to have variants with an `_axis` suffix, such as `sum_axis`, which take in a type parameter of `Axis` and perform the reduction across that axis:
 ```rust
-use ndarray::prelude::*;
-
-fn main() {
-    let a = array![[1., 2., 3.], [4., 5., 6.],];
-    let col_sums = a.sum_axis(Axis(0));
-    let row_sums = a.sum_axis(Axis(1));
-    assert_eq!(col_sums, array![5., 7., 9.]);
-    assert_eq!(row_sums, array![6., 15.]);
-}
+--8<-- "docs/quickstart/src/bin/reduce-axis.rs
 ```
 
 ### Matrix Product
 Rust doesn't have an operator for matrix products (like Python's `@`), so they must be performed by using a method call; in the case of `ndarray`, that method is called `dot`.
 ```rust
-use ndarray::prelude::*;
-
-fn main() {
-    let a = array![[10., 20., 30., 40.]];
-    let b = Array::range(0., 4., 1.);     // b = [0., 1., 2., 3, ]
-    println!("a shape {:?}", &a.shape());
-    println!("b shape {:?}", &b.shape());
-    
-    let b = b.into_shape_with_order((4,1)).unwrap(); // reshape b to shape [4, 1]
-    println!("b shape after reshape {:?}", &b.shape());
-    
-    println!("{}", a.dot(&b));            // [1, 4] x [4, 1] -> [1, 1] 
-    println!("{}", a.t().dot(&b.t()));    // [4, 1] x [1, 4] -> [4, 4]
-}
+--8<-- "docs/quickstart/src/bin/matmul.rs
 ```
 which outputs
 ```
@@ -208,7 +132,7 @@ b shape after reshape [4, 1]
  [0, 40, 80, 120]]
 ```
 
-An important note about this code: unlike [`nalgebra`](nalgebra.org), `ndarray` does not currently track the lengths of array axes in the type system.
+An important note about this code: unlike [`nalgebra`](https://nalgebra.org), `ndarray` does not currently track the lengths of array axes in the type system.
 As a result, there is no way for `ndarray` to know at compile-time whether two arrays are shape-compatible for a `dot` operation.
 Commenting out the `into_shape_with_order` call will still compile, but will lead to a runtime panic due to shape mismatches.
 
@@ -216,35 +140,7 @@ Commenting out the `into_shape_with_order` call will still compile, but will lea
 Like `Vec`s in Rust or NumPy arrays in Python, `ndarray`s can be indexed, sliced, and iterated over.
 Let's start with indexing and slicing:
 ```rust
-use ndarray::prelude::*;
-
-fn main() {
-    let a = array![ // A 3D array with shape (2, 2, 3)
-        [[ 0,  2,  4],
-         [ 1,  3,  5]],
-        [[10, 12, 14],
-         [11, 13, 15]]
-    ];
-
-    let tens: ArrayView::<_, _> = a.slice(s![1, .., ..]);
-    assert_eq!(tens, array![
-        [10, 12, 14],
-        [11, 13, 15]
-    ]);
-
-    // Get every other element from each row
-    let first_last = a.slice(s![.., .., ..;2]);
-    assert_eq!(first_last, array![
-        [[ 0,  4],
-         [ 1,  5]],
-        [[10, 14],
-         [11, 15]]
-    ]);
-
-    // Negative indexing from the back
-    let last = a.slice(s![.., .., -1]);
-    assert_eq!(last, array![[4, 5], [14, 15]]);
-}
+--8<-- "docs/quickstart/src/bin/indexing.rs
 ```
 Here we've introduced two new `ndarray` concepts: the slice macro, `s!`, and the `ArrayView` type.
 We'll cover the `ArrayView` type in more detail below, but right now its enough to point out that `tens` is not a different allocation than `a`, just a "view" into `a`'s data.
@@ -254,31 +150,7 @@ It's covered in more detail in [its API documentation](https://docs.rs/ndarray/l
 
 Iteration in `ndarray` can happen either flattened over the entire array, via `.iter()`, or can happen across dimensions, e.g., via `.outer_iter()`:
 ```rust
-use ndarray::prelude::*;
-
-fn main() {
-    let a = array![ // A 3D array with shape (2, 2, 3)
-        [[ 0,  2,  4],
-         [ 1,  3,  5]],
-        [[10, 12, 14],
-         [11, 13, 15]]
-    ];
-
-    let mut sum = 0;
-    for elem in a.iter() {
-        sum += elem;
-    }
-    assert_eq!(sum, a.sum());
-
-    let mut max = Array::from_elem((2, 3), i32::MIN);
-    max.zip_mut_with(&mat, |x, a| {
-        *x = (*x).max(*a);
-    });
-    assert_eq!(max, array![
-        [10, 12, 14],
-        [11, 13, 15]
-    ]);
-}
+--8<-- "docs/quickstart/src/bin/iteration.rs
 ```
 
 ## Shape Manipulation
@@ -288,77 +160,20 @@ This includes reshaping, stacking, and splitting.
 ### Changing Shapes
 The easiest way to change shapes is via methods such as `into_shape_with_order` or `flatten`:
 ```rust
-use ndarray::prelude::*;
-
-fn main() {
-    let a = array![
-        [1, 2, 3, 4],
-        [5, 6, 7, 8],
-    ];
-    
-    let b = a.flatten();
-    assert_eq!(b, Array1::<i32>::range(1, 9, 1));
-
-    // Consume `b` and generate `c` with new shape
-    let c = b.into_shape_with_order((4, 2)).unwrap();
-    assert_eq!(c, array![
-        [1, 2],
-        [3, 4],
-        [5, 6],
-        [7, 8]
-    ]);
-}
+--8<-- "docs/quickstart/src/bin/change-shapes.rs
 ```
 
 ### Stacking and Concatenating
 The `stack!` and `concatenate!` macros are helpful for joining arrays together.
 The `stack!` macro stacks arrays along a new axis, while the `concatenate!` macro concatenates arrays along an existing axis:
 ```rust
-use ndarray::prelude::*;
-use ndarray::{concatenate, stack};
-
-fn main() {
-    let a = array![1, 2, 3];
-    let b = array![4, 5, 6];
-    
-    assert_eq!(stack!(Axis(0), a, b), array![
-        [1, 2, 3],
-        [4, 5, 6],
-    ]);
-    assert_eq!(stack!(Axis(1), a, b), array![
-        [1, 4],
-        [2, 5],
-        [3, 6],
-    ]);
-
-    assert_eq!(concatenate!(Axis(0), a, b), array![1, 2, 3, 4, 5, 6]);
-}
+--8<-- "docs/quickstart/src/bin/stack-cat.rs
 ```
 
 ### Splitting Arrays
 Of course, arrays can also be split into smaller pieces via the `split_at` method:
 ```rust
-use ndarray::prelude::*;
-
-fn main() {
-    let a = array![
-        [1, 2, 3],
-        [4, 5, 6],
-    ];
-    let (first_row, second_row) = a.view().split_at(Axis(0), 1);
-    assert_eq!(first_row, array![[1, 2, 3]]);
-    assert_eq!(second_row, array![[4, 5, 6]]);
-
-    let (first_col, other_cols) = a.view().split_at(Axis(1), 1);
-    assert_eq!(first_col, array![
-        [1],
-        [4],
-    ]);
-    assert_eq!(other_cols, array![
-        [2, 3],
-        [5, 6],
-    ]);
-}
+--8<-- "docs/quickstart/src/bin/split.rs
 ```
 Two interesting note: first, notice that splitting does not remove axes.
 This is because we cannot know at runtime whether either or both parts of a split will be "collapsible", and we therefore just keep length-one axes.
@@ -375,41 +190,7 @@ But the concepts of array views and references are critical to extending Rust's 
 ### Array Views
 Views are immutable borrows of a _portion_ of an array, so when we have a view of an array, we can't mutate that array until we've released the view:
 ```rust
-use ndarray::{array, Axis};
-
-fn main() {
-    let mut a = array![[0, 1, 2, 3], [4, 5, 6, 7]];
-
-    {
-        // Get views of `a`
-        let (s1, s2) = a.view().split_at(Axis(1), 2);
-
-        // With s as a view sharing the ref of a, we cannot update a here
-        //
-        // a[[1, 1]] = 8;
-        //
-        // error[E0502]: cannot borrow `a` as mutable because it is also borrowed as immutable
-        // --> src/main.rs:11:9
-        //    |
-        // 8  |         let (s1, s2) = a.view().split_at(Axis(1), 2);
-        //    |                        - immutable borrow occurs here
-        // ...
-        // 12 |         a[[1, 1]] = 8;
-        //    |         ^ mutable borrow occurs here
-        // 25 |         assert_eq!(s1, array![[0, 1], [4, 5]]);
-        //    |         -------------------------------------- immutable borrow later used here
-
-        assert_eq!(s1, array![[0, 1], [4, 5]]);
-        assert_eq!(s2, array![[2, 3], [6, 7]]);
-    }
-
-    // Now we can update a again here, as views of s1, s2 are dropped already
-    a[[1, 1]] = 8;
-
-    let (s1, s2) = a.view().split_at(Axis(1), 2);
-    assert_eq!(s1, array![[0, 1], [4, 8]]);
-    assert_eq!(s2, array![[2, 3], [6, 7]]);
-}
+--8<-- "docs/quickstart/src/bin/views.rs
 ```
 Mutable views are also possible, and similarly "lock" the array until the mutable view is released.
 
@@ -418,25 +199,13 @@ They do not copy the data, but they have their own shape and stride information 
 
 ### Array References
 The other major array type in `ndarray` is `ArrayRef`, the array reference type.
-You can read more about its relationship to the other array types in the [Array Types](explain/array-types.md) documentation.
+You can read more about its relationship to the other array types in the [Array Types](explain/types.md) documentation.
 Its main use is for writing functions, which is covered in the [Functions How-To Guide](how-to/functions.md).
 
 ### Deep Copies
 Deep copies - copies of the underlying array data - are available via the usual `::clone()` method:
 ```rust
-use ndarray::array;
-
-fn main() {
-    let mut a = array![[0, 1], [2, 3]];
-    let b = a.clone();
-
-    assert_eq!(a, b);
-
-    a[[1, 1]] = 5;
-
-    assert_eq!(a, array![[0, 1], [2, 5]]);
-    assert_eq!(b, array![[0, 1], [2, 3]]);
-}
+--8<-- "docs/quickstart/src/bin/clone.rs
 ```
 Cloning an `ArrayView`, on the other hand, will not copy the underlying elements; it will act more like cloning a pointer.
 Getting a "cloned" array from a view can be done via `::to_owned`.
@@ -445,59 +214,14 @@ Getting a "cloned" array from a view can be done via `::to_owned`.
 Arrays support limited broadcasting, where arithmetic operations with array operands of different sizes can be carried out by repeating the elements of the array with fewer dimensions. 
 
 ```rust
-use ndarray::array;
-
-fn main() {
-    let a = array![
-        [1., 1.], 
-        [1., 2.], 
-        [0., 3.], 
-        [0., 4.]
-    ];
-
-    let b = array![[0., 1.]];
-
-    let c = array![
-        [1., 2.], 
-        [1., 3.], 
-        [0., 4.], 
-        [0., 5.]
-    ];
-    
-    // We can add because the shapes are compatible even if not equal.
-    // The `b` array is shape 1 × 2 but acts like a 4 × 2 array.
-    assert!(c == a + b);
-}
+--8<-- "docs/quickstart/src/bin/broadcast-ops.rs
 ```
 
 See [.broadcast()](https://docs.rs/ndarray/latest/ndarray/struct.ArrayBase.html#method.broadcast) for a more detailed description.
 
 And here is a short example of it:
 ```rust
-use ndarray::prelude::*;
-
-fn main() {
-    let a = array![
-        [1., 2.],
-        [3., 4.],
-    ];
-    
-    let b =  a.broadcast((3, 2, 2)).unwrap();
-    assert_eq!(b, array![
-        [
-            [1, 2],
-            [3, 4],
-        ],
-        [
-            [1, 2],
-            [3, 4],
-        ],
-        [
-            [1, 2],
-            [3, 4],
-        ]
-    ])
-}
+--8<-- "docs/quickstart/src/bin/broadcast.rs
 ```
 
 ## Want to learn more?

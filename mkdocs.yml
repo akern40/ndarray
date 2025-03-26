@@ -6,13 +6,15 @@ nav:
   - Quickstart: quickstart.md
   - For NumPy Users: numpy.md
   - Explanations:
-      - Array Types: explain/reference.md
+      - Array Types: explain/types.md
       - Panics: explain/panics.md
+      - Binary Operations: explain/binary-ops.md
   - How-To Guides:
       - Slicing: how-to/slice.md
       - Iteration: how-to/iterate.md
       - Writing Functions: how-to/functions.md
   - Features Flags:
+      - no_std Support: features/no-std.md
       - Serialization with serde: features/serde.md
       - Approximate Equality with approx: features/approx.md
       - Parallelization with rayon: features/rayon.md
@@ -20,8 +22,8 @@ nav:
       - Threading matrixmultiply: features/mm-threading.md
       - Portable Atomics Critical: features/pacs.md
   - ndarray Ecosystem:
-      - Integration with rand: rand.md
-      - Linear Algebra: linalg.md
+      - Integration with rand: ecosystem/rand.md
+      - Linear Algebra: ecosystem/linalg.md
   - Glossary: glossary.md
 
 theme:
