@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use alloc::borrow::Cow;
 use alloc::slice;
 use alloc::vec;
 #[cfg(not(feature = "std"))]
@@ -34,6 +35,7 @@ use crate::dimension::{
 };
 use crate::error::{self, from_kind, ErrorKind, ShapeError};
 use crate::itertools::zip;
+use crate::layout::{Layout, Shape, Strided, Strides};
 use crate::math_cell::MathCell;
 use crate::order::Order;
 use crate::shape_builder::ShapeArg;
@@ -65,12 +67,12 @@ use crate::stacking::concatenate;
 use crate::{NdIndex, Slice, SliceInfoElem};
 
 /// # Methods For All Array Types
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<A, L: Layout> LayoutRef<A, L>
 {
     /// Return the total number of elements in the array.
     pub fn len(&self) -> usize
     {
-        self._dim().size()
+        self.layout.size()
     }
 
     /// Return the length of `axis`.
@@ -82,7 +84,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     #[track_caller]
     pub fn len_of(&self, axis: Axis) -> usize
     {
-        self._dim()[axis.index()]
+        self.layout.shape()[axis]
     }
 
     /// Return whether the array has any elements
@@ -94,13 +96,14 @@ impl<A, D: Dimension> LayoutRef<A, D>
     /// Return the number of dimensions (axes) in the array
     pub fn ndim(&self) -> usize
     {
-        self._dim().ndim()
+        self.layout.ndim()
     }
 
     /// Return the shape of the array in its “pattern” form,
     /// an integer in the one-dimensional case, tuple in the n-dimensional cases
     /// and so on.
-    pub fn dim(&self) -> D::Pattern
+    #[deprecated(since = "0.17.0", note = "...")] // FIXME
+    pub fn dim(&self) -> L::Pattern
     {
         self._dim().clone().into_pattern()
     }
@@ -119,9 +122,15 @@ impl<A, D: Dimension> LayoutRef<A, D>
     /// // Create an array of zeros that's the same shape and dimensionality as `a`.
     /// let b = Array::<f64, _>::zeros(a.raw_dim());
     /// ```
+    #[deprecated(since = "0.17.0", note = "Use `raw_shape` to get the underlying stored shape")] // FIXME
     pub fn raw_dim(&self) -> D
     {
         self._dim().clone()
+    }
+
+    pub fn raw_shape(&self) -> Cow<'_, L::Shape>
+    {
+        self.layout.shape()
     }
 
     /// Return the shape of the array as a slice.
@@ -148,17 +157,24 @@ impl<A, D: Dimension> LayoutRef<A, D>
     /// let c = Array::zeros(a.raw_dim());
     /// assert_eq!(a, c);
     /// ```
-    pub fn shape(&self) -> &[usize]
+    pub fn shape(&self) -> Cow<'_, [usize]>
     {
-        self._dim().slice()
+        match self.layout.shape() {
+            Cow::Borrowed(s) => s.as_slice(),
+            Cow::Owned(s) => Cow::Owned(s.as_slice().into_owned()),
+        }
     }
+}
 
+impl<A, L: Strided> LayoutRef<A, L>
+{
     /// Return the strides of the array as a slice.
-    pub fn strides(&self) -> &[isize]
+    pub fn strides(&self) -> Cow<'_, [isize]>
     {
-        let s = self._strides().slice();
-        // reinterpret unsigned integer as signed
-        unsafe { slice::from_raw_parts(s.as_ptr() as *const _, s.len()) }
+        match self.layout.strides() {
+            Cow::Borrowed(s) => s.as_slice(),
+            Cow::Owned(s) => Cow::Owned(s.as_slice().into_owned()),
+        }
     }
 
     /// Return the stride of `axis`.
@@ -171,7 +187,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     pub fn stride_of(&self, axis: Axis) -> isize
     {
         // strides are reinterpreted as isize
-        self._strides()[axis.index()] as isize
+        self.layout.strides()[axis]
     }
 }
 

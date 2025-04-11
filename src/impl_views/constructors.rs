@@ -13,6 +13,7 @@ use crate::dimension::{self, CanIndexCheckMode};
 use crate::error::ShapeError;
 use crate::extension::nonnull::nonnull_debug_checked_from_ptr;
 use crate::imp_prelude::*;
+use crate::layout::Layout;
 use crate::{is_aligned, StrideShape};
 
 /// Methods for read-only array views.
@@ -237,7 +238,7 @@ where D: Dimension
     ///
     /// Unsafe because: `ptr` must be valid for the given dimension and strides.
     #[inline(always)]
-    pub(crate) unsafe fn new(ptr: NonNull<A>, dim: D, strides: D) -> Self
+    pub(crate) unsafe fn new(ptr: NonNull<A>, layout: D) -> Self
     {
         if cfg!(debug_assertions) {
             assert!(is_aligned(ptr.as_ptr()), "The pointer must be aligned.");
