@@ -6,6 +6,7 @@ use crate::Dimension;
 ///
 /// Either c- or f- memory ordered (*c* a.k.a *row major* is the default).
 #[derive(Copy, Clone, Debug)]
+#[deprecated]
 pub struct Shape<D>
 {
     /// Shape (axis lengths)
@@ -15,6 +16,7 @@ pub struct Shape<D>
 }
 
 #[derive(Copy, Clone, Debug)]
+#[deprecated]
 pub(crate) enum Contiguous {}
 
 impl<D> Shape<D>
@@ -27,6 +29,7 @@ impl<D> Shape<D>
 
 /// An array shape of n dimensions in c-order, f-order or custom strides.
 #[derive(Copy, Clone, Debug)]
+#[deprecated]
 pub struct StrideShape<D>
 {
     pub(crate) dim: D,
@@ -50,6 +53,7 @@ where D: Dimension
 
 /// Stride description
 #[derive(Copy, Clone, Debug)]
+#[deprecated]
 pub(crate) enum Strides<D>
 {
     /// Row-major ("C"-order)
@@ -94,6 +98,7 @@ impl<D> Strides<D>
 ///
 /// This trait is used together with array constructor methods like
 /// `Array::from_shape_vec`.
+#[deprecated]
 pub trait ShapeBuilder
 {
     /// The type that captures the built shape's dimensionality.
@@ -221,6 +226,7 @@ where D: Dimension
 /// (optionally) an ordering argument.
 ///
 /// See for example [`.to_shape()`](crate::ArrayRef::to_shape).
+#[deprecated]
 pub trait ShapeArg
 {
     /// The type that captures the shape's dimensionality.

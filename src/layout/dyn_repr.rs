@@ -189,6 +189,11 @@ impl Shape for DynAxesRepr<usize>
 {
     type Pattern = Self;
 
+    fn into_pattern(&self) -> Self::Pattern
+    {
+        self.clone()
+    }
+
     fn as_slice(&self) -> Cow<'_, [usize]>
     {
         Cow::Borrowed(self)

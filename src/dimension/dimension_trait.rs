@@ -29,6 +29,7 @@ use crate::{Dim, Ix, Ix0, Ix1, Ix2, Ix3, Ix4, Ix5, Ix6, IxDyn, IxDynImpl, Ixs};
 /// dimensions and indices.
 ///
 /// **Note:** *This trait can not be implemented outside the crate*
+#[deprecated]
 pub trait Dimension:
     Clone
     + Eq

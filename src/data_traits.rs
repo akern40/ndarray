@@ -23,7 +23,7 @@ use std::mem::MaybeUninit;
 use std::mem::{self, size_of};
 use std::ptr::NonNull;
 
-use crate::{ArcArray, Array, ArrayBase, ArrayRef, CowRepr, Dimension, OwnedArcRepr, OwnedRepr, RawViewRepr, ViewRepr};
+use crate::{ArcArray, Array, ArrayBase, ArrayRef, CowRepr, Layout, OwnedArcRepr, OwnedRepr, RawViewRepr, ViewRepr};
 
 /// Array representation trait.
 ///
@@ -65,7 +65,7 @@ pub unsafe trait RawDataMut: RawData
     fn try_ensure_unique<D>(_: &mut ArrayBase<Self, D>)
     where
         Self: Sized,
-        D: Dimension;
+        D: Layout;
 
     /// If possible, returns whether the array has unique access to its data.
     ///
@@ -110,13 +110,13 @@ pub unsafe trait Data: RawData
     fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
     where
         Self::Elem: Clone,
-        D: Dimension;
+        D: Layout;
 
     /// Converts the array into `Array<A, D>` if this is possible without
     /// cloning the array elements. Otherwise, returns `self_` unchanged.
     #[doc(hidden)]
     fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
-    where D: Dimension;
+    where D: Layout;
 
     /// Return a shared ownership (copy on write) array based on the existing one,
     /// cloning elements if necessary.
@@ -125,7 +125,7 @@ pub unsafe trait Data: RawData
     fn to_shared<D>(self_: &ArrayBase<Self, D>) -> ArcArray<Self::Elem, D>
     where
         Self::Elem: Clone,
-        D: Dimension,
+        D: Layout,
     {
         // clone to shared
         self_.to_owned().into_shared()
@@ -153,7 +153,7 @@ pub unsafe trait DataMut: Data + RawDataMut
     fn ensure_unique<D>(self_: &mut ArrayBase<Self, D>)
     where
         Self: Sized,
-        D: Dimension,
+        D: Layout,
     {
         Self::try_ensure_unique(self_)
     }
@@ -208,7 +208,7 @@ unsafe impl<A> RawDataMut for RawViewRepr<*mut A>
     fn try_ensure_unique<D>(_: &mut ArrayBase<Self, D>)
     where
         Self: Sized,
-        D: Dimension,
+        D: Layout,
     {
     }
 
@@ -246,12 +246,12 @@ where A: Clone
     fn try_ensure_unique<D>(self_: &mut ArrayBase<Self, D>)
     where
         Self: Sized,
-        D: Dimension,
+        D: Layout,
     {
         if Arc::get_mut(&mut self_.data.0).is_some() {
             return;
         }
-        if self_.parts.dim.size() <= self_.data.0.len() / 2 {
+        if self_.parts.layout.size() <= self_.data.0.len() / 2 {
             // Clone only the visible elements if the current view is less than
             // half of backing data.
             *self_ = self_.to_owned().into_shared();
@@ -281,30 +281,26 @@ unsafe impl<A> Data for OwnedArcRepr<A>
     fn into_owned<D>(mut self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
     where
         A: Clone,
-        D: Dimension,
+        D: Layout,
     {
         Self::ensure_unique(&mut self_);
         let data = Arc::try_unwrap(self_.data.0).ok().unwrap();
         // safe because data is equivalent
-        unsafe {
-            ArrayBase::from_data_ptr(data, self_.parts.ptr).with_strides_dim(self_.parts.strides, self_.parts.dim)
-        }
+        unsafe { ArrayBase::from_data_ptr(data, self_.parts.ptr).with_layout(self_.parts.layout) }
     }
 
     fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
-    where D: Dimension
+    where D: Layout
     {
         match Arc::try_unwrap(self_.data.0) {
             Ok(owned_data) => unsafe {
                 // Safe because the data is equivalent.
-                Ok(ArrayBase::from_data_ptr(owned_data, self_.parts.ptr)
-                    .with_strides_dim(self_.parts.strides, self_.parts.dim))
+                Ok(ArrayBase::from_data_ptr(owned_data, self_.parts.ptr).with_layout(self_.parts.layout))
             },
             Err(arc_data) => unsafe {
                 // Safe because the data is equivalent; we're just
                 // reconstructing `self_`.
-                Err(ArrayBase::from_data_ptr(OwnedArcRepr(arc_data), self_.parts.ptr)
-                    .with_strides_dim(self_.parts.strides, self_.parts.dim))
+                Err(ArrayBase::from_data_ptr(OwnedArcRepr(arc_data), self_.parts.ptr).with_layout(self_.parts.layout))
             },
         }
     }
@@ -313,7 +309,7 @@ unsafe impl<A> Data for OwnedArcRepr<A>
     fn to_shared<D>(self_: &ArrayBase<Self, D>) -> ArcArray<Self::Elem, D>
     where
         Self::Elem: Clone,
-        D: Dimension,
+        D: Layout,
     {
         // to shared using clone of OwnedArcRepr without clone of raw data.
         self_.clone()
@@ -352,7 +348,7 @@ unsafe impl<A> RawDataMut for OwnedRepr<A>
     fn try_ensure_unique<D>(_: &mut ArrayBase<Self, D>)
     where
         Self: Sized,
-        D: Dimension,
+        D: Layout,
     {
     }
 
@@ -369,14 +365,14 @@ unsafe impl<A> Data for OwnedRepr<A>
     fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
     where
         A: Clone,
-        D: Dimension,
+        D: Layout,
     {
         self_
     }
 
     #[inline]
     fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
-    where D: Dimension
+    where D: Layout
     {
         Ok(self_)
     }
@@ -428,13 +424,13 @@ unsafe impl<A> Data for ViewRepr<&A>
     fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
     where
         Self::Elem: Clone,
-        D: Dimension,
+        D: Layout,
     {
         self_.to_owned()
     }
 
     fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
-    where D: Dimension
+    where D: Layout
     {
         Err(self_)
     }
@@ -467,7 +463,7 @@ unsafe impl<A> RawDataMut for ViewRepr<&mut A>
     fn try_ensure_unique<D>(_: &mut ArrayBase<Self, D>)
     where
         Self: Sized,
-        D: Dimension,
+        D: Layout,
     {
     }
 
@@ -483,13 +479,13 @@ unsafe impl<A> Data for ViewRepr<&mut A>
     fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
     where
         Self::Elem: Clone,
-        D: Dimension,
+        D: Layout,
     {
         self_.to_owned()
     }
 
     fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
-    where D: Dimension
+    where D: Layout
     {
         Err(self_)
     }
@@ -524,7 +520,7 @@ pub unsafe trait DataOwned: Data
     fn into_shared<D>(self_: ArrayBase<Self, D>) -> ArcArray<Self::Elem, D>
     where
         Self::Elem: Clone,
-        D: Dimension;
+        D: Layout;
 }
 
 /// Array representation trait.
@@ -550,7 +546,7 @@ unsafe impl<A> DataOwned for OwnedRepr<A>
     fn into_shared<D>(self_: ArrayBase<Self, D>) -> ArcArray<A, D>
     where
         A: Clone,
-        D: Dimension,
+        D: Layout,
     {
         ArcArray::from(self_)
     }
@@ -568,7 +564,7 @@ unsafe impl<A> DataOwned for OwnedArcRepr<A>
     fn into_shared<D>(self_: ArrayBase<Self, D>) -> ArcArray<A, D>
     where
         A: Clone,
-        D: Dimension,
+        D: Layout,
     {
         self_
     }
@@ -597,15 +593,14 @@ where A: Clone
     fn try_ensure_unique<D>(array: &mut ArrayBase<Self, D>)
     where
         Self: Sized,
-        D: Dimension,
+        D: Layout,
     {
         match array.data {
             CowRepr::View(_) => {
                 let owned = ArrayRef::to_owned(array);
                 array.data = CowRepr::Owned(owned.data);
                 array.parts.ptr = owned.parts.ptr;
-                array.parts.dim = owned.parts.dim;
-                array.parts.strides = owned.parts.strides;
+                array.parts.layout = owned.parts.layout;
             }
             CowRepr::Owned(_) => {}
         }
@@ -660,26 +655,25 @@ unsafe impl<'a, A> Data for CowRepr<'a, A>
     fn into_owned<D>(self_: ArrayBase<CowRepr<'a, A>, D>) -> Array<Self::Elem, D>
     where
         A: Clone,
-        D: Dimension,
+        D: Layout,
     {
         match self_.data {
             CowRepr::View(_) => self_.to_owned(),
             CowRepr::Owned(data) => unsafe {
                 // safe because the data is equivalent so ptr, dims remain valid
-                ArrayBase::from_data_ptr(data, self_.parts.ptr).with_strides_dim(self_.parts.strides, self_.parts.dim)
+                ArrayBase::from_data_ptr(data, self_.parts.ptr).with_layout(self_.parts.layout)
             },
         }
     }
 
     fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
-    where D: Dimension
+    where D: Layout
     {
         match self_.data {
             CowRepr::View(_) => Err(self_),
             CowRepr::Owned(data) => unsafe {
                 // safe because the data is equivalent so ptr, dims remain valid
-                Ok(ArrayBase::from_data_ptr(data, self_.parts.ptr)
-                    .with_strides_dim(self_.parts.strides, self_.parts.dim))
+                Ok(ArrayBase::from_data_ptr(data, self_.parts.ptr).with_layout(self_.parts.layout))
             },
         }
     }
@@ -699,7 +693,7 @@ unsafe impl<'a, A> DataOwned for CowRepr<'a, A>
     fn into_shared<D>(self_: ArrayBase<Self, D>) -> ArcArray<A, D>
     where
         A: Clone,
-        D: Dimension,
+        D: Layout,
     {
         self_.into_owned().into_shared()
     }

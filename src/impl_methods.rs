@@ -72,7 +72,7 @@ impl<A, L: Layout> LayoutRef<A, L>
     /// Return the total number of elements in the array.
     pub fn len(&self) -> usize
     {
-        self.layout.size()
+        self._layout().size()
     }
 
     /// Return the length of `axis`.
@@ -84,7 +84,7 @@ impl<A, L: Layout> LayoutRef<A, L>
     #[track_caller]
     pub fn len_of(&self, axis: Axis) -> usize
     {
-        self.layout.shape()[axis]
+        self._layout().shape()[axis]
     }
 
     /// Return whether the array has any elements
@@ -96,16 +96,16 @@ impl<A, L: Layout> LayoutRef<A, L>
     /// Return the number of dimensions (axes) in the array
     pub fn ndim(&self) -> usize
     {
-        self.layout.ndim()
+        self._layout().ndim()
     }
 
     /// Return the shape of the array in its “pattern” form,
     /// an integer in the one-dimensional case, tuple in the n-dimensional cases
     /// and so on.
     #[deprecated(since = "0.17.0", note = "...")] // FIXME
-    pub fn dim(&self) -> L::Pattern
+    pub fn dim(&self) -> <L::Shape as Shape>::Pattern
     {
-        self._dim().clone().into_pattern()
+        self._layout().shape().into_pattern()
     }
 
     /// Return the shape of the array as it's stored in the array.
@@ -123,14 +123,14 @@ impl<A, L: Layout> LayoutRef<A, L>
     /// let b = Array::<f64, _>::zeros(a.raw_dim());
     /// ```
     #[deprecated(since = "0.17.0", note = "Use `raw_shape` to get the underlying stored shape")] // FIXME
-    pub fn raw_dim(&self) -> D
+    pub fn raw_dim(&self) -> L
     {
-        self._dim().clone()
+        self._layout().clone()
     }
 
     pub fn raw_shape(&self) -> Cow<'_, L::Shape>
     {
-        self.layout.shape()
+        self._layout().shape()
     }
 
     /// Return the shape of the array as a slice.
@@ -159,7 +159,7 @@ impl<A, L: Layout> LayoutRef<A, L>
     /// ```
     pub fn shape(&self) -> Cow<'_, [usize]>
     {
-        match self.layout.shape() {
+        match self._layout().shape() {
             Cow::Borrowed(s) => s.as_slice(),
             Cow::Owned(s) => Cow::Owned(s.as_slice().into_owned()),
         }
@@ -171,7 +171,7 @@ impl<A, L: Strided> LayoutRef<A, L>
     /// Return the strides of the array as a slice.
     pub fn strides(&self) -> Cow<'_, [isize]>
     {
-        match self.layout.strides() {
+        match self._layout().strides() {
             Cow::Borrowed(s) => s.as_slice(),
             Cow::Owned(s) => Cow::Owned(s.as_slice().into_owned()),
         }
@@ -187,23 +187,23 @@ impl<A, L: Strided> LayoutRef<A, L>
     pub fn stride_of(&self, axis: Axis) -> isize
     {
         // strides are reinterpreted as isize
-        self.layout.strides()[axis]
+        self._layout().strides()[axis]
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Return a read-only view of the array
     pub fn view(&self) -> ArrayView<'_, A, D>
     {
         // debug_assert!(self.pointer_is_inbounds());
-        unsafe { ArrayView::new(*self._ptr(), self._dim().clone(), self._strides().clone()) }
+        unsafe { ArrayView::new(*self._ptr(), self._layout().clone()) }
     }
 
     /// Return a read-write view of the array
     pub fn view_mut(&mut self) -> ArrayViewMut<'_, A, D>
     {
-        unsafe { ArrayViewMut::new(*self._ptr(), self._dim().clone(), self._strides().clone()) }
+        unsafe { ArrayViewMut::new(*self._ptr(), self._layout().clone()) }
     }
 
     /// Return a shared view of the array with elements as if they were embedded in cells.
@@ -264,7 +264,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
 impl<A, S, D> ArrayBase<S, D>
 where
     S: RawData<Elem = A>,
-    D: Dimension,
+    D: Layout,
 {
     /// Return an uniquely owned copy of the array.
     ///
@@ -366,7 +366,7 @@ where
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Returns a reference to the first element of the array, or `None` if it
     /// is empty.
@@ -581,7 +581,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
 impl<A, S, D> ArrayBase<S, D>
 where
     S: RawData<Elem = A>,
-    D: Dimension,
+    D: Layout,
 {
     /// Slice the array, possibly changing the number of dimensions.
     ///
@@ -636,7 +636,7 @@ where
     }
 }
 
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<A, D: Layout> LayoutRef<A, D>
 {
     /// Slice the array in place without changing the number of dimensions.
     ///
@@ -680,7 +680,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Return a view of the array, sliced along the specified axis.
     ///
@@ -709,7 +709,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<A, D: Layout> LayoutRef<A, D>
 {
     /// Slice the array in place along the specified axis.
     ///
@@ -731,7 +731,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
 impl<A, S, D> ArrayBase<S, D>
 where
     S: RawData<Elem = A>,
-    D: Dimension,
+    D: Layout,
 {
     /// Slice the array in place along the specified axis, then return the sliced array.
     ///
@@ -745,7 +745,7 @@ where
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Return a view of a slice of the array, with a closure specifying the
     /// slice for each axis.
@@ -780,7 +780,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<A, D: Layout> LayoutRef<A, D>
 {
     /// Slice the array in place, with a closure specifying the slice for each
     /// axis.
@@ -806,7 +806,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Return a reference to the element at `index`, or return `None`
     /// if the index is out of bounds.
@@ -833,7 +833,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, D: Dimension> RawRef<A, D>
+impl<A, D: Layout> RawRef<A, D>
 {
     /// Return a raw pointer to the element at `index`, or return `None`
     /// if the index is out of bounds.
@@ -858,7 +858,7 @@ impl<A, D: Dimension> RawRef<A, D>
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Return a mutable reference to the element at `index`, or return `None`
     /// if the index is out of bounds.
@@ -869,7 +869,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, D: Dimension> RawRef<A, D>
+impl<A, D: Layout> RawRef<A, D>
 {
     /// Return a raw pointer to the element at `index`, or return `None`
     /// if the index is out of bounds.
@@ -900,7 +900,7 @@ impl<A, D: Dimension> RawRef<A, D>
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Perform *unchecked* array indexing.
     ///
@@ -1063,7 +1063,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
 impl<A, S, D> ArrayBase<S, D>
 where
     S: RawData<Elem = A>,
-    D: Dimension,
+    D: Layout,
 {
     /// Collapses the array to `index` along the axis and removes the axis.
     ///
@@ -1082,7 +1082,7 @@ where
     }
 }
 
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<A, D: Layout> LayoutRef<A, D>
 {
     /// Selects `index` along the axis, collapsing the axis into length one.
     ///
@@ -1097,7 +1097,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Along `axis`, select arbitrary subviews corresponding to `indices`
     /// and copy them into a new array.
@@ -1585,7 +1585,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
 impl<A, S, D> ArrayBase<S, D>
 where
     S: RawData<Elem = A>,
-    D: Dimension,
+    D: Layout,
 {
     // Return (length, stride) for diagonal
     fn diag_params(&self) -> (Ix, Ixs)
@@ -1629,7 +1629,7 @@ where
     }
 }
 
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<A, D: Layout> LayoutRef<A, D>
 {
     /// Return `true` if the array data is laid out in contiguous “C order” in
     /// memory (where the last index is the most rapidly varying).
@@ -1648,7 +1648,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Return a standard-layout array containing the data, cloning if
     /// necessary.
@@ -1691,7 +1691,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, D: Dimension> RawRef<A, D>
+impl<A, D: Layout> RawRef<A, D>
 {
     /// Return a pointer to the first element in the array.
     ///
@@ -1719,7 +1719,7 @@ impl<A, D: Dimension> RawRef<A, D>
 impl<A, S, D> ArrayBase<S, D>
 where
     S: RawData<Elem = A>,
-    D: Dimension,
+    D: Layout,
 {
     /// Return a mutable pointer to the first element in the array.
     ///
@@ -1740,7 +1740,7 @@ where
     }
 }
 
-impl<A, D: Dimension> RawRef<A, D>
+impl<A, D: Layout> RawRef<A, D>
 {
     /// Return a raw view of the array.
     #[inline]
@@ -1760,7 +1760,7 @@ impl<A, D: Dimension> RawRef<A, D>
 impl<A, S, D> ArrayBase<S, D>
 where
     S: RawData<Elem = A>,
-    D: Dimension,
+    D: Layout,
 {
     /// Return a raw mutable view of the array.
     ///
@@ -1824,7 +1824,7 @@ where
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Return the array’s data as a slice, if it is contiguous and in standard order.
     /// Return `None` otherwise.
@@ -1995,7 +1995,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
 impl<A, S, D> ArrayBase<S, D>
 where
     S: RawData<Elem = A>,
-    D: Dimension,
+    D: Layout,
 {
     /// Transform the array into `shape`; any shape with the same number of
     /// elements is accepted, but the source array must be contiguous.
@@ -2229,7 +2229,7 @@ where
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Flatten the array to a one-dimensional array.
     ///
@@ -2273,7 +2273,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
 impl<A, S, D> ArrayBase<S, D>
 where
     S: RawData<Elem = A>,
-    D: Dimension,
+    D: Layout,
 {
     /// Flatten the array to a one-dimensional array, consuming the array.
     ///
@@ -2353,7 +2353,7 @@ where
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Act like a larger size and/or shape array by *broadcasting*
     /// into a larger shape, if possible.
@@ -2395,7 +2395,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
         ///
         /// **Note:** Cannot be used for mutable iterators, since repeating
         /// elements would create aliasing pointers.
-        fn upcast<D: Dimension, E: Dimension>(to: &D, from: &E, stride: &E) -> Option<D>
+        fn upcast<D: Layout, E: Dimension>(to: &D, from: &E, stride: &E) -> Option<D>
         {
             // Make sure the product of non-zero axis lengths does not exceed
             // `isize::MAX`. This is the only safety check we need to perform
@@ -2454,7 +2454,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
         &'a self, other: &'b ArrayRef<B, E>,
     ) -> Result<(ArrayView<'a, A, DimMaxOf<D, E>>, ArrayView<'b, B, DimMaxOf<D, E>>), ShapeError>
     where
-        D: Dimension + DimMax<E>,
+        D: Layout + DimMax<E>,
         E: Dimension,
     {
         let shape = co_broadcast::<D, E, <D as DimMax<E>>::Output>(self._dim(), other._dim())?;
@@ -2481,7 +2481,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<A, D: Layout> LayoutRef<A, D>
 {
     /// Swap axes `ax` and `bx`.
     ///
@@ -2510,7 +2510,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
 impl<A, S, D> ArrayBase<S, D>
 where
     S: RawData<Elem = A>,
-    D: Dimension,
+    D: Layout,
 {
     /// Permute the axes.
     ///
@@ -2650,7 +2650,7 @@ where
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Return a transposed view of the array.
     ///
@@ -2663,7 +2663,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<A, D: Layout> LayoutRef<A, D>
 {
     /// Return an iterator over the length and stride of each axis.
     pub fn axes(&self) -> Axes<'_, D>
@@ -2747,7 +2747,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
 impl<A, S, D> ArrayBase<S, D>
 where
     S: RawData<Elem = A>,
-    D: Dimension,
+    D: Layout,
 {
     /// Insert new array axis at `axis` and return the result.
     ///
@@ -2801,7 +2801,7 @@ where
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Perform an elementwise assignment to `self` from `rhs`.
     ///
@@ -3015,7 +3015,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
 impl<A, S, D> ArrayBase<S, D>
 where
     S: RawData<Elem = A>,
-    D: Dimension,
+    D: Layout,
 {
     /// Call `f` by **v**alue on each element, update the array with the new values
     /// and return it.
@@ -3074,7 +3074,7 @@ where
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Modify the array in place by calling `f` by mutable reference on each element.
     ///
@@ -3226,7 +3226,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, D: Layout> ArrayRef<A, D>
 {
     /// Iterates over pairs of consecutive elements along the axis.
     ///
@@ -3317,7 +3317,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     pub fn partition(&self, kth: usize, axis: Axis) -> Array<A, D>
     where
         A: Clone + Ord + num_traits::Zero,
-        D: Dimension,
+        D: Layout,
     {
         let mut result = self.to_owned();
 

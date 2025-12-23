@@ -16,12 +16,13 @@ use crate::{
     ArrayRef,
     Axis,
     Dimension,
+    Layout,
     Zip,
 };
 
 impl<A, D> ArrayRef<A, D>
 where
-    D: Dimension,
+    D: Layout,
     A: Clone + Zero,
 {
     /// Upper triangular of an array.
@@ -59,7 +60,8 @@ where
         // C-order array check prevents infinite recursion in edge cases like [[1]].
         // k-size check prevents underflow when k == isize::MIN
         let n = self.ndim();
-        if is_layout_f(self._dim(), self._strides()) && !is_layout_c(self._dim(), self._strides()) && k > isize::MIN {
+        if is_layout_f(self._layout(), self._strides()) && !is_layout_c(self._dim(), self._strides()) && k > isize::MIN
+        {
             let mut x = self.view();
             x.swap_axes(n - 2, n - 1);
             let mut tril = x.tril(-k);

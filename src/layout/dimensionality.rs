@@ -65,7 +65,7 @@ pub trait Dimensionality:
     + Debug
     + Send
     + Sync
-    + DMax<D0, Output = Self>
+    + DMax<D1, Output = Self>
     + DMax<Self, Output = Self>
     + DMax<DDyn, Output = DDyn>
     + DMax<Self::Smaller, Output = Self>
@@ -73,7 +73,6 @@ pub trait Dimensionality:
     + DAdd<Self>
     + DAdd<Self::Smaller>
     + DAdd<Self::Larger>
-    + DAdd<D0, Output = Self>
     + DAdd<D1, Output = Self::Larger>
     + DAdd<DDyn, Output = DDyn>
 {
@@ -85,11 +84,13 @@ pub trait Dimensionality:
     type Larger: Dimensionality; // And more
 }
 
-pub trait DAdd<D> {
+pub trait DAdd<D>
+{
     type Output: Dimensionality;
 }
 
-pub trait DMax<D> {
+pub trait DMax<D>
+{
     type Output: Dimensionality;
 }
 
@@ -114,13 +115,13 @@ pub type D11 = NDim<11>;
 pub type D12 = NDim<12>;
 
 macro_rules! impl_add {
-    ($left:literal, ($($right:literal),+), ddyn: ($($rightd:literal),*)) => {
+    ($left:literal, ($($right:literal),*), ddyn: ($($rightd:literal),*)) => {
         $(
             impl DAdd<NDim<$right>> for NDim<$left>
             {
                 type Output = NDim<{$left + $right}>;
             }
-        )+
+        )*
 
         $(
             impl DAdd<NDim<$rightd>> for NDim<$left>
@@ -134,19 +135,19 @@ macro_rules! impl_add {
 // There's got to be a macro way to do this in one line to help with
 // any future additions of extra dimenions, although it might
 // also slow down compile times.
-impl_add!(0, (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), ddyn: ());
-impl_add!(1, (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), ddyn: (12));
-impl_add!(2, (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10), ddyn: (11, 12));
-impl_add!(3, (0, 1, 2, 3, 4, 5, 6, 7, 8, 9), ddyn: (10, 11, 12));
-impl_add!(4, (0, 1, 2, 3, 4, 5, 6, 7, 8), ddyn: (9, 10, 11, 12));
-impl_add!(5, (0, 1, 2, 3, 4, 5, 6, 7), ddyn: (8, 9, 10, 11, 12));
-impl_add!(6, (0, 1, 2, 3, 4, 5, 6), ddyn: (7, 8, 9, 10, 11, 12));
-impl_add!(7, (0, 1, 2, 3, 4, 5), ddyn: (6, 7, 8, 9, 10, 11, 12));
-impl_add!(8, (0, 1, 2, 3, 4), ddyn: (5, 6, 7, 8, 9, 10, 11, 12));
-impl_add!(9, (0, 1, 2, 3), ddyn: (4, 5, 6, 7, 8, 9, 10, 11, 12));
-impl_add!(10, (0, 1, 2), ddyn: (3, 4, 5, 6, 7, 8, 9, 10, 11, 12));
-impl_add!(11, (0, 1), ddyn: (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12));
-impl_add!(12, (0), ddyn: (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12));
+impl_add!(0, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), ddyn: ());
+impl_add!(1, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), ddyn: (12));
+impl_add!(2, (1, 2, 3, 4, 5, 6, 7, 8, 9, 10), ddyn: (11, 12));
+impl_add!(3, (1, 2, 3, 4, 5, 6, 7, 8, 9), ddyn: (10, 11, 12));
+impl_add!(4, (1, 2, 3, 4, 5, 6, 7, 8), ddyn: (9, 10, 11, 12));
+impl_add!(5, (1, 2, 3, 4, 5, 6, 7), ddyn: (8, 9, 10, 11, 12));
+impl_add!(6, (1, 2, 3, 4, 5, 6), ddyn: (7, 8, 9, 10, 11, 12));
+impl_add!(7, (1, 2, 3, 4, 5), ddyn: (6, 7, 8, 9, 10, 11, 12));
+impl_add!(8, (1, 2, 3, 4), ddyn: (5, 6, 7, 8, 9, 10, 11, 12));
+impl_add!(9, (1, 2, 3), ddyn: (4, 5, 6, 7, 8, 9, 10, 11, 12));
+impl_add!(10, (1, 2), ddyn: (3, 4, 5, 6, 7, 8, 9, 10, 11, 12));
+impl_add!(11, (1), ddyn: (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12));
+impl_add!(12, (), ddyn: (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12));
 
 macro_rules! impl_max {
     // Base case, just a target with some lowers
@@ -196,11 +197,10 @@ macro_rules! impl_max {
     };
 }
 
-impl_max!(target: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+impl_max!(target: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
 
 impl<const N: usize> DMax<NDim<N>> for NDim<N>
-where
-    NDim<N>: Dimensionality,
+where NDim<N>: Dimensionality
 {
     type Output = Self;
 }
@@ -220,17 +220,19 @@ macro_rules! impl_dimensionality {
     };
 }
 
-impl Dimensionality for D0 {
-    const N: Option<usize> = Some(0);
+impl Dimensionality for D1
+{
+    const N: Option<usize> = Some(1);
 
     type Smaller = Self;
 
-    type Larger = D1;
+    type Larger = D2;
 }
 
-impl_dimensionality!(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+impl_dimensionality!(2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
 
-impl Dimensionality for NDim<12> {
+impl Dimensionality for NDim<12>
+{
     const N: Option<usize> = Some(12);
 
     type Smaller = D11;
@@ -245,7 +247,8 @@ impl Dimensionality for NDim<12> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DDyn;
 
-impl Dimensionality for DDyn {
+impl Dimensionality for DDyn
+{
     const N: Option<usize> = None;
 
     type Smaller = Self;
@@ -253,26 +256,32 @@ impl Dimensionality for DDyn {
     type Larger = Self;
 }
 
-impl DAdd<DDyn> for DDyn {
+impl DAdd<DDyn> for DDyn
+{
     type Output = DDyn;
 }
 
-impl<const N: usize> DAdd<NDim<N>> for DDyn {
+impl<const N: usize> DAdd<NDim<N>> for DDyn
+{
     type Output = DDyn;
 }
 
-impl<const N: usize> DAdd<DDyn> for NDim<N> {
+impl<const N: usize> DAdd<DDyn> for NDim<N>
+{
     type Output = DDyn;
 }
 
-impl DMax<DDyn> for DDyn {
+impl DMax<DDyn> for DDyn
+{
     type Output = DDyn;
 }
 
-impl<const N: usize> DMax<NDim<N>> for DDyn {
+impl<const N: usize> DMax<NDim<N>> for DDyn
+{
     type Output = DDyn;
 }
 
-impl<const N: usize> DMax<DDyn> for NDim<N> {
+impl<const N: usize> DMax<DDyn> for NDim<N>
+{
     type Output = DDyn;
 }

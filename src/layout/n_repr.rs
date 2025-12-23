@@ -93,6 +93,73 @@ impl<T, const N: usize> From<ShapeStrideN<T, N>> for [T; N]
     }
 }
 
+macro_rules! shapestride_and_tuples {
+    ($(($tuple:ty, $N:literal)),*) => {
+        $(
+            impl<T> From<$tuple> for ShapeStrideN<T, $N>
+            {
+                fn from(value: $tuple) -> Self
+                {
+                    Self { 0: value.into() }
+                }
+            }
+
+            impl<T> From<ShapeStrideN<T, $N>> for $tuple
+            {
+                fn from(value: ShapeStrideN<T, $N>) -> Self
+                {
+                    value.0.into()
+                }
+            }
+
+            impl<T> IntoShape for $tuple
+            where
+                NShape<$N>: From<$tuple>,
+                T: Copy,
+            {
+                type Dimality = NDim<$N>;
+
+                type Shape = NShape<$N>;
+
+                fn into_shape(&self) -> Self::Shape
+                {
+                    (*self).into()
+                }
+            }
+
+            impl<T> IntoStrides for $tuple
+            where
+                NStrides<$N>: From<$tuple>,
+                T: Copy,
+            {
+                type Dimality = NDim<$N>;
+
+                type Strides = NStrides<$N>;
+
+                fn into_strides(&self) -> Self::Strides
+                {
+                    (*self).into()
+                }
+            }
+        )*
+    };
+}
+
+shapestride_and_tuples!(
+    ((T,), 1),
+    ((T, T), 2),
+    ((T, T, T), 3),
+    ((T, T, T, T), 4),
+    ((T, T, T, T, T), 5),
+    ((T, T, T, T, T, T), 6),
+    ((T, T, T, T, T, T, T), 7),
+    ((T, T, T, T, T, T, T, T), 8),
+    ((T, T, T, T, T, T, T, T, T), 9),
+    ((T, T, T, T, T, T, T, T, T, T), 10),
+    ((T, T, T, T, T, T, T, T, T, T, T), 11),
+    ((T, T, T, T, T, T, T, T, T, T, T, T), 12)
+);
+
 impl<Rhs, T, const N: usize> PartialEq<Rhs> for ShapeStrideN<T, N>
 where
     T: PartialEq,
@@ -241,6 +308,11 @@ where NDim<N>: Dimensionality
 {
     type Pattern = [usize; N];
 
+    fn into_pattern(&self) -> Self::Pattern
+    {
+        self.0
+    }
+
     fn as_slice(&self) -> Cow<'_, [usize]>
     {
         Cow::Borrowed(self.deref())
@@ -277,6 +349,14 @@ where NDim<N>: Dimensionality
     fn size_checked(&self) -> Option<usize>
     {
         self.iter().try_fold(1_usize, |acc, &i| acc.checked_mul(i))
+    }
+}
+
+impl<const N: usize> Default for NShape<N>
+{
+    fn default() -> Self
+    {
+        Self([0; N])
     }
 }
 

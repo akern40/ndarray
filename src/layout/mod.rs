@@ -1,9 +1,12 @@
-mod layoutfmt;
+pub mod bitset;
+mod bitsetfmt;
 pub mod dimensionality;
 mod dyn_repr;
 mod n_repr;
 pub mod shape;
 pub mod strides;
+pub mod strided_builder;
+
 pub use dyn_repr::{DShape, DStrides};
 pub use n_repr::{NShape, NStrides};
 
@@ -132,7 +135,7 @@ where NDim<N>: Dimensionality
 }
 
 /// A trait capturing how an array is laid out in memory.
-pub trait Layout: Dimensioned
+pub trait Layout: Dimensioned + Clone + Default
 {
     /// The type of shape that the array uses.
     ///
@@ -190,10 +193,22 @@ pub trait Strided: Layout
     fn strides(&self) -> Cow<'_, Self::Strides>;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NLayout<const N: usize>
 {
     shape: NShape<N>,
     strides: NStrides<N>,
+}
+
+impl<const N: usize> Default for NLayout<N>
+where NDim<N>: Dimensionality
+{
+    fn default() -> Self
+    {
+        let shape = NShape::<N>::default();
+        let strides = NStrides::<N>::default_c(shape);
+        Self { shape, strides }
+    }
 }
 
 impl<const N: usize> Dimensioned for NLayout<N>
@@ -248,6 +263,40 @@ where NDim<N>: Dimensionality
         todo!()
     }
 }
+
+impl NLayout<1>
+{
+    pub fn new(length: usize) -> Self
+    {
+        NLayout {
+            shape: [length].into(),
+            strides: [1].into(),
+        }
+    }
+}
+
+macro_rules! create_L_types {
+    ($(($t:ident, $v:literal)),+) => {
+        $(
+            pub type $t = NLayout<$v>;
+        )+
+    };
+}
+
+create_L_types!(
+    (L1, 1),
+    (L2, 2),
+    (L3, 3),
+    (L4, 4),
+    (L5, 5),
+    (L6, 6),
+    (L7, 7),
+    (L8, 8),
+    (L9, 9),
+    (L10, 10),
+    (L11, 11),
+    (L12, 12)
+);
 
 #[cfg(test)]
 mod tests

@@ -165,7 +165,7 @@ pub use crate::stacking::{concatenate, stack};
 
 pub use crate::impl_views::IndexLonger;
 pub use crate::math_cell::MathCell;
-pub use crate::shape_builder::{Shape, ShapeArg, ShapeBuilder, StrideShape};
+// pub use crate::shape_builder::{Shape, ShapeArg, ShapeBuilder, StrideShape};
 
 #[macro_use]
 mod macro_utils;
@@ -212,6 +212,7 @@ mod math_cell;
 mod numeric_util;
 mod order;
 mod partial;
+#[deprecated]
 mod shape_builder;
 #[macro_use]
 mod slice;
@@ -225,12 +226,13 @@ mod dimension;
 
 pub use crate::zip::{FoldWhile, IntoNdProducer, NdProducer, Zip};
 
-pub use crate::layout::{Layout, LayoutBitset};
+pub use crate::layout::{Layout, LayoutBitset, Shape};
 
 /// Implementation's prelude. Common types used everywhere.
 mod imp_prelude
 {
     pub use crate::dimension::DimensionExt;
+    pub use crate::layout::*;
     pub use crate::prelude::*;
     pub use crate::ArcArray;
     pub use crate::{
@@ -1295,14 +1297,14 @@ pub type Ixs = isize;
 // may change in the future.
 //
 // [`.offset()`]: https://doc.rust-lang.org/stable/std/primitive.pointer.html#method.offset-1
-pub struct ArrayBase<S, D, A = <S as RawData>::Elem>
+pub struct ArrayBase<S, L, A = <S as RawData>::Elem>
 where S: RawData<Elem = A>
 {
     /// Data buffer / ownership information. (If owned, contains the data
     /// buffer; if borrowed, contains the lifetime and mutability.)
     data: S,
     /// The dimension, strides, and pointer to inside of `data`
-    parts: ArrayPartsSized<A, D>,
+    parts: ArrayPartsSized<A, L>,
 }
 
 /// A possibly-unsized container for array parts.
@@ -1311,29 +1313,26 @@ where S: RawData<Elem = A>
 /// type, which needs to be sized inside of `ArrayBase` and unsized inside
 /// of the reference types.
 #[derive(Debug)]
-struct ArrayParts<A, D, T: ?Sized>
+struct ArrayParts<A, L, T: ?Sized>
 {
     /// A non-null pointer into the buffer held by `data`; may point anywhere
     /// in its range. If `S: Data`, this pointer must be aligned.
     ptr: NonNull<A>,
-    /// The lengths of the axes.
-    dim: D,
-    /// The element count stride per axis. To be parsed as `isize`.
-    strides: D,
+    /// The layout of the array's data.
+    layout: L,
     _dst_control: T,
 }
 
-type ArrayPartsSized<A, D> = ArrayParts<A, D, [usize; 0]>;
-type ArrayPartsUnsized<A, D> = ArrayParts<A, D, [usize]>;
+type ArrayPartsSized<A, L> = ArrayParts<A, L, [usize; 0]>;
+type ArrayPartsUnsized<A, L> = ArrayParts<A, L, [usize]>;
 
-impl<A, D> ArrayPartsSized<A, D>
+impl<A, L> ArrayPartsSized<A, L>
 {
-    const fn new(ptr: NonNull<A>, dim: D, strides: D) -> ArrayPartsSized<A, D>
+    const fn new(ptr: NonNull<A>, layout: L) -> ArrayPartsSized<A, L>
     {
         Self {
             ptr,
-            dim,
-            strides,
+            layout,
             _dst_control: [],
         }
     }
@@ -1439,9 +1438,9 @@ impl<A, D> ArrayPartsSized<A, D>
 // alter the offset of the pointer. This is allowed, as it does not
 // cause a pointer deref.
 #[repr(transparent)]
-pub struct LayoutRef<A, D>(ArrayPartsUnsized<A, D>);
+pub struct LayoutRef<A, L>(ArrayPartsUnsized<A, L>);
 
-impl<A, D> LayoutRef<A, D>
+impl<A, L> LayoutRef<A, L>
 {
     /// Get a reference to the data pointer.
     fn _ptr(&self) -> &NonNull<A>
@@ -1449,16 +1448,10 @@ impl<A, D> LayoutRef<A, D>
         &self.0.ptr
     }
 
-    /// Get a reference to the array's dimension.
-    fn _dim(&self) -> &D
+    // Get a reference to the array's layout.
+    fn _layout(&self) -> &L
     {
-        &self.0.dim
-    }
-
-    /// Get a reference to the array's strides.
-    fn _strides(&self) -> &D
-    {
-        &self.0.strides
+        &self.0.layout
     }
 }
 
@@ -1531,7 +1524,7 @@ impl<A, D> LayoutRef<A, D>
 /// into `ArrayRef`. In other words, having a `&mut ArrayRef` guarantees that the underlying
 /// data is un-shared and safe to write to.
 #[repr(transparent)]
-pub struct ArrayRef<A, D>(LayoutRef<A, D>);
+pub struct ArrayRef<A, L>(LayoutRef<A, L>);
 
 /// A reference to an *n*-dimensional array whose data is not safe to read or write.
 ///
@@ -1788,18 +1781,18 @@ mod impl_owned_array;
 mod impl_special_element_types;
 
 /// Private Methods
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<A, L: Layout> ArrayRef<A, L>
 {
     #[inline]
-    fn broadcast_unwrap<E>(&self, dim: E) -> ArrayView<'_, A, E>
-    where E: Dimension
+    fn broadcast_unwrap<S>(&self, shape: S) -> ArrayView<'_, A, E>
+    where S: Shape
     {
         #[cold]
         #[inline(never)]
         fn broadcast_panic<D, E>(from: &D, to: &E) -> !
         where
-            D: Dimension,
-            E: Dimension,
+            D: Shape,
+            E: Shape,
         {
             panic!("ndarray: could not broadcast array from shape: {:?} to: {:?}", from.slice(), to.slice())
         }
@@ -1814,7 +1807,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     // (Checked in debug assertions).
     #[inline]
     fn broadcast_assume<E>(&self, dim: E) -> ArrayView<'_, A, E>
-    where E: Dimension
+    where E: Layout
     {
         let dim = dim.into_dimension();
         debug_assert_eq!(self.shape(), dim.slice());

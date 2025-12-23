@@ -39,7 +39,7 @@ pub(crate) fn array_out_of_bounds() -> !
 #[inline(always)]
 pub fn debug_bounds_check<A, D, I, T>(_a: &T, _index: &I)
 where
-    D: Dimension,
+    D: Layout,
     I: NdIndex<D>,
     T: AsRef<LayoutRef<A, D>> + ?Sized,
 {
@@ -52,7 +52,7 @@ where
 /// **Panics** if index is out of bounds.
 impl<A, D, I> Index<I> for ArrayRef<A, D>
 where
-    D: Dimension,
+    D: Layout,
     I: NdIndex<D>,
 {
     type Output = A;
@@ -76,7 +76,7 @@ where
 /// **Panics** if index is out of bounds.
 impl<A, D, I> IndexMut<I> for ArrayRef<A, D>
 where
-    D: Dimension,
+    D: Layout,
     I: NdIndex<D>,
 {
     #[inline]
@@ -98,7 +98,7 @@ where
 /// **Panics** if index is out of bounds.
 impl<S, D, I> Index<I> for ArrayBase<S, D>
 where
-    D: Dimension,
+    D: Layout,
     I: NdIndex<D>,
     S: Data,
 {
@@ -116,7 +116,7 @@ where
 /// **Panics** if index is out of bounds.
 impl<S, D, I> IndexMut<I> for ArrayBase<S, D>
 where
-    D: Dimension,
+    D: Layout,
     I: NdIndex<D>,
     S: DataMut,
 {
@@ -132,7 +132,7 @@ where
 impl<A, B, D> PartialEq<ArrayRef<B, D>> for ArrayRef<A, D>
 where
     A: PartialEq<B>,
-    D: Dimension,
+    D: Layout,
 {
     fn eq(&self, rhs: &ArrayRef<B, D>) -> bool
     {
@@ -162,7 +162,7 @@ where
 impl<A, B, D> PartialEq<&ArrayRef<B, D>> for ArrayRef<A, D>
 where
     A: PartialEq<B>,
-    D: Dimension,
+    D: Layout,
 {
     fn eq(&self, rhs: &&ArrayRef<B, D>) -> bool
     {
@@ -175,7 +175,7 @@ where
 impl<A, B, D> PartialEq<ArrayRef<B, D>> for &ArrayRef<A, D>
 where
     A: PartialEq<B>,
-    D: Dimension,
+    D: Layout,
 {
     fn eq(&self, rhs: &ArrayRef<B, D>) -> bool
     {
@@ -185,7 +185,7 @@ where
 
 impl<A, D> Eq for ArrayRef<A, D>
 where
-    D: Dimension,
+    D: Layout,
     A: Eq,
 {
 }
@@ -197,7 +197,7 @@ where
     A: PartialEq<B>,
     S: Data<Elem = A>,
     S2: Data<Elem = B>,
-    D: Dimension,
+    D: Layout,
 {
     fn eq(&self, rhs: &ArrayBase<S2, D>) -> bool
     {
@@ -213,7 +213,7 @@ where
     A: PartialEq<B>,
     S: Data<Elem = A>,
     S2: Data<Elem = B>,
-    D: Dimension,
+    D: Layout,
 {
     fn eq(&self, rhs: &&ArrayBase<S2, D>) -> bool
     {
@@ -229,7 +229,7 @@ where
     A: PartialEq<B>,
     S: Data<Elem = A>,
     S2: Data<Elem = B>,
-    D: Dimension,
+    D: Layout,
 {
     fn eq(&self, rhs: &ArrayBase<S2, D>) -> bool
     {
@@ -239,7 +239,7 @@ where
 
 impl<S, D> Eq for ArrayBase<S, D>
 where
-    D: Dimension,
+    D: Layout,
     S: Data,
     S::Elem: Eq,
 {
@@ -297,7 +297,7 @@ where S: DataOwned<Elem = A>
 }
 
 impl<'a, A, D> IntoIterator for &'a ArrayRef<A, D>
-where D: Dimension
+where D: Layout
 {
     type Item = &'a A;
 
@@ -310,7 +310,7 @@ where D: Dimension
 }
 
 impl<'a, A, D> IntoIterator for &'a mut ArrayRef<A, D>
-where D: Dimension
+where D: Layout
 {
     type Item = &'a mut A;
 
@@ -324,7 +324,7 @@ where D: Dimension
 
 impl<'a, S, D> IntoIterator for &'a ArrayBase<S, D>
 where
-    D: Dimension,
+    D: Layout,
     S: Data,
 {
     type Item = &'a S::Elem;
@@ -338,7 +338,7 @@ where
 
 impl<'a, S, D> IntoIterator for &'a mut ArrayBase<S, D>
 where
-    D: Dimension,
+    D: Layout,
     S: DataMut,
 {
     type Item = &'a mut S::Elem;
@@ -351,7 +351,7 @@ where
 }
 
 impl<'a, A, D> IntoIterator for ArrayView<'a, A, D>
-where D: Dimension
+where D: Layout
 {
     type Item = &'a A;
     type IntoIter = Iter<'a, A, D>;
@@ -363,7 +363,7 @@ where D: Dimension
 }
 
 impl<'a, A, D> IntoIterator for ArrayViewMut<'a, A, D>
-where D: Dimension
+where D: Layout
 {
     type Item = &'a mut A;
     type IntoIter = IterMut<'a, A, D>;
@@ -376,7 +376,7 @@ where D: Dimension
 
 impl<A, D> hash::Hash for ArrayRef<A, D>
 where
-    D: Dimension,
+    D: Layout,
     A: hash::Hash,
 {
     // Note: elements are hashed in the logical order
@@ -401,7 +401,7 @@ where
 
 impl<S, D> hash::Hash for ArrayBase<S, D>
 where
-    D: Dimension,
+    D: Layout,
     S: Data,
     S::Elem: hash::Hash,
 {
@@ -488,7 +488,7 @@ impl<'a, A, const N: usize> From<&'a [[A; N]]> for ArrayView<'a, A, Ix2>
 impl<'a, A, S, D> From<&'a ArrayBase<S, D>> for ArrayView<'a, A, D>
 where
     S: Data<Elem = A>,
-    D: Dimension,
+    D: Layout,
 {
     /// Create a read-only array view of the array.
     fn from(array: &'a ArrayBase<S, D>) -> Self
@@ -566,7 +566,7 @@ impl<'a, A, const N: usize> From<&'a mut [[A; N]]> for ArrayViewMut<'a, A, Ix2>
 impl<'a, A, S, D> From<&'a mut ArrayBase<S, D>> for ArrayViewMut<'a, A, D>
 where
     S: DataMut<Elem = A>,
-    D: Dimension,
+    D: Layout,
 {
     /// Create a read-write array view of the array.
     fn from(array: &'a mut ArrayBase<S, D>) -> Self
@@ -576,13 +576,13 @@ where
 }
 
 impl<A, D> From<Array<A, D>> for ArcArray<A, D>
-where D: Dimension
+where D: Layout
 {
     fn from(arr: Array<A, D>) -> ArcArray<A, D>
     {
         let data = OwnedArcRepr(Arc::new(arr.data));
         // safe because: equivalent unmoved data, ptr and dims remain valid
-        unsafe { ArrayBase::from_data_ptr(data, arr.parts.ptr).with_strides_dim(arr.parts.strides, arr.parts.dim) }
+        unsafe { ArrayBase::from_data_ptr(data, arr.parts.ptr).with_layout(arr.parts.layout) }
     }
 }
 
@@ -607,14 +607,15 @@ where D: Dimension
 /// );
 ///
 /// ```
-pub trait AsArray<'a, A: 'a, D = Ix1>: Into<ArrayView<'a, A, D>>
-where D: Dimension
+pub trait AsArray<'a, A: 'a, D = L1>: Into<ArrayView<'a, A, D>>
+where D: Layout
 {
 }
+
 impl<'a, A: 'a, D, T> AsArray<'a, A, D> for T
 where
     T: Into<ArrayView<'a, A, D>>,
-    D: Dimension,
+    D: Layout,
 {
 }
 
@@ -633,7 +634,7 @@ where
 impl<A, S, D> Default for ArrayBase<S, D>
 where
     S: DataOwned<Elem = A>,
-    D: Dimension,
+    D: Layout,
     A: Default,
 {
     // NOTE: We can implement Default for non-zero dimensional array views by

@@ -56,6 +56,9 @@ pub trait Shape:
     /// of the shape, or if the shape has any `const` axis lengths.
     fn try_full(ndim: usize, value: usize) -> Result<Self, ShapeStrideError<Self>>;
 
+    /// Get a pattern matching-friendly version of the shape.
+    fn into_pattern(&self) -> Self::Pattern;
+
     /// Convert this shape into a dynamic-dimensional shape.
     fn to_dyn(&self) -> DShape
     {
@@ -196,6 +199,13 @@ impl<const N: usize, const M: usize> Index<Axis> for ConstMatrixShape<N, M>
 
 impl<const N: usize, const M: usize> Shape for ConstMatrixShape<N, M>
 {
+    type Pattern = [usize; 2];
+
+    fn into_pattern(&self) -> Self::Pattern
+    {
+        [N, M]
+    }
+
     fn as_slice(&self) -> Cow<'_, [usize]>
     {
         Cow::Borrowed(&[N, M])

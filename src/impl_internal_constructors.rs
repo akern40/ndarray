@@ -8,10 +8,10 @@
 
 use std::ptr::NonNull;
 
-use crate::{imp_prelude::*, ArrayPartsSized};
+use crate::{imp_prelude::*, ArrayPartsSized, Layout};
 
 // internal "builder-like" methods
-impl<A, S> ArrayBase<S, Ix1>
+impl<A, S> ArrayBase<S, L1>
 where S: RawData<Elem = A>
 {
     /// Create an (initially) empty one-dimensional array from the given data and array head
@@ -27,7 +27,7 @@ where S: RawData<Elem = A>
     {
         let array = ArrayBase {
             data,
-            parts: ArrayPartsSized::new(ptr, Ix1(0), Ix1(1)),
+            parts: ArrayPartsSized::new(ptr, L1::new(0)),
         };
         debug_assert!(array.pointer_is_inbounds());
         array
@@ -38,7 +38,7 @@ where S: RawData<Elem = A>
 impl<A, S, D> ArrayBase<S, D>
 where
     S: RawData<Elem = A>,
-    D: Dimension,
+    D: Layout,
 {
     /// Set strides and dimension of the array to the new values
     ///
@@ -50,13 +50,12 @@ where
     /// The caller needs to ensure that the new strides and dimensions are correct
     /// for the array data.
     #[inline]
-    pub(crate) unsafe fn with_strides_dim<E>(self, strides: E, dim: E) -> ArrayBase<S, E>
-    where E: Dimension
+    pub(crate) unsafe fn with_layout<E>(self, layout: E) -> ArrayBase<S, E>
+    where E: Layout
     {
-        debug_assert_eq!(strides.ndim(), dim.ndim());
         ArrayBase {
             data: self.data,
-            parts: ArrayPartsSized::new(self.parts.ptr, dim, strides),
+            parts: ArrayPartsSized::new(self.parts.ptr, layout),
         }
     }
 }

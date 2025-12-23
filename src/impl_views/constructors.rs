@@ -232,7 +232,7 @@ where D: Dimension
 
 /// Private array view methods
 impl<A, D> ArrayView<'_, A, D>
-where D: Dimension
+where D: Layout
 {
     /// Create a new `ArrayView`
     ///
@@ -242,7 +242,7 @@ where D: Dimension
     {
         if cfg!(debug_assertions) {
             assert!(is_aligned(ptr.as_ptr()), "The pointer must be aligned.");
-            dimension::max_abs_offset_check_overflow::<A, _>(&dim, &strides).unwrap();
+            // dimension::max_abs_offset_check_overflow::<A, _>(&dim, &strides).unwrap();
         }
         ArrayView::from_data_ptr(ViewRepr::new(), ptr).with_strides_dim(strides, dim)
     }
@@ -256,13 +256,13 @@ where D: Dimension
 }
 
 impl<A, D> ArrayViewMut<'_, A, D>
-where D: Dimension
+where D: Layout
 {
     /// Create a new `ArrayView`
     ///
     /// Unsafe because: `ptr` must be valid for the given dimension and strides.
     #[inline(always)]
-    pub(crate) unsafe fn new(ptr: NonNull<A>, dim: D, strides: D) -> Self
+    pub(crate) unsafe fn new(ptr: NonNull<A>, layout: L) -> Self
     {
         if cfg!(debug_assertions) {
             assert!(is_aligned(ptr.as_ptr()), "The pointer must be aligned.");
