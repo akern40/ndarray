@@ -3,7 +3,7 @@ use crate::{
     ArrayBase,
     Axis,
     AxisDescription,
-    Dimension,
+    Layout,
     NdIndex,
     RawArrayView,
     RawData,
@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Functions coming from RawRef
-impl<A, S: RawData<Elem = A>, D: Dimension> ArrayBase<S, D>
+impl<A, S: RawData<Elem = A>, D: Layout> ArrayBase<S, D>
 {
     /// Return a raw pointer to the element at `index`, or return `None`
     /// if the index is out of bounds.
@@ -83,7 +83,7 @@ impl<A, S: RawData<Elem = A>, D: Dimension> ArrayBase<S, D>
 }
 
 /// Functions coming from LayoutRef
-impl<S: RawData, D: Dimension> ArrayBase<S, D>
+impl<S: RawData, D: Layout> ArrayBase<S, D>
 {
     /// Slice the array in place without changing the number of dimensions.
     ///

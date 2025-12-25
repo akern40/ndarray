@@ -21,7 +21,7 @@ pub(crate) trait SplitPreference: SplitAt
 }
 
 impl<D> SplitAt for D
-where D: Dimension
+where D: Layout
 {
     fn split_at(self, axis: Axis, index: Ix) -> (Self, Self)
     {
@@ -36,7 +36,7 @@ where D: Dimension
 }
 
 impl<A, D> SplitAt for ArrayViewMut<'_, A, D>
-where D: Dimension
+where D: Layout
 {
     fn split_at(self, axis: Axis, index: usize) -> (Self, Self)
     {
@@ -45,7 +45,7 @@ where D: Dimension
 }
 
 impl<A, D> SplitAt for RawArrayViewMut<A, D>
-where D: Dimension
+where D: Layout
 {
     fn split_at(self, axis: Axis, index: usize) -> (Self, Self)
     {

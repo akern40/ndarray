@@ -16,6 +16,8 @@ use dimensionality::{Dimensionality, NDim};
 pub use shape::Shape;
 pub use strides::Strides;
 
+use crate::layout::{dimensionality::DDyn, strides::DefaultC};
+
 // Layout is a bitset used for internal layout description of
 // arrays, producers and sets of producers.
 // The type is public but users don't interact with it.
@@ -126,12 +128,19 @@ impl<S: Strides> Display for ShapeStrideError<S>
 pub trait Dimensioned
 {
     type Dimality: Dimensionality;
+
+    fn ndim(&self) -> usize;
 }
 
 impl<T, const N: usize> Dimensioned for [T; N]
 where NDim<N>: Dimensionality
 {
     type Dimality = NDim<N>;
+
+    fn ndim(&self) -> usize
+    {
+        N
+    }
 }
 
 /// A trait capturing how an array is laid out in memory.
@@ -145,7 +154,7 @@ pub trait Layout: Dimensioned + Clone + Default
     /// The index type that this layout uses; e.g., `[usize; N]`.
     ///
     /// Must have the same dimensionality.
-    type Index: Dimensioned<Dimality = Self::Dimality>;
+    type Index<'a>: Dimensioned<Dimality = Self::Dimality>;
 
     /// Get the shape of the layout.
     ///
@@ -163,11 +172,11 @@ pub trait Layout: Dimensioned + Clone + Default
     fn index_memory_order(&self, idx: usize) -> isize;
 
     /// Index into this layout with a multidimensional index.
-    fn index(&self, idx: Self::Index) -> isize;
+    fn index<'a, 'b: 'a>(&'a self, idx: Self::Index<'b>) -> isize;
 
-    fn first_index(&self) -> Option<Self::Index>;
+    fn first_index(&self) -> Option<Self::Index<'_>>;
 
-    fn next_for(&self, index: Self::Index) -> Option<Self::Index>;
+    fn next_for<'a, 'b: 'a>(&'a self, index: Self::Index<'b>) -> Option<Self::Index<'b>>;
 
     // Shortcut methods, we could add more of these
     fn ndim(&self) -> usize
@@ -215,6 +224,11 @@ impl<const N: usize> Dimensioned for NLayout<N>
 where NDim<N>: Dimensionality
 {
     type Dimality = NDim<N>;
+
+    fn ndim(&self) -> usize
+    {
+        N
+    }
 }
 
 impl<const N: usize> Layout for NLayout<N>
@@ -222,7 +236,7 @@ where NDim<N>: Dimensionality
 {
     type Shape = NShape<N>;
 
-    type Index = [usize; N];
+    type Index<'a> = [usize; N];
 
     fn shape(&self) -> Cow<'_, Self::Shape>
     {
@@ -297,6 +311,78 @@ create_L_types!(
     (L11, 11),
     (L12, 12)
 );
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DynLayout
+{
+    shape: DShape,
+    strides: DStrides,
+}
+
+impl Dimensioned for DynLayout
+{
+    type Dimality = DDyn;
+
+    fn ndim(&self) -> usize
+    {
+        self.shape.ndim()
+    }
+}
+
+impl Default for DynLayout
+{
+    fn default() -> Self
+    {
+        let shape = DShape::Inline(1, []);
+        let strides = DStrides::default_c(shape);
+        Self {
+            shape: Default::default(),
+            strides: Default::default(),
+        }
+    }
+}
+
+impl Layout for DynLayout
+{
+    type Shape = DShape;
+
+    type Index = &[usize];
+
+    fn shape(&self) -> Cow<'_, Self::Shape>
+    {
+        todo!()
+    }
+
+    fn index_linear_left(&self, idx: usize) -> isize
+    {
+        todo!()
+    }
+
+    fn index_linear_right(&self, idx: usize) -> isize
+    {
+        todo!()
+    }
+
+    fn index_memory_order(&self, idx: usize) -> isize
+    {
+        todo!()
+    }
+
+    fn index(&self, idx: Self::Index) -> isize
+    {
+        todo!()
+    }
+
+    fn first_index(&self) -> Option<Self::Index>
+    {
+        todo!()
+    }
+
+    fn next_for(&self, index: Self::Index) -> Option<Self::Index>
+    {
+        todo!()
+    }
+}
 
 #[cfg(test)]
 mod tests

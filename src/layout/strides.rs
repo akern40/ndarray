@@ -23,11 +23,6 @@ pub trait Strides:
     /// Get the strides as a (possibly-borrowed) slice of `isize`.
     fn as_slice(&self) -> Cow<'_, [isize]>;
 
-    /// Get the runtime dimensionality of the strides.
-    ///
-    /// Implementors of `Strides` must guarantee that this value will match [`Strides::Dimality`].
-    fn ndim(&self) -> usize;
-
     fn is_c_order(&self) -> bool;
 
     fn is_f_order(&self) -> bool;
@@ -58,6 +53,16 @@ pub trait DefaultC: Strides
 {
     fn default_c<Sh>(shape: Sh) -> Self
     where Sh: IntoShape<Dimality = Self::Dimality>;
+}
+
+pub const fn c_strides(n: usize) -> _
+{
+    (1..2).chain((1..n).rev().scan(1isize, |state, i| {})).rev()
+    // let mut strides = [1isize; N];
+    // for i in 1..N {
+    //     strides[N - i - 1] = strides[N - i] * (shape[N - i] as isize);
+    // }
+    // return strides.into();
 }
 
 /// Default F-style (column-major) stride construction.

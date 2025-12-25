@@ -4,7 +4,9 @@ use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use core::ops::{Deref, DerefMut, Index, IndexMut};
+use num_traits::Zero;
 
+use crate::layout::strides::DefaultF;
 use crate::Axis;
 
 use super::strides::StridesMut;
@@ -99,6 +101,51 @@ impl<T> IndexMut<Axis> for DynAxesRepr<T>
     }
 }
 
+impl<T> Default for DynAxesRepr<T>
+where T: Zero + Copy
+{
+    fn default() -> Self
+    {
+        Self::Inline(1, [T::zero(); 4])
+    }
+}
+
+impl Zero for DShape
+{
+    fn zero() -> Self
+    {
+        Self::Inline(1, [0usize; CAP])
+    }
+
+    fn is_zero(&self) -> bool
+    {
+        self.iter().all(|e| e.is_zero())
+    }
+
+    fn set_zero(&mut self)
+    {
+        self.iter_mut().for_each(|e| e.set_zero());
+    }
+}
+
+impl Zero for DStrides
+{
+    fn zero() -> Self
+    {
+        Self::Inline(1, [0isize; CAP])
+    }
+
+    fn is_zero(&self) -> bool
+    {
+        self.iter().all(|e| e.is_zero())
+    }
+
+    fn set_zero(&mut self)
+    {
+        self.iter_mut().for_each(|e| e.set_zero());
+    }
+}
+
 impl<Rhs, T> From<Rhs> for DynAxesRepr<T>
 where
     Rhs: AsRef<[T]>,
@@ -110,7 +157,7 @@ where
         let n = value.len();
         if n <= CAP {
             let mut inline = [T::default(); CAP];
-            inline.split_at_mut(CAP).0.copy_from_slice(value);
+            inline.split_at_mut(n).0.copy_from_slice(value);
             Self::Inline(n, inline)
         } else {
             Self::Alloc(value.into())
@@ -121,6 +168,14 @@ where
 impl<T> Dimensioned for DynAxesRepr<T>
 {
     type Dimality = DDyn;
+
+    fn ndim(&self) -> usize
+    {
+        match self {
+            DynAxesRepr::Inline(d, _) => d.clone(),
+            DynAxesRepr::Alloc(items) => items.len(),
+        }
+    }
 }
 
 macro_rules! impl_op {
@@ -208,11 +263,6 @@ impl Shape for DynAxesRepr<usize>
         }
     }
 
-    fn ndim(&self) -> usize
-    {
-        self.ndim()
-    }
-
     fn size(&self) -> usize
     {
         self.iter().product()
@@ -245,11 +295,6 @@ impl Strides for DynAxesRepr<isize>
         Cow::Borrowed(self)
     }
 
-    fn ndim(&self) -> usize
-    {
-        self.ndim()
-    }
-
     fn is_c_order(&self) -> bool
     {
         todo!()
@@ -262,3 +307,20 @@ impl Strides for DynAxesRepr<isize>
 }
 
 impl StridesMut for DynAxesRepr<isize> {}
+
+impl DefaultF for DStrides
+{
+    fn default_f<Sh>(shape: Sh) -> Self
+    where Sh: IntoShape<Dimality = Self::Dimality>
+    {
+        let shape = shape.into_shape();
+        let n = shape.ndim();
+        let mut strides = Vec::with_capacity(n);
+        for i in 1..n {
+            strides[i] = strides[i - 1] * (shape[i] as isize);
+        }
+        DStrides::from(strides)
+    }
+}
+
+impl DefaultC for DStrides {}

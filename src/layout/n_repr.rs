@@ -184,6 +184,11 @@ impl<T, const N: usize> Dimensioned for ShapeStrideN<T, N>
 where NDim<N>: Dimensionality
 {
     type Dimality = NDim<N>;
+
+    fn ndim(&self) -> usize
+    {
+        N
+    }
 }
 
 impl<const N: usize> IntoShape for [usize; N]
@@ -336,11 +341,6 @@ where NDim<N>: Dimensionality
         }
     }
 
-    fn ndim(&self) -> usize
-    {
-        N
-    }
-
     fn size(&self) -> usize
     {
         self.iter().product()
@@ -368,11 +368,6 @@ where NDim<N>: Dimensionality
     fn as_slice(&self) -> Cow<'_, [isize]>
     {
         Cow::Borrowed(self.deref())
-    }
-
-    fn ndim(&self) -> usize
-    {
-        N
     }
 
     fn is_c_order(&self) -> bool

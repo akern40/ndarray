@@ -18,7 +18,7 @@ use crate::RawDataSubst;
 impl<A, S, D> ArrayBase<S, D>
 where
     S: RawDataSubst<A, Elem = MaybeUninit<A>>,
-    D: Dimension,
+    D: Layout,
 {
     /// **Promise** that the array's elements are all fully initialized, and convert
     /// the array from element type `MaybeUninit<A>` to `A`.
@@ -39,8 +39,7 @@ where
             parts:
                 ArrayParts {
                     ptr,
-                    dim,
-                    strides,
+                    layout,
                     _dst_control: [],
                 },
         } = self;
@@ -48,6 +47,6 @@ where
         // "transmute" from storage of MaybeUninit<A> to storage of A
         let data = S::data_subst(data);
         let ptr = ptr.cast::<A>();
-        ArrayBase::from_data_ptr(data, ptr).with_strides_dim(strides, dim)
+        ArrayBase::from_data_ptr(data, ptr).with_layout(layout)
     }
 }

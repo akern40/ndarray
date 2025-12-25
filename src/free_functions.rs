@@ -152,8 +152,7 @@ pub const fn aview1<A>(xs: &[A]) -> ArrayView1<'_, A>
         parts: ArrayPartsSized::new(
             // Safe because references are always non-null.
             unsafe { NonNull::new_unchecked(xs.as_ptr() as *mut A) },
-            Ix1(xs.len()),
-            Ix1(1),
+            L1::new(xs.len()),
         ),
     }
 }

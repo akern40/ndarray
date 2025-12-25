@@ -43,7 +43,7 @@ use crate::{
     ArrayRef,
     Data,
     DataMut,
-    Dimension,
+    Layout,
     LayoutRef,
     RawData,
     RawDataMut,
@@ -73,7 +73,7 @@ where S: Data
 impl<S, D> DerefMut for ArrayBase<S, D>
 where
     S: DataMut,
-    D: Dimension,
+    D: Layout,
 {
     fn deref_mut(&mut self) -> &mut Self::Target
     {
@@ -338,7 +338,7 @@ where S: Data
 impl<S, D> BorrowMut<ArrayRef<S::Elem, D>> for ArrayBase<S, D>
 where
     S: DataMut,
-    D: Dimension,
+    D: Layout,
 {
     fn borrow_mut(&mut self) -> &mut ArrayRef<S::Elem, D>
     {
@@ -349,7 +349,7 @@ where
 impl<A, D> ToOwned for ArrayRef<A, D>
 where
     A: Clone,
-    D: Dimension,
+    D: Layout,
 {
     type Owned = Array<A, D>;
 

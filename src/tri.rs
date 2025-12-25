@@ -15,7 +15,6 @@ use crate::{
     Array,
     ArrayRef,
     Axis,
-    Dimension,
     Layout,
     Zip,
 };

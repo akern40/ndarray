@@ -65,14 +65,6 @@ pub trait Shape:
         self.as_slice().into()
     }
 
-    /// Get the runtime dimensionality of the shape.
-    ///
-    /// Implementors of `Shape` must guarantee that this value will match [`Shape::Dimality`].
-    fn ndim(&self) -> usize
-    {
-        self.as_slice().len()
-    }
-
     /// Get the number of elements that the array contains.
     fn size(&self) -> usize
     {
@@ -171,6 +163,11 @@ pub struct ConstMatrixShape<const N: usize, const M: usize>;
 impl<const N: usize, const M: usize> Dimensioned for ConstMatrixShape<N, M>
 {
     type Dimality = NDim<2>;
+
+    fn ndim(&self) -> usize
+    {
+        2
+    }
 }
 
 impl<const N: usize, const M: usize> Index<usize> for ConstMatrixShape<N, M>

@@ -2,6 +2,7 @@
 //!
 
 use crate::dimension::Dim;
+use crate::layout::{L1, L2, L3, L4, L5, L6};
 use crate::{ArcArray, Array, ArrayRef, ArrayView, ArrayViewMut, Ix, IxDynImpl, LayoutRef};
 
 /// Create a zero-dimensional index
@@ -107,91 +108,92 @@ pub type Ix6 = Dim<[Ix; 6]>;
 pub type IxDyn = Dim<IxDynImpl>;
 
 /// zero-dimensional array
+#[deprecated]
 pub type Array0<A> = Array<A, Ix0>;
 /// one-dimensional array
-pub type Array1<A> = Array<A, Ix1>;
+pub type Array1<A> = Array<A, L1>;
 /// two-dimensional array
-pub type Array2<A> = Array<A, Ix2>;
+pub type Array2<A> = Array<A, L2>;
 /// three-dimensional array
-pub type Array3<A> = Array<A, Ix3>;
+pub type Array3<A> = Array<A, L3>;
 /// four-dimensional array
-pub type Array4<A> = Array<A, Ix4>;
+pub type Array4<A> = Array<A, L4>;
 /// five-dimensional array
-pub type Array5<A> = Array<A, Ix5>;
+pub type Array5<A> = Array<A, L5>;
 /// six-dimensional array
-pub type Array6<A> = Array<A, Ix6>;
+pub type Array6<A> = Array<A, L6>;
 /// dynamic-dimensional array
 pub type ArrayD<A> = Array<A, IxDyn>;
 
 /// zero-dimensional array reference
 pub type ArrayRef0<A> = ArrayRef<A, Ix0>;
 /// one-dimensional array reference
-pub type ArrayRef1<A> = ArrayRef<A, Ix1>;
+pub type ArrayRef1<A> = ArrayRef<A, L1>;
 /// two-dimensional array reference
-pub type ArrayRef2<A> = ArrayRef<A, Ix2>;
+pub type ArrayRef2<A> = ArrayRef<A, L2>;
 /// three-dimensional array reference
-pub type ArrayRef3<A> = ArrayRef<A, Ix3>;
+pub type ArrayRef3<A> = ArrayRef<A, L3>;
 /// four-dimensional array reference
-pub type ArrayRef4<A> = ArrayRef<A, Ix4>;
+pub type ArrayRef4<A> = ArrayRef<A, L4>;
 /// five-dimensional array reference
-pub type ArrayRef5<A> = ArrayRef<A, Ix5>;
+pub type ArrayRef5<A> = ArrayRef<A, L5>;
 /// six-dimensional array reference
-pub type ArrayRef6<A> = ArrayRef<A, Ix6>;
+pub type ArrayRef6<A> = ArrayRef<A, L6>;
 /// dynamic-dimensional array reference
 pub type ArrayRefD<A> = ArrayRef<A, IxDyn>;
 
 /// zero-dimensional layout reference
 pub type LayoutRef0<A> = LayoutRef<A, Ix0>;
 /// one-dimensional layout reference
-pub type LayoutRef1<A> = LayoutRef<A, Ix1>;
+pub type LayoutRef1<A> = LayoutRef<A, L1>;
 /// two-dimensional layout reference
-pub type LayoutRef2<A> = LayoutRef<A, Ix2>;
+pub type LayoutRef2<A> = LayoutRef<A, L2>;
 /// three-dimensional layout reference
-pub type LayoutRef3<A> = LayoutRef<A, Ix3>;
+pub type LayoutRef3<A> = LayoutRef<A, L3>;
 /// four-dimensional layout reference
-pub type LayoutRef4<A> = LayoutRef<A, Ix4>;
+pub type LayoutRef4<A> = LayoutRef<A, L4>;
 /// five-dimensional layout reference
-pub type LayoutRef5<A> = LayoutRef<A, Ix5>;
+pub type LayoutRef5<A> = LayoutRef<A, L5>;
 /// six-dimensional layout reference
-pub type LayoutRef6<A> = LayoutRef<A, Ix6>;
+pub type LayoutRef6<A> = LayoutRef<A, L6>;
 /// dynamic-dimensional layout reference
 pub type LayoutRefD<A> = LayoutRef<A, IxDyn>;
 
 /// zero-dimensional array view
 pub type ArrayView0<'a, A> = ArrayView<'a, A, Ix0>;
 /// one-dimensional array view
-pub type ArrayView1<'a, A> = ArrayView<'a, A, Ix1>;
+pub type ArrayView1<'a, A> = ArrayView<'a, A, L1>;
 /// two-dimensional array view
-pub type ArrayView2<'a, A> = ArrayView<'a, A, Ix2>;
+pub type ArrayView2<'a, A> = ArrayView<'a, A, L2>;
 /// three-dimensional array view
-pub type ArrayView3<'a, A> = ArrayView<'a, A, Ix3>;
+pub type ArrayView3<'a, A> = ArrayView<'a, A, L3>;
 /// four-dimensional array view
-pub type ArrayView4<'a, A> = ArrayView<'a, A, Ix4>;
+pub type ArrayView4<'a, A> = ArrayView<'a, A, L4>;
 /// five-dimensional array view
-pub type ArrayView5<'a, A> = ArrayView<'a, A, Ix5>;
+pub type ArrayView5<'a, A> = ArrayView<'a, A, L5>;
 /// six-dimensional array view
-pub type ArrayView6<'a, A> = ArrayView<'a, A, Ix6>;
+pub type ArrayView6<'a, A> = ArrayView<'a, A, L6>;
 /// dynamic-dimensional array view
 pub type ArrayViewD<'a, A> = ArrayView<'a, A, IxDyn>;
 
 /// zero-dimensional read-write array view
 pub type ArrayViewMut0<'a, A> = ArrayViewMut<'a, A, Ix0>;
 /// one-dimensional read-write array view
-pub type ArrayViewMut1<'a, A> = ArrayViewMut<'a, A, Ix1>;
+pub type ArrayViewMut1<'a, A> = ArrayViewMut<'a, A, L1>;
 /// two-dimensional read-write array view
-pub type ArrayViewMut2<'a, A> = ArrayViewMut<'a, A, Ix2>;
+pub type ArrayViewMut2<'a, A> = ArrayViewMut<'a, A, L2>;
 /// three-dimensional read-write array view
-pub type ArrayViewMut3<'a, A> = ArrayViewMut<'a, A, Ix3>;
+pub type ArrayViewMut3<'a, A> = ArrayViewMut<'a, A, L3>;
 /// four-dimensional read-write array view
-pub type ArrayViewMut4<'a, A> = ArrayViewMut<'a, A, Ix4>;
+pub type ArrayViewMut4<'a, A> = ArrayViewMut<'a, A, L4>;
 /// five-dimensional read-write array view
-pub type ArrayViewMut5<'a, A> = ArrayViewMut<'a, A, Ix5>;
+pub type ArrayViewMut5<'a, A> = ArrayViewMut<'a, A, L5>;
 /// six-dimensional read-write array view
-pub type ArrayViewMut6<'a, A> = ArrayViewMut<'a, A, Ix6>;
+pub type ArrayViewMut6<'a, A> = ArrayViewMut<'a, A, L6>;
 /// dynamic-dimensional read-write array view
 pub type ArrayViewMutD<'a, A> = ArrayViewMut<'a, A, IxDyn>;
 
 /// one-dimensional shared ownership array
-pub type ArcArray1<A> = ArcArray<A, Ix1>;
+pub type ArcArray1<A> = ArcArray<A, L1>;
 /// two-dimensional shared ownership array
-pub type ArcArray2<A> = ArcArray<A, Ix2>;
+pub type ArcArray2<A> = ArcArray<A, L2>;

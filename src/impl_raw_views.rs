@@ -9,22 +9,22 @@ use crate::is_aligned;
 use crate::shape_builder::{StrideShape, Strides};
 
 impl<A, D> RawArrayView<A, D>
-where D: Dimension
+where D: Layout
 {
     /// Create a new `RawArrayView`.
     ///
     /// Unsafe because caller is responsible for ensuring that the array will
     /// meet all of the invariants of the `ArrayBase` type.
     #[inline]
-    pub(crate) unsafe fn new(ptr: NonNull<A>, dim: D, strides: D) -> Self
+    pub(crate) unsafe fn new(ptr: NonNull<A>, layout: D) -> Self
     {
-        RawArrayView::from_data_ptr(RawViewRepr::new(), ptr).with_strides_dim(strides, dim)
+        RawArrayView::from_data_ptr(RawViewRepr::new(), ptr).with_layout(layout)
     }
 
     #[inline]
-    unsafe fn new_(ptr: *const A, dim: D, strides: D) -> Self
+    unsafe fn new_(ptr: *const A, layout: D) -> Self
     {
-        Self::new(nonnull_debug_checked_from_ptr(ptr as *mut A), dim, strides)
+        Self::new(nonnull_debug_checked_from_ptr(ptr as *mut A), layout)
     }
 
     /// Create an `RawArrayView<A, D>` from shape information and a raw pointer
@@ -153,12 +153,12 @@ where D: Dimension
             "size mismatch in raw view cast"
         );
         let ptr = self.parts.ptr.cast::<B>();
-        unsafe { RawArrayView::new(ptr, self.parts.dim, self.parts.strides) }
+        unsafe { RawArrayView::new(ptr, self.parts.layout) }
     }
 }
 
 impl<T, D> RawArrayView<Complex<T>, D>
-where D: Dimension
+where D: Layout
 {
     /// Splits the view into views of the real and imaginary components of the
     /// elements.
@@ -225,7 +225,7 @@ where D: Dimension
 }
 
 impl<A, D> RawArrayViewMut<A, D>
-where D: Dimension
+where D: Layout
 {
     /// Create a new `RawArrayViewMut`.
     ///
@@ -388,7 +388,7 @@ where D: Dimension
 }
 
 impl<T, D> RawArrayViewMut<Complex<T>, D>
-where D: Dimension
+where D: Layout
 {
     /// Splits the view into views of the real and imaginary components of the
     /// elements.
