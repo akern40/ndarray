@@ -1,11 +1,14 @@
 use core::{
+    array::IntoIter,
     marker::PhantomData,
     ops::{Add, AddAssign, Deref, DerefMut, Index, IndexMut, Mul, MulAssign, Sub, SubAssign},
 };
+use std::slice::Iter;
 
 use alloc::borrow::Cow;
+use num_traits::Zero;
 
-use crate::Axis;
+use crate::{layout::checked::Checked, Axis};
 
 use super::{
     dimensionality::{Dimensionality, NDim},
@@ -20,6 +23,15 @@ use super::{
 pub struct ShapeStrideN<T, const N: usize>([T; N]);
 
 pub type NShape<const N: usize> = ShapeStrideN<usize, N>;
+
+impl<const N: usize> NShape<N>
+where NDim<N>: Dimensionality
+{
+    pub fn default_checked() -> Checked<Self>
+    {
+        unsafe { Checked::new_shape(Self::default()) }
+    }
+}
 
 pub type NStrides<const N: usize> = ShapeStrideN<isize, N>;
 
@@ -90,6 +102,35 @@ impl<T, const N: usize> From<ShapeStrideN<T, N>> for [T; N]
     fn from(value: ShapeStrideN<T, N>) -> Self
     {
         value.0
+    }
+}
+
+impl<'a, T, const N: usize> TryFrom<&'a [T]> for ShapeStrideN<T, N>
+where T: Copy + Zero
+{
+    type Error = ShapeStrideError<Self>;
+
+    fn try_from(value: &'a [T]) -> Result<Self, Self::Error>
+    {
+        if value.len() != N {
+            Err(ShapeStrideError::BadDimality(PhantomData, value.len()))
+        } else {
+            let mut arr = [T::zero(); N];
+            arr.copy_from_slice(value);
+            Ok(Self { 0: arr })
+        }
+    }
+}
+
+impl<T, const N: usize> IntoIterator for ShapeStrideN<T, N>
+{
+    type Item = T;
+
+    type IntoIter = IntoIter<T, N>;
+
+    fn into_iter(self) -> Self::IntoIter
+    {
+        self.0.into_iter()
     }
 }
 
@@ -308,14 +349,23 @@ impl<const N: usize> MulAssign<usize> for NShape<N>
     }
 }
 
-impl<const N: usize> Shape for NShape<N>
+unsafe impl<const N: usize> Shape for NShape<N>
 where NDim<N>: Dimensionality
 {
     type Pattern = [usize; N];
 
+    type Iter<'a>
+        = Iter<'a, usize>
+    where Self: 'a;
+
     fn into_pattern(&self) -> Self::Pattern
     {
         self.0
+    }
+
+    fn iter(&self) -> Self::Iter<'_>
+    {
+        self.0.iter()
     }
 
     fn as_slice(&self) -> Cow<'_, [usize]>
@@ -341,11 +391,6 @@ where NDim<N>: Dimensionality
         }
     }
 
-    fn size(&self) -> usize
-    {
-        self.iter().product()
-    }
-
     fn size_checked(&self) -> Option<usize>
     {
         self.iter().try_fold(1_usize, |acc, &i| acc.checked_mul(i))
@@ -365,9 +410,18 @@ impl<const N: usize> ShapeMut for NShape<N> where NDim<N>: Dimensionality {}
 impl<const N: usize> Strides for NStrides<N>
 where NDim<N>: Dimensionality
 {
+    type Iter<'a>
+        = Iter<'a, isize>
+    where Self: 'a;
+
     fn as_slice(&self) -> Cow<'_, [isize]>
     {
         Cow::Borrowed(self.deref())
+    }
+
+    fn iter<'a>(&'a self) -> Self::Iter<'a>
+    {
+        (**self).iter()
     }
 
     fn is_c_order(&self) -> bool

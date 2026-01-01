@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use core::ops::{Deref, DerefMut, Index, IndexMut};
+use core::slice::Iter;
 use num_traits::Zero;
 
 use crate::layout::strides::DefaultF;
@@ -240,13 +241,37 @@ impl_op!(Add<Rhs>, add, AddAssign<Rhs>, add_assign);
 impl_op!(Sub<Rhs>, sub, SubAssign<Rhs>, sub_assign);
 impl_op!(Mul<Rhs>, mul, MulAssign<Rhs>, mul_assign);
 
-impl Shape for DynAxesRepr<usize>
+impl<T> IntoIterator for DynAxesRepr<T>
+where T: Clone
+{
+    type Item = T;
+    type IntoIter = alloc::vec::IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter
+    {
+        match self {
+            DynAxesRepr::Inline(len, arr) => Vec::from(arr[..len].to_vec()).into_iter(),
+            DynAxesRepr::Alloc(b) => b.into_vec().into_iter(),
+        }
+    }
+}
+
+unsafe impl Shape for DynAxesRepr<usize>
 {
     type Pattern = Self;
+
+    type Iter<'a>
+        = Iter<'a, usize>
+    where Self: 'a;
 
     fn into_pattern(&self) -> Self::Pattern
     {
         self.clone()
+    }
+
+    fn iter(&self) -> Self::Iter<'_>
+    {
+        (**self).iter()
     }
 
     fn as_slice(&self) -> Cow<'_, [usize]>
@@ -261,11 +286,6 @@ impl Shape for DynAxesRepr<usize>
         } else {
             Err(super::ShapeStrideError::OutOfBounds(PhantomData, index))
         }
-    }
-
-    fn size(&self) -> usize
-    {
-        self.iter().product()
     }
 
     fn size_checked(&self) -> Option<usize>
@@ -290,9 +310,18 @@ impl ShapeMut for DynAxesRepr<usize> {}
 
 impl Strides for DynAxesRepr<isize>
 {
+    type Iter<'a>
+        = Iter<'a, isize>
+    where Self: 'a;
+
     fn as_slice(&self) -> Cow<'_, [isize]>
     {
         Cow::Borrowed(self)
+    }
+
+    fn iter<'a>(&'a self) -> Self::Iter<'a>
+    {
+        (**self).iter()
     }
 
     fn is_c_order(&self) -> bool
@@ -322,5 +351,3 @@ impl DefaultF for DStrides
         DStrides::from(strides)
     }
 }
-
-impl DefaultC for DStrides {}

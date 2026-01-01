@@ -1,4 +1,5 @@
 pub mod bitset;
+pub mod checked;
 mod bitsetfmt;
 pub mod dimensionality;
 mod dyn_repr;
@@ -9,9 +10,9 @@ pub mod strided_builder;
 
 pub use dyn_repr::{DShape, DStrides};
 pub use n_repr::{NShape, NStrides};
+use num_traits::ToPrimitive;
 
-use alloc::borrow::Cow;
-use core::{any::type_name, fmt::Display, marker::PhantomData};
+use core::{any::type_name, error::Error, fmt::Debug, fmt::Display, marker::PhantomData};
 use dimensionality::{Dimensionality, NDim};
 pub use shape::Shape;
 pub use strides::Strides;
@@ -109,9 +110,24 @@ pub enum ShapeStrideError<S>
     FixedIndex(PhantomData<S>, usize),
     /// The error when trying to construct or mutate a shape or strides with the wrong dimensionality value.
     BadDimality(PhantomData<S>, usize),
+    /// The desired shape would represent an array with more elements than `usize::MAX`
+    ShapeOverflow,
 }
 
-impl<S: Strides> Display for ShapeStrideError<S>
+impl<S> ShapeStrideError<S>
+{
+    pub fn replace_type_with<T>(&self) -> ShapeStrideError<T>
+    {
+        match self {
+            ShapeStrideError::OutOfBounds(_, u) => ShapeStrideError::OutOfBounds(PhantomData, *u),
+            ShapeStrideError::FixedIndex(_, u) => ShapeStrideError::FixedIndex(PhantomData, *u),
+            ShapeStrideError::BadDimality(_, u) => ShapeStrideError::BadDimality(PhantomData, *u),
+            ShapeStrideError::ShapeOverflow => ShapeStrideError::ShapeOverflow,
+        }
+    }
+}
+
+impl<S: Dimensioned> Display for ShapeStrideError<S>
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
     {
@@ -120,9 +136,12 @@ impl<S: Strides> Display for ShapeStrideError<S>
             ShapeStrideError::OutOfBounds(_, idx) =>
                 write!(f, "Index {idx} is larger than the dimensionality of {}", type_name::<S>()),
             ShapeStrideError::BadDimality(_, dimality) => write!(f, "{} has a dimensionality of {}, which is incompatible with requested dimensionality of {dimality}", type_name::<S>(), type_name::<S::Dimality>()),
+            ShapeStrideError::ShapeOverflow => write!(f, "The desired shape would represent an array with more elements than `usize::MAX`")
         }
     }
 }
+
+impl<S: Debug + Dimensioned> Error for ShapeStrideError<S> {}
 
 /// Trait that associates a dimensionality to a type
 pub trait Dimensioned
@@ -143,7 +162,38 @@ where NDim<N>: Dimensionality
     }
 }
 
+impl<T> Dimensioned for [T]
+{
+    type Dimality = DDyn;
+
+    fn ndim(&self) -> usize
+    {
+        self.len()
+    }
+}
+
 /// A trait capturing how an array is laid out in memory.
+///
+/// # Safety
+/// Not all instances of a layout are valid. For example, layouts
+/// with invalid shapes are themselves not valid; see [`Shape`] for
+/// safety information. `Layout` instances must hold their own
+/// invariants to be valid. In particular, the offset in bytes
+/// between the minimum and maximum addresses of the array
+/// cannot be greater than `isize::MAX`. This is true even if
+/// the number of elements in the array is technically zero.
+///
+/// For example, if the layout is strided with a shape of `[2, 0, 3]`
+/// and strides of `[3, 6, -1]`, the minimum offset is -2 and the maximum
+/// offset is 3, with a total 5 elements between the minimum and maximum.
+/// The offset in bytes is dependent on the type that the layout is representing.
+///
+/// To uphold these invariants, implementors of `Layout` guarantee that that
+/// [`Layout::offset_range_checked`]:
+/// 1. Only returns `Some(_)` if the offset in _number of elements_ fits in `isize`.
+/// 2. When it returns `Some(_)`, it represents the _exact_ offset in `isize`.
+///
+/// Similar guarantees must be held for [`Layout::offset_range_bytes_checked`].
 pub trait Layout: Dimensioned + Clone + Default
 {
     /// The type of shape that the array uses.
@@ -154,13 +204,13 @@ pub trait Layout: Dimensioned + Clone + Default
     /// The index type that this layout uses; e.g., `[usize; N]`.
     ///
     /// Must have the same dimensionality.
-    type Index<'a>: Dimensioned<Dimality = Self::Dimality>;
+    type Index: Dimensioned<Dimality = Self::Dimality> + ?Sized;
 
     /// Get the shape of the layout.
     ///
     /// If the implementing type does not carry a shape directly,
     /// one should be constructed and passed as [`Cow::Owned`].
-    fn shape(&self) -> Cow<'_, Self::Shape>;
+    fn shape(&self) -> &Self::Shape;
 
     /// Index into this layout in "linear" fashion by moving across axes from left to right.
     fn index_linear_left(&self, idx: usize) -> isize;
@@ -172,26 +222,43 @@ pub trait Layout: Dimensioned + Clone + Default
     fn index_memory_order(&self, idx: usize) -> isize;
 
     /// Index into this layout with a multidimensional index.
-    fn index<'a, 'b: 'a>(&'a self, idx: Self::Index<'b>) -> isize;
+    fn index(&self, idx: &Self::Index) -> isize;
 
-    fn first_index(&self) -> Option<Self::Index<'_>>;
+    // fn first_index(&self) -> Option<Self::Index>;
 
-    fn next_for<'a, 'b: 'a>(&'a self, index: Self::Index<'b>) -> Option<Self::Index<'b>>;
+    // fn next_for(&self, index: Self::Index) -> Option<Self::Index>;
 
-    // Shortcut methods, we could add more of these
-    fn ndim(&self) -> usize
+    /// The number of elements between the minimum and maximum offsets represented by this layout.
+    fn offset_range_checked(&self) -> Option<isize>;
+
+    /// The number of bytes between the minimum and maximum offsets represented by this layout.
+    ///
+    /// If the number of bytes exceeds `isize::MAX`, returns `None`.
+    ///
+    /// # Safety
+    /// This method must return `None` if and only if the number of bytes exceeds `isize::MAX`.
+    /// When returning `Some(_)`, the number of bytes returned must be exact and correct.
+    ///
+    /// This method has a default implementation that uses [`Layout::offset_range_checked`],
+    /// so that users should rarely need to re-implement this method.
+    fn offset_range_bytes_checked<T>(&self) -> Option<isize>
     {
-        self.shape().ndim()
+        size_of::<T>()
+            .to_isize()
+            .and_then(|s| self.offset_range_checked().map(|or| (s, or)))
+            .and_then(|(s, or)| s.checked_mul(or))
     }
 
-    fn size(&self) -> usize
-    {
-        self.shape().size()
-    }
+    // Shortcut methods
 
     fn size_checked(&self) -> Option<usize>
     {
         self.shape().size_checked()
+    }
+
+    fn size_bytes_checked<T>(&self) -> Option<usize>
+    {
+        self.shape().size_bytes_checked::<T>()
     }
 }
 
@@ -199,7 +266,7 @@ pub trait Strided: Layout
 {
     type Strides: Strides<Dimality = Self::Dimality>;
 
-    fn strides(&self) -> Cow<'_, Self::Strides>;
+    fn strides(&self) -> &Self::Strides;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -214,9 +281,12 @@ where NDim<N>: Dimensionality
 {
     fn default() -> Self
     {
-        let shape = NShape::<N>::default();
+        let shape = NShape::<N>::default_checked();
         let strides = NStrides::<N>::default_c(shape);
-        Self { shape, strides }
+        Self {
+            shape: shape.unwrap(),
+            strides,
+        }
     }
 }
 
@@ -231,16 +301,38 @@ where NDim<N>: Dimensionality
     }
 }
 
+/// Get the offset between the minimum and maximum addresses of the strided array, in number of elements.
+pub fn offset_range_checked(shape: &impl Shape, strides: &impl Strides) -> Option<isize>
+{
+    shape
+        .iter_isize_checked()
+        .and_then(|it| {
+            it.zip(strides.iter())
+                .map(|(sh, st)| (sh - 1).checked_mul(*st).map(|v| (v.min(0), v.max(0))))
+                .try_fold((0isize, 0isize), |acc, x| x.map(|x_| (acc.0 + x_.0, acc.1 + x_.1)))
+        })
+        .and_then(|(min, max)| max.checked_sub(min))
+}
+
+pub fn offset_range_bytes_checked<T>(shape: &impl Shape, strides: &impl Strides) -> Option<isize>
+{
+    let size = size_of::<T>().to_isize();
+    match size {
+        None => None,
+        Some(s) => offset_range_checked(shape, strides).and_then(|off| off.checked_mul(s)),
+    }
+}
+
 impl<const N: usize> Layout for NLayout<N>
 where NDim<N>: Dimensionality
 {
     type Shape = NShape<N>;
 
-    type Index<'a> = [usize; N];
+    type Index = [usize; N];
 
-    fn shape(&self) -> Cow<'_, Self::Shape>
+    fn shape(&self) -> &Self::Shape
     {
-        Cow::Borrowed(&self.shape)
+        &self.shape
     }
 
     fn index_linear_left(&self, idx: usize) -> isize
@@ -258,7 +350,7 @@ where NDim<N>: Dimensionality
         todo!()
     }
 
-    fn index(&self, index: Self::Index) -> isize
+    fn index(&self, index: &Self::Index) -> isize
     {
         let mut offset = 0isize;
         for idx in 0..N {
@@ -267,15 +359,25 @@ where NDim<N>: Dimensionality
         offset
     }
 
-    fn first_index(&self) -> Option<Self::Index>
+    fn offset_range_checked(&self) -> Option<isize>
     {
-        todo!()
+        offset_range_checked(&self.shape, &self.strides)
     }
 
-    fn next_for(&self, index: Self::Index) -> Option<Self::Index>
+    fn offset_range_bytes_checked<T>(&self) -> Option<isize>
     {
-        todo!()
+        offset_range_bytes_checked::<T>(&self.shape, &self.strides)
     }
+
+    // fn first_index(&self) -> Option<Self::Index>
+    // {
+    //     todo!()
+    // }
+
+    // fn next_for(&self, index: Self::Index) -> Option<Self::Index>
+    // {
+    //     todo!()
+    // }
 }
 
 impl NLayout<1>
@@ -333,12 +435,13 @@ impl Default for DynLayout
 {
     fn default() -> Self
     {
-        let shape = DShape::Inline(1, []);
-        let strides = DStrides::default_c(shape);
-        Self {
-            shape: Default::default(),
-            strides: Default::default(),
-        }
+        todo!()
+        // let shape = DShape::Inline(1, []);
+        // let strides = DStrides::default_c(shape);
+        // Self {
+        //     shape: Default::default(),
+        //     strides: Default::default(),
+        // }
     }
 }
 
@@ -346,9 +449,9 @@ impl Layout for DynLayout
 {
     type Shape = DShape;
 
-    type Index = &[usize];
+    type Index = [usize];
 
-    fn shape(&self) -> Cow<'_, Self::Shape>
+    fn shape(&self) -> &Self::Shape
     {
         todo!()
     }
@@ -368,19 +471,60 @@ impl Layout for DynLayout
         todo!()
     }
 
-    fn index(&self, idx: Self::Index) -> isize
+    fn index(&self, idx: &Self::Index) -> isize
     {
         todo!()
     }
 
-    fn first_index(&self) -> Option<Self::Index>
+    fn offset_range_checked(&self) -> Option<isize>
     {
-        todo!()
+        offset_range_checked(&self.shape, &self.strides)
     }
 
-    fn next_for(&self, index: Self::Index) -> Option<Self::Index>
+    fn offset_range_bytes_checked<T>(&self) -> Option<isize>
     {
-        todo!()
+        let size = size_of::<T>().to_isize();
+        match size {
+            None => None,
+            Some(s) => self
+                .offset_range_checked()
+                .and_then(|off| off.checked_mul(s)),
+        }
+    }
+
+    // fn first_index(&self) -> Option<Self::Index>
+    // {
+    //     todo!()
+    // }
+
+    // fn next_for(&self, index: Self::Index) -> Option<Self::Index>
+    // {
+    //     todo!()
+    // }
+}
+
+/// A convenience extension trait to check if a `usize` fits in an `isize`.
+pub trait FitsInISize: Sized
+{
+    fn fits_in_isize(&self) -> bool;
+
+    fn as_usize_if_isize_compatible(self) -> Option<Self>;
+}
+
+impl FitsInISize for usize
+{
+    fn fits_in_isize(&self) -> bool
+    {
+        *self <= (isize::MAX as usize)
+    }
+
+    fn as_usize_if_isize_compatible(self) -> Option<Self>
+    {
+        if self.fits_in_isize() {
+            Some(self)
+        } else {
+            None
+        }
     }
 }
 

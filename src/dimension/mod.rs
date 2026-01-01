@@ -85,6 +85,7 @@ pub(crate) fn dim_stride_overlap<D: Dimension>(dim: &D, strides: &D) -> bool
 /// are met to construct an array from the data buffer, `dim`, and `strides`.
 /// (The data buffer being a slice or `Vec` guarantees that it contains no more
 /// than `isize::MAX` bytes.)
+#[deprecated(since = "0.18.0", note = "Use `Shape::size_checked` instead")]
 pub fn size_of_shape_checked<D: Dimension>(dim: &D) -> Result<usize, ShapeError>
 {
     let size_nonzero = dim

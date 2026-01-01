@@ -1,14 +1,15 @@
-use crate::{Axis, Dimension, Ixs};
+use crate::{layout::Strided, Axis, Dimension, Ixs, Layout};
+use alloc::borrow::Cow;
 
 /// Create a new Axes iterator
-pub(crate) fn axes_of<'a, D>(d: &'a D, strides: &'a D) -> Axes<'a, D>
-where D: Dimension
+pub(crate) fn axes_of<'a, L>(layout: L) -> Axes<'a, L>
+where L: Strided
 {
     Axes {
-        dim: d,
-        strides,
+        shape: layout.shape(),
+        strides: layout.strides(),
         start: 0,
-        end: d.ndim(),
+        end: layout.ndim(),
     }
 }
 
@@ -36,17 +37,18 @@ where D: Dimension
 /// assert_eq!(largest_axis.axis, Axis(1));
 /// assert_eq!(largest_axis.len, 5);
 /// ```
-#[derive(Debug)]
-pub struct Axes<'a, D>
+#[derive(Debug, Clone)]
+pub struct Axes<'a, L>
+where L: Strided
 {
-    dim: &'a D,
-    strides: &'a D,
+    shape: Cow<'a, L::Shape>,
+    strides: Cow<'a, L::Strides>,
     start: usize,
     end: usize,
 }
 
 /// Description of the axis, its length and its stride.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct AxisDescription
 {
     /// Axis identifier (index)
@@ -57,11 +59,8 @@ pub struct AxisDescription
     pub stride: isize,
 }
 
-copy_and_clone!(AxisDescription);
-copy_and_clone!(['a, D] Axes<'a, D>);
-
 impl<D> Iterator for Axes<'_, D>
-where D: Dimension
+where D: Strided
 {
     /// Description of the axis, its length and its stride.
     type Item = AxisDescription;
