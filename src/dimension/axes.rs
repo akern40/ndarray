@@ -1,8 +1,7 @@
-use crate::{layout::Strided, Axis, Dimension, Ixs, Layout};
-use alloc::borrow::Cow;
+use crate::{layout::Strided, Axis, Dimension};
 
 /// Create a new Axes iterator
-pub(crate) fn axes_of<'a, L>(layout: L) -> Axes<'a, L>
+pub(crate) fn axes_of<'a, L>(layout: &'a L) -> Axes<'a, L>
 where L: Strided
 {
     Axes {
@@ -41,8 +40,8 @@ where L: Strided
 pub struct Axes<'a, L>
 where L: Strided
 {
-    shape: Cow<'a, L::Shape>,
-    strides: Cow<'a, L::Strides>,
+    shape: &'a L::Shape,
+    strides: &'a L::Strides,
     start: usize,
     end: usize,
 }
@@ -71,8 +70,8 @@ where D: Strided
             let i = self.start.post_inc();
             Some(AxisDescription {
                 axis: Axis(i),
-                len: self.dim[i],
-                stride: self.strides[i] as Ixs,
+                len: self.shape[i],
+                stride: self.strides[i],
             })
         } else {
             None
@@ -85,8 +84,8 @@ where D: Strided
         (self.start..self.end)
             .map(move |i| AxisDescription {
                 axis: Axis(i),
-                len: self.dim[i],
-                stride: self.strides[i] as isize,
+                len: self.shape[i],
+                stride: self.strides[i],
             })
             .fold(init, f)
     }
@@ -99,7 +98,7 @@ where D: Strided
 }
 
 impl<D> DoubleEndedIterator for Axes<'_, D>
-where D: Dimension
+where D: Strided
 {
     fn next_back(&mut self) -> Option<Self::Item>
     {
@@ -107,8 +106,8 @@ where D: Dimension
             let i = self.end.pre_dec();
             Some(AxisDescription {
                 axis: Axis(i),
-                len: self.dim[i],
-                stride: self.strides[i] as Ixs,
+                len: self.shape[i],
+                stride: self.strides[i],
             })
         } else {
             None

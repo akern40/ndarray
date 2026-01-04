@@ -2,8 +2,8 @@
 //!
 
 use crate::dimension::Dim;
-use crate::layout::{L1, L2, L3, L4, L5, L6};
-use crate::{ArcArray, Array, ArrayRef, ArrayView, ArrayViewMut, Ix, IxDynImpl, LayoutRef};
+use crate::layout::{NLayout, NShape};
+use crate::{ArcArray, Array, ArrayRef, ArrayView, ArrayViewMut, Ix, IxDynImpl, Layout, LayoutRef};
 
 /// Create a zero-dimensional index
 #[allow(non_snake_case)]
@@ -106,6 +106,44 @@ pub type Ix6 = Dim<[Ix; 6]>;
 /// let arrays = vec![a, b];
 /// ```
 pub type IxDyn = Dim<IxDynImpl>;
+
+// One-dimensional strided layout
+pub type L1 = NLayout<1>;
+// Two-dimensional strided layout
+pub type L2 = NLayout<2>;
+// Three-dimensional strided layout
+pub type L3 = NLayout<3>;
+// Four-dimensional strided layout
+pub type L4 = NLayout<4>;
+// Five-dimensional strided layout
+pub type L5 = NLayout<5>;
+// Six-dimensional strided layout
+pub type L6 = NLayout<6>;
+// Seven-dimensional strided layout
+pub type L7 = NLayout<7>;
+// Eight-dimensional strided layout
+pub type L8 = NLayout<8>;
+// Nine-dimensional strided layout
+pub type L9 = NLayout<9>;
+// Ten-dimensional strided layout
+pub type L10 = NLayout<10>;
+// Eleven-dimensional strided layout
+pub type L11 = NLayout<11>;
+// Twelve-dimensional strided layout
+pub type L12 = NLayout<12>;
+
+pub type Sh1 = <L1 as Layout>::Shape;
+pub type Sh2 = <L2 as Layout>::Shape;
+pub type Sh3 = <L3 as Layout>::Shape;
+pub type Sh4 = <L4 as Layout>::Shape;
+pub type Sh5 = <L5 as Layout>::Shape;
+pub type Sh6 = <L6 as Layout>::Shape;
+pub type Sh7 = <L7 as Layout>::Shape;
+pub type Sh8 = <L8 as Layout>::Shape;
+pub type Sh9 = <L9 as Layout>::Shape;
+pub type Sh10 = <L10 as Layout>::Shape;
+pub type Sh11 = <L11 as Layout>::Shape;
+pub type Sh12 = <L12 as Layout>::Shape;
 
 /// zero-dimensional array
 #[deprecated]

@@ -1,4 +1,4 @@
-use crate::imp_prelude::*;
+use crate::{imp_prelude::*, layout::shape::ShapeMut};
 
 /// Arrays and similar that can be split along an axis
 pub(crate) trait SplitAt
@@ -21,7 +21,7 @@ pub(crate) trait SplitPreference: SplitAt
 }
 
 impl<D> SplitAt for D
-where D: Layout
+where D: ShapeMut
 {
     fn split_at(self, axis: Axis, index: Ix) -> (Self, Self)
     {
@@ -36,7 +36,7 @@ where D: Layout
 }
 
 impl<A, D> SplitAt for ArrayViewMut<'_, A, D>
-where D: Layout
+where D: Layout<Shape: ShapeMut>
 {
     fn split_at(self, axis: Axis, index: usize) -> (Self, Self)
     {
@@ -45,7 +45,7 @@ where D: Layout
 }
 
 impl<A, D> SplitAt for RawArrayViewMut<A, D>
-where D: Layout
+where D: Layout<Shape: ShapeMut>
 {
     fn split_at(self, axis: Axis, index: usize) -> (Self, Self)
     {

@@ -8,7 +8,7 @@
 
 use std::ptr::NonNull;
 
-use crate::{imp_prelude::*, ArrayPartsSized, Layout};
+use crate::{imp_prelude::*, ArrayPartsSized, Layout, L1};
 
 // internal "builder-like" methods
 impl<A, S> ArrayBase<S, L1>

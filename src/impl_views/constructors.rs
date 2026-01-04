@@ -18,7 +18,7 @@ use crate::{is_aligned, StrideShape};
 
 /// Methods for read-only array views.
 impl<'a, A, D> ArrayView<'a, A, D>
-where D: Dimension
+where D: Layout
 {
     /// Create a read-only array view borrowing its data from a slice.
     ///

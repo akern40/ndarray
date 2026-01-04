@@ -7,12 +7,13 @@
 // except according to those terms.
 
 use crate::imp_prelude::*;
+use crate::layout::shape::ShapeMut;
 use crate::slice::MultiSliceArg;
 use num_complex::Complex;
 
 /// Methods for read-only array views.
 impl<A, D> ArrayView<'_, A, D>
-where D: Dimension
+where D: Strided<Shape: ShapeMut>
 {
     /// Split the array view along `axis` and return one view strictly before the
     /// split and one view after the split.
@@ -99,7 +100,7 @@ where D: Dimension
 }
 
 impl<'a, T, D> ArrayView<'a, Complex<T>, D>
-where D: Dimension
+where D: Strided<Shape: ShapeMut>
 {
     /// Splits the view into views of the real and imaginary components of the
     /// elements.
@@ -131,7 +132,7 @@ where D: Dimension
 
 /// Methods for read-write array views.
 impl<'a, A, D> ArrayViewMut<'a, A, D>
-where D: Dimension
+where D: Strided<Shape: ShapeMut>
 {
     /// Split the array view along `axis` and return one mutable view strictly
     /// before the split and one mutable view after the split.
@@ -173,7 +174,7 @@ where D: Dimension
 }
 
 impl<'a, T, D> ArrayViewMut<'a, Complex<T>, D>
-where D: Dimension
+where D: Strided<Shape: ShapeMut>
 {
     /// Splits the view into views of the real and imaginary components of the
     /// elements.

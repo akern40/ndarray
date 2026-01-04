@@ -391,29 +391,6 @@ impl NLayout<1>
     }
 }
 
-macro_rules! create_L_types {
-    ($(($t:ident, $v:literal)),+) => {
-        $(
-            pub type $t = NLayout<$v>;
-        )+
-    };
-}
-
-create_L_types!(
-    (L1, 1),
-    (L2, 2),
-    (L3, 3),
-    (L4, 4),
-    (L5, 5),
-    (L6, 6),
-    (L7, 7),
-    (L8, 8),
-    (L9, 9),
-    (L10, 10),
-    (L11, 11),
-    (L12, 12)
-);
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DynLayout
 {

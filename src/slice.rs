@@ -334,6 +334,7 @@ pub unsafe trait SliceArg<D: Dimension>: AsRef<[SliceInfoElem]>
     private_decl! {}
 }
 
+/// Implementation of [`SliceArg`] for references.
 unsafe impl<T, D> SliceArg<D> for &T
 where
     T: SliceArg<D> + ?Sized,
