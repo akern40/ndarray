@@ -1,20 +1,26 @@
+use core::array;
 use core::iter::Map;
 
-use crate::layout::rank::Rank;
+use crate::layout::rank::{ConstRank, DynRank, Rank};
 use crate::layout::ranked::Ranked;
 
 pub trait Shape: Ranked
 {
-    type Iter<'a>: Iterator<Item = &'a usize> + ExactSizeIterator + DoubleEndedIterator
-    where Self: 'a;
+    type Iter: Iterator<Item = usize> + ExactSizeIterator + DoubleEndedIterator;
 
+    /// A representation of the shape as a type that can be destructured.
+    ///
+    /// For example, for 2D shapes, this should be something like [usize; 2].
+    /// For 3D shapes, [usize; 3], etc.
+    /// For shapes whose rank isn't known at compile time, this can be the marker
+    /// type [`DMarker`].
     type Pattern: Ranked<NDim = Self::NDim>;
 
     /// The length of the array along a given axis.
     fn axis_len(&self, axis: usize) -> usize;
 
     /// Iterate over the dimensions of the shape.
-    fn iter(&self) -> Self::Iter<'_>;
+    fn iter(&self) -> Self::Iter;
 
     /// Get the number of elements that the array contains.
     ///
@@ -27,7 +33,7 @@ pub trait Shape: Ranked
     fn size_checked(&self) -> Option<usize>
     {
         self.iter()
-            .try_fold(1_usize, |acc, &i| acc.checked_mul(i))
+            .try_fold(1_usize, |acc, i| acc.checked_mul(i))
             .and_then(as_usize_if_isize_compatible)
     }
 
@@ -43,10 +49,9 @@ pub trait Shape: Ranked
             .and_then(as_usize_if_isize_compatible)
     }
 
-    fn iter_isize<'a>(&'a self) -> Option<Map<Self::Iter<'a>, impl FnMut(&'a usize) -> isize>>
+    fn iter_isize<'a>(&'a self) -> Option<Map<Self::Iter, impl FnMut(usize) -> isize>>
     {
-        self.size_checked()
-            .map(|_| self.iter().map(|v| *v as isize))
+        self.size_checked().map(|_| self.iter().map(|v| v as isize))
     }
 }
 
@@ -57,6 +62,13 @@ fn as_usize_if_isize_compatible(v: usize) -> Option<usize>
     } else {
         None
     }
+}
+
+pub trait Patterned
+{
+    type Pattern;
+
+    fn into_pattern(&self) -> Self::Pattern;
 }
 
 /// A conversion trait for types that can turn into a shape.
@@ -70,7 +82,7 @@ pub trait IntoShape
 }
 
 impl<T> IntoShape for T
-where T: Shape
+where T: Shape + Clone
 {
     type NDim = T::NDim;
 
