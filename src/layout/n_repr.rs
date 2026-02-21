@@ -1,9 +1,10 @@
 use core::{
     array::IntoIter,
+    iter::Cloned,
     marker::PhantomData,
     ops::{Add, AddAssign, Deref, DerefMut, Index, IndexMut, Mul, MulAssign, Sub, SubAssign},
+    slice::Iter,
 };
-use std::{iter::Cloned, slice::Iter};
 
 use num_traits::Zero;
 
