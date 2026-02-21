@@ -11,7 +11,8 @@
 mod bitset;
 pub mod rank;
 pub mod ranked;
-pub mod shape;
+mod shape;
+mod n_repr;
 
 use core::any::type_name;
 use core::error::Error;
@@ -22,6 +23,8 @@ use crate::layout::ranked::Ranked;
 
 #[allow(deprecated)]
 pub use bitset::{Layout, LayoutBitset};
+pub use n_repr::NShape;
+pub use shape::Shape;
 
 /// The error type for dealing with shapes and strides
 #[derive(Debug, Clone, Copy)]
@@ -31,20 +34,8 @@ pub enum ShapeStrideError<S>
     OutOfBounds(PhantomData<S>, usize),
     /// The error when trying to construct or mutate a shape or strides with the wrong dimensionality value.
     RankMismatch(PhantomData<S>, usize),
-    /// The desired shape would represent an array with more elements than `usize::MAX`
+    /// The desired shape would represent an array with more elements than `isize::MAX`
     ShapeOverflow,
-}
-
-impl<S> ShapeStrideError<S>
-{
-    pub fn replace_type_with<T>(&self) -> ShapeStrideError<T>
-    {
-        match self {
-            ShapeStrideError::OutOfBounds(_, u) => ShapeStrideError::OutOfBounds(PhantomData, *u),
-            ShapeStrideError::RankMismatch(_, u) => ShapeStrideError::RankMismatch(PhantomData, *u),
-            ShapeStrideError::ShapeOverflow => ShapeStrideError::ShapeOverflow,
-        }
-    }
 }
 
 impl<S: Ranked> Display for ShapeStrideError<S>

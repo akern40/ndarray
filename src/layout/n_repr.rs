@@ -3,14 +3,14 @@ use core::{
     marker::PhantomData,
     ops::{Add, AddAssign, Deref, DerefMut, Index, IndexMut, Mul, MulAssign, Sub, SubAssign},
 };
-use std::slice::Iter;
+use std::{iter::Cloned, slice::Iter};
 
 use num_traits::Zero;
 
 use crate::layout::{
     rank::{ConstRank, Rank},
     ranked::Ranked,
-    shape::{IntoShape, Shape},
+    shape::Shape,
     ShapeStrideError,
 };
 
@@ -18,6 +18,7 @@ use crate::layout::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ShapeStrideN<T, const N: usize>([T; N]);
 
+/// An array shape with a constant rank.
 pub type NShape<const N: usize> = ShapeStrideN<usize, N>;
 
 impl<T, const N: usize> Deref for ShapeStrideN<T, N>
@@ -80,7 +81,7 @@ where T: Copy + Zero
     fn try_from(value: &'a [T]) -> Result<Self, Self::Error>
     {
         if value.len() != N {
-            Err(ShapeStrideError::BadDimality(PhantomData, value.len()))
+            Err(ShapeStrideError::RankMismatch(PhantomData, value.len()))
         } else {
             let mut arr = [T::zero(); N];
             arr.copy_from_slice(value);
@@ -117,21 +118,6 @@ macro_rules! shapestride_and_tuples {
                 fn from(value: ShapeStrideN<T, $N>) -> Self
                 {
                     value.0.into()
-                }
-            }
-
-            impl<T> IntoShape for $tuple
-            where
-                NShape<$N>: From<$tuple>,
-                T: Copy,
-            {
-                type NDim = ConstRank<$N>;
-
-                type Shape = NShape<$N>;
-
-                fn into_shape(&self) -> Self::Shape
-                {
-                    (*self).into()
                 }
             }
         )*
@@ -184,24 +170,11 @@ where ConstRank<N>: Rank
     }
 }
 
-impl<const N: usize> IntoShape for [usize; N]
-where ConstRank<N>: Rank
-{
-    type NDim = ConstRank<N>;
-
-    type Shape = NShape<N>;
-
-    fn into_shape(&self) -> Self::Shape
-    {
-        (*self).into()
-    }
-}
-
 macro_rules! impl_op {
     ($op_trait:ty, $op_fn:ident, $op_assign_trait:ty, $op_assign_fn:ident) => {
         impl<Rhs, const N: usize> $op_trait for NShape<N>
         where
-            Rhs: IntoShape<NDim = ConstRank<N>>,
+            Rhs: Into<NShape<N>>,
         {
             type Output = NShape<N>;
 
@@ -214,10 +187,10 @@ macro_rules! impl_op {
 
         impl<Rhs, const N: usize> $op_assign_trait for NShape<N>
         where
-            Rhs: IntoShape<NDim = ConstRank<N>>,
+            Rhs: Into<NShape<N>>,
         {
             fn $op_assign_fn(&mut self, rhs: Rhs) {
-                let other = rhs.into_shape();
+                let other = rhs.into();
                 for i in 0..N {
                     self[i].$op_assign_fn(other[i]);
                 }
@@ -279,13 +252,16 @@ impl<const N: usize> MulAssign<usize> for NShape<N>
 impl<const N: usize> Shape for NShape<N>
 where ConstRank<N>: Rank
 {
-    type Iter<'a>
-        = Iter<'a, usize>
-    where Self: 'a;
+    type Iter<'a> = Cloned<Iter<'a, usize>>;
+
+    fn axis_len(&self, axis: usize) -> usize
+    {
+        self.0[axis]
+    }
 
     fn iter(&self) -> Self::Iter<'_>
     {
-        self.0.iter()
+        self.0.iter().cloned()
     }
 }
 
