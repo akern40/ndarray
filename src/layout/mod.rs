@@ -13,6 +13,7 @@ pub mod rank;
 pub mod ranked;
 mod shape;
 mod n_repr;
+mod dyn_repr;
 
 use core::any::type_name;
 use core::error::Error;
@@ -23,6 +24,7 @@ use crate::layout::ranked::Ranked;
 
 #[allow(deprecated)]
 pub use bitset::{Layout, LayoutBitset};
+pub use dyn_repr::DShape;
 pub use n_repr::NShape;
 pub use shape::Shape;
 

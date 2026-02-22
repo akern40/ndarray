@@ -171,6 +171,19 @@ where ConstRank<N>: Rank
     }
 }
 
+impl<const N: usize> Zero for NShape<N>
+{
+    fn zero() -> Self
+    {
+        Self([usize::zero(); N])
+    }
+
+    fn is_zero(&self) -> bool
+    {
+        self.0.iter().all(|e| *e == 0usize)
+    }
+}
+
 macro_rules! impl_op {
     ($op_trait:ty, $op_fn:ident, $op_assign_trait:ty, $op_assign_fn:ident) => {
         impl<Rhs, const N: usize> $op_trait for NShape<N>
@@ -270,6 +283,6 @@ impl<const N: usize> Default for NShape<N>
 {
     fn default() -> Self
     {
-        Self([0; N])
+        Self::zero()
     }
 }

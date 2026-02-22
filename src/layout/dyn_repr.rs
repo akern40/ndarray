@@ -1,13 +1,13 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::iter::Cloned;
 use core::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use core::ops::{Deref, DerefMut, Index, IndexMut};
 use core::slice::Iter;
-use num_traits::Zero;
 
 use crate::layout::rank::DynRank;
 use crate::layout::ranked::Ranked;
-use crate::layout::shape::{IntoShape, Shape};
+use crate::layout::shape::Shape;
 use crate::Axis;
 
 const CAP: usize = 4;
@@ -19,18 +19,8 @@ pub enum DynAxesRepr<T>
     Alloc(Box<[T]>),
 }
 
+/// An array shape with a dynamic rank.
 pub type DShape = DynAxesRepr<usize>;
-
-impl<T> DynAxesRepr<T>
-{
-    fn ndim(&self) -> usize
-    {
-        match self {
-            DynAxesRepr::Inline(len, _) => *len,
-            DynAxesRepr::Alloc(items) => items.len(),
-        }
-    }
-}
 
 impl<T> Deref for DynAxesRepr<T>
 {
@@ -52,7 +42,13 @@ impl<T> DerefMut for DynAxesRepr<T>
 {
     fn deref_mut(&mut self) -> &mut Self::Target
     {
-        todo!()
+        match self {
+            DynAxesRepr::Inline(len, arr) => {
+                debug_assert!(*len <= arr.len());
+                unsafe { arr.get_unchecked_mut(..*len) }
+            }
+            DynAxesRepr::Alloc(items) => items,
+        }
     }
 }
 
@@ -89,33 +85,6 @@ impl<T> IndexMut<Axis> for DynAxesRepr<T>
     fn index_mut(&mut self, index: Axis) -> &mut Self::Output
     {
         self.index_mut(index.0)
-    }
-}
-
-impl<T> Default for DynAxesRepr<T>
-where T: Zero + Copy
-{
-    fn default() -> Self
-    {
-        Self::Inline(1, [T::zero(); 4])
-    }
-}
-
-impl Zero for DShape
-{
-    fn zero() -> Self
-    {
-        Self::Inline(1, [0usize; CAP])
-    }
-
-    fn is_zero(&self) -> bool
-    {
-        self.iter().all(|e| e.is_zero())
-    }
-
-    fn set_zero(&mut self)
-    {
-        self.iter_mut().for_each(|e| e.set_zero());
     }
 }
 
@@ -156,7 +125,7 @@ macro_rules! impl_op {
         /// *Panics* if the two dimensionalities are different
         impl<Rhs> $op_trait for DShape
         where
-            Rhs: IntoShape<NDim = DynRank>,
+            Rhs: Into<Self>,
         {
             type Output = DShape;
 
@@ -170,10 +139,10 @@ macro_rules! impl_op {
         /// *Panics* if the two dimensionalities are different
         impl<Rhs> $op_assign_trait for DShape
         where
-            Rhs: IntoShape<NDim = DynRank>,
+            Rhs: Into<Self>,
         {
             fn $op_assign_fn(&mut self, rhs: Rhs) {
-                let other = rhs.into_shape();
+                let other = rhs.into();
                 for i in 0..self.ndim().max(other.ndim()) {
                     self[i].$op_assign_fn(other[i]);
                 }
@@ -204,11 +173,16 @@ where T: Clone
 impl Shape for DynAxesRepr<usize>
 {
     type Iter<'a>
-        = Iter<'a, usize>
+        = Cloned<Iter<'a, usize>>
     where Self: 'a;
+
+    fn axis_len(&self, axis: usize) -> usize
+    {
+        self[axis]
+    }
 
     fn iter(&self) -> Self::Iter<'_>
     {
-        (**self).iter()
+        (**self).iter().cloned()
     }
 }
