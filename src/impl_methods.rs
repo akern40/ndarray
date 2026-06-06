@@ -3620,9 +3620,9 @@ mod tests
 }
 
 #[cfg(test)]
-#[cfg_attr(miri, ignore)]
 proptest! {
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_permute_axes_6d(p in Just([0, 1, 2, 3, 4, 5]).prop_shuffle()) {
         let mut arr: Array6<usize> = Array6::zeros((0, 1, 2, 3, 4, 5));
         arr.permute_axes(p.clone());
