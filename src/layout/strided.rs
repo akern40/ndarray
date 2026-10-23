@@ -51,6 +51,7 @@ impl<D: Dimension> Ranked for StridedLayout<D>
 {
     type NDim = D::NDim;
 
+    #[inline]
     fn ndim(&self) -> usize
     {
         self.dim.ndim()
@@ -61,37 +62,44 @@ impl<D: Dimension> Layout for StridedLayout<D>
 {
     type Index = D;
 
+    #[inline]
     fn shape(&self) -> &[usize]
     {
         self.dim.slice()
     }
 
+    #[inline]
     fn len(&self) -> usize
     {
         self.dim.size()
     }
 
+    #[inline]
     #[track_caller]
     fn len_of(&self, axis: Axis) -> usize
     {
         self.dim[axis.index()]
     }
 
+    #[inline]
     fn offset(&self, index: &D) -> isize
     {
         D::stride_offset(index, &self.strides)
     }
 
+    #[inline]
     fn offset_checked(&self, index: &D) -> Option<isize>
     {
         self.dim.stride_offset_checked(&self.strides, index)
     }
 
+    #[inline]
     fn first_index(&self) -> Option<D>
     {
         self.dim.first_index()
     }
 
+    #[inline]
     fn next_index(&self, index: D) -> Option<D>
     {
         self.dim.next_for(index)
@@ -100,6 +108,7 @@ impl<D: Dimension> Layout for StridedLayout<D>
 
 impl<D: Dimension> Strided for StridedLayout<D>
 {
+    #[inline]
     fn strides(&self) -> &[isize]
     {
         let s = self.strides.slice();
@@ -107,32 +116,38 @@ impl<D: Dimension> Strided for StridedLayout<D>
         unsafe { core::slice::from_raw_parts(s.as_ptr() as *const isize, s.len()) }
     }
 
+    #[inline]
     #[track_caller]
     fn stride_of(&self, axis: Axis) -> isize
     {
         self.strides[axis.index()] as isize
     }
 
+    #[inline]
     fn is_contiguous(&self) -> bool
     {
         D::is_contiguous(&self.dim, &self.strides)
     }
 
+    #[inline]
     fn is_standard_layout(&self) -> bool
     {
         dimension::is_layout_c(&self.dim, &self.strides)
     }
 
+    #[inline]
     fn is_fortran_layout(&self) -> bool
     {
         dimension::is_layout_f(&self.dim, &self.strides)
     }
 
+    #[inline]
     fn low_addr_offset(&self) -> usize
     {
         dimension::offset_from_low_addr_ptr_to_logical_ptr(&self.dim, &self.strides)
     }
 
+    #[inline]
     fn has_overlap(&self) -> bool
     {
         dimension::dim_stride_overlap(&self.dim, &self.strides)
@@ -145,18 +160,21 @@ impl<D: Dimension> AxisOps for StridedLayout<D>
     type Larger = StridedLayout<D::Larger>;
     type Dyn = StridedLayout<IxDyn>;
 
+    #[inline]
     #[track_caller]
     fn collapse_axis(&mut self, axis: Axis, index: usize) -> isize
     {
         dimension::do_collapse_axis(&mut self.dim, &self.strides, axis.index(), index)
     }
 
+    #[inline]
     #[track_caller]
     fn slice_axis(&mut self, axis: Axis, slice: Slice) -> isize
     {
         dimension::do_slice(&mut self.dim.slice_mut()[axis.index()], &mut self.strides.slice_mut()[axis.index()], slice)
     }
 
+    #[inline]
     #[track_caller]
     fn invert_axis(&mut self, axis: Axis) -> isize
     {
@@ -170,6 +188,7 @@ impl<D: Dimension> AxisOps for StridedLayout<D>
         }
     }
 
+    #[inline]
     #[track_caller]
     fn swap_axes(&mut self, a: usize, b: usize)
     {
@@ -177,18 +196,21 @@ impl<D: Dimension> AxisOps for StridedLayout<D>
         self.strides.slice_mut().swap(a, b);
     }
 
+    #[inline]
     fn reverse_axes(&mut self)
     {
         self.dim.slice_mut().reverse();
         self.strides.slice_mut().reverse();
     }
 
+    #[inline]
     #[track_caller]
     fn merge_axes(&mut self, take: Axis, into: Axis) -> bool
     {
         dimension::merge_axes(&mut self.dim, &mut self.strides, take, into)
     }
 
+    #[inline]
     #[track_caller]
     fn insert_axis(&self, axis: Axis) -> Self::Larger
     {
@@ -196,6 +218,7 @@ impl<D: Dimension> AxisOps for StridedLayout<D>
         StridedLayout::new(self.dim.insert_axis(axis), self.strides.insert_axis(axis))
     }
 
+    #[inline]
     #[track_caller]
     fn remove_axis(&self, axis: Axis) -> Self::Smaller
     {
@@ -204,6 +227,7 @@ impl<D: Dimension> AxisOps for StridedLayout<D>
         StridedLayout::new(self.dim.try_remove_axis(axis), self.strides.try_remove_axis(axis))
     }
 
+    #[inline]
     #[track_caller]
     fn permute_axes(&self, axes: &D) -> Self
     {
@@ -225,6 +249,7 @@ impl<D: Dimension> AxisOps for StridedLayout<D>
         StridedLayout::new(new_dim, new_strides)
     }
 
+    #[inline]
     fn into_dyn(self) -> Self::Dyn
     {
         StridedLayout::new(self.dim.into_dyn(), self.strides.into_dyn())
