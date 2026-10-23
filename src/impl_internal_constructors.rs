@@ -6,8 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::ptr::NonNull;
-
 use crate::{imp_prelude::*, ArrayPartsSized};
 
 // internal "builder-like" methods
@@ -23,7 +21,7 @@ where S: RawData<Elem = A>
     ///
     /// See ArrayView::from_shape_ptr for general pointer validity documentation.
     #[inline]
-    pub(crate) unsafe fn from_data_ptr(data: S, ptr: NonNull<A>) -> Self
+    pub(crate) unsafe fn from_data_ptr(data: S, ptr: <S::Acc as Accessor>::Handle) -> Self
     {
         let array = ArrayBase {
             data,
@@ -56,7 +54,7 @@ where
         debug_assert_eq!(strides.ndim(), dim.ndim());
         ArrayBase {
             data: self.data,
-            parts: ArrayPartsSized::new(self.parts.ptr, dim, strides),
+            parts: ArrayPartsSized::new(self.parts.handle, dim, strides),
         }
     }
 

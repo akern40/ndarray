@@ -46,7 +46,7 @@ impl<A> Array<A, Ix0>
         // (This is necessary because the element in the array might not be
         // the first element in the `Vec`, such as if the array was created
         // by `array![1, 2, 3, 4].slice_move(s![2])`.)
-        let first = self.parts.ptr.as_ptr() as usize;
+        let first = self.parts.handle.as_ptr() as usize;
         let base = self.data.as_ptr() as usize;
         let index = (first - base) / size;
         debug_assert_eq!((first - base) % size.get(), 0);
@@ -851,7 +851,7 @@ where D: Dimension
                 0
             };
             debug_assert!(data_to_array_offset >= 0);
-            self.parts.ptr = self
+            self.parts.handle = self
                 .data
                 .reserve(len_to_append)
                 .offset(data_to_array_offset);
@@ -882,7 +882,7 @@ pub(crate) unsafe fn drop_unreachable_raw<A, D>(
     }
     sort_axes_in_default_order(&mut self_);
     // with uninverted axes this is now the element with lowest address
-    let array_memory_head_ptr = self_.parts.ptr;
+    let array_memory_head_ptr = self_.parts.handle;
     let data_end_ptr = data_ptr.add(data_len);
     debug_assert!(data_ptr <= array_memory_head_ptr);
     debug_assert!(array_memory_head_ptr <= data_end_ptr);
@@ -911,7 +911,7 @@ pub(crate) unsafe fn drop_unreachable_raw<A, D>(
 
     // iter is a raw pointer iterator traversing the array in memory order now with the
     // sorted axes.
-    let mut iter = Baseiter::new(self_.parts.ptr, self_.parts.layout);
+    let mut iter = Baseiter::new(self_.parts.handle, self_.parts.layout);
     let mut dropped_elements = 0;
 
     let mut last_ptr = data_ptr;

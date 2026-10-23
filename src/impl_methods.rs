@@ -690,7 +690,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     {
         let offset = self.0.layout.slice_axis(axis, indices);
         unsafe {
-            self.0.ptr = self._ptr().offset(offset);
+            self.0.handle = self._ptr().offset(offset);
         }
         // debug_assert!(self.pointer_is_inbounds());
     }
@@ -1058,7 +1058,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     pub fn collapse_axis(&mut self, axis: Axis, index: usize)
     {
         let offset = self.0.layout.collapse_axis(axis, index);
-        self.0.ptr = unsafe { self._ptr().offset(offset) };
+        self.0.handle = unsafe { self._ptr().offset(offset) };
         // debug_assert!(self.pointer_is_inbounds());
     }
 }
@@ -1710,7 +1710,7 @@ where
     where S: RawDataMut
     {
         self.try_ensure_unique(); // for ArcArray
-        self.parts.ptr.as_ptr()
+        AsRef::<RawRef<A, D>>::as_ref(self)._ptr().as_ptr()
     }
 }
 
@@ -1747,7 +1747,7 @@ where
         self.try_ensure_unique(); // for ArcArray
         unsafe {
             RawArrayViewMut::new(
-                self.parts.ptr,
+                *AsRef::<RawRef<A, D>>::as_ref(self)._ptr(),
                 StridedLayout::new(self.parts.layout.dim.clone(), self.parts.layout.strides.clone()),
             )
         }
@@ -2287,7 +2287,7 @@ where
     pub fn into_dyn(self) -> ArrayBase<S, IxDyn>
     {
         // safe because new dims equivalent
-        unsafe { ArrayBase::from_data_ptr(self.data, self.parts.ptr).with_layout(self.parts.layout.into_dyn()) }
+        unsafe { ArrayBase::from_data_ptr(self.data, self.parts.handle).with_layout(self.parts.layout.into_dyn()) }
     }
 
     /// Convert an array or array view to another with the same type, but different dimensionality
@@ -2314,7 +2314,7 @@ where
                 // safe because D == D2
                 let dim = unlimited_transmute::<D, D2>(self.parts.layout.dim);
                 let strides = unlimited_transmute::<D, D2>(self.parts.layout.strides);
-                return Ok(ArrayBase::from_data_ptr(self.data, self.parts.ptr).with_strides_dim(strides, dim));
+                return Ok(ArrayBase::from_data_ptr(self.data, self.parts.handle).with_strides_dim(strides, dim));
             } else if D::NDIM.is_none() || D2::NDIM.is_none() {
                 // one is dynamic dim
                 // safe because dim, strides are equivalent under a different type
@@ -2648,7 +2648,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     pub fn invert_axis(&mut self, axis: Axis)
     {
         let offset = self.0.layout.invert_axis(axis);
-        self.0.ptr = unsafe { self._ptr().offset(offset) };
+        self.0.handle = unsafe { self._ptr().offset(offset) };
     }
 
     /// If possible, merge in the axis `take` to `into`.

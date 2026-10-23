@@ -36,7 +36,7 @@ where D: Dimension
     pub(crate) fn new(array: Array<A, D>) -> Self
     {
         unsafe {
-            let array_head_ptr = array.parts.ptr;
+            let array_head_ptr = array.parts.handle;
             let mut array_data = array.data;
             let data_len = array_data.release_all_elements();
             debug_assert!(data_len >= array.parts.layout.dim.size());

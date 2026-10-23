@@ -38,7 +38,7 @@ where
             data,
             parts:
                 ArrayParts {
-                    ptr,
+                    handle: ptr,
                     layout,
                     _dst_control: [],
                 },

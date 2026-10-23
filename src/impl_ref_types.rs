@@ -29,6 +29,7 @@
 //! This allows users to write a single method or trait implementation that takes `T: AsRef<RawRef<A, D>>`
 //! or `T: AsRef<LayoutRef<A, D>>` and have that functionality work on any of the relevant array types.
 
+use crate::Accessor;
 use alloc::borrow::ToOwned;
 use core::{
     borrow::{Borrow, BorrowMut},
@@ -63,8 +64,8 @@ where S: Data
         // - It is "dereferencable" because it comes from a reference
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
-        let parts: &ArrayPartsUnsized<S::Elem, D> = &self.parts;
-        let ptr = (parts as *const ArrayPartsUnsized<S::Elem, D>) as *const ArrayRef<S::Elem, D>;
+        let parts: &ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D> = &self.parts;
+        let ptr = (parts as *const ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *const ArrayRef<S::Elem, D>;
         unsafe { &*ptr }
     }
 }
@@ -83,8 +84,8 @@ where
         // - It is "dereferencable" because it comes from a reference
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
-        let parts: &mut ArrayPartsUnsized<S::Elem, D> = &mut self.parts;
-        let ptr = (parts as *mut ArrayPartsUnsized<S::Elem, D>) as *mut ArrayRef<S::Elem, D>;
+        let parts: &mut ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D> = &mut self.parts;
+        let ptr = (parts as *mut ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *mut ArrayRef<S::Elem, D>;
         unsafe { &mut *ptr }
     }
 }
@@ -150,8 +151,8 @@ where S: RawData<Elem = A>
         // - It is "dereferencable" because it comes from a reference
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
-        let parts: &ArrayPartsUnsized<S::Elem, D> = &self.parts;
-        let ptr = (parts as *const ArrayPartsUnsized<S::Elem, D>) as *const RawRef<S::Elem, D>;
+        let parts: &ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D> = &self.parts;
+        let ptr = (parts as *const ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *const RawRef<S::Elem, D>;
         unsafe { &*ptr }
     }
 }
@@ -167,8 +168,8 @@ where S: RawDataMut<Elem = A>
         // - It is "dereferencable" because it comes from a reference
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
-        let parts: &mut ArrayPartsUnsized<S::Elem, D> = &mut self.parts;
-        let ptr = (parts as *mut ArrayPartsUnsized<S::Elem, D>) as *mut RawRef<S::Elem, D>;
+        let parts: &mut ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D> = &mut self.parts;
+        let ptr = (parts as *mut ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *mut RawRef<S::Elem, D>;
         unsafe { &mut *ptr }
     }
 }
@@ -179,8 +180,8 @@ where S: RawData<Elem = A>
 {
     fn as_ref(&self) -> &LayoutRef<A, D>
     {
-        let parts: &ArrayPartsUnsized<S::Elem, D> = &self.parts;
-        let ptr = (parts as *const ArrayPartsUnsized<S::Elem, D>) as *const LayoutRef<S::Elem, D>;
+        let parts: &ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D> = &self.parts;
+        let ptr = (parts as *const ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *const LayoutRef<S::Elem, D>;
         unsafe { &*ptr }
     }
 }
@@ -191,8 +192,8 @@ where S: RawData<Elem = A>
 {
     fn as_mut(&mut self) -> &mut LayoutRef<A, D>
     {
-        let parts: &mut ArrayPartsUnsized<S::Elem, D> = &mut self.parts;
-        let ptr = (parts as *mut ArrayPartsUnsized<S::Elem, D>) as *mut LayoutRef<S::Elem, D>;
+        let parts: &mut ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D> = &mut self.parts;
+        let ptr = (parts as *mut ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *mut LayoutRef<S::Elem, D>;
         unsafe { &mut *ptr }
     }
 }
@@ -294,19 +295,19 @@ impl<A, D> AsMut<LayoutRef<A, D>> for LayoutRef<A, D>
 /// impossible to read the data behind the pointer from a LayoutRef (this
 /// is a safety invariant that *must* be maintained), and therefore we can
 /// Clone and Copy as desired.
-impl<A, D: Clone> Clone for ArrayPartsSized<A, D>
+impl<H: Copy, D: Clone> Clone for ArrayPartsSized<H, D>
 {
     fn clone(&self) -> Self
     {
         Self {
             layout: self.layout.clone(),
-            ptr: self.ptr,
+            handle: self.handle,
             _dst_control: [0; 0],
         }
     }
 }
 
-impl<A, D: Clone + Copy> Copy for ArrayPartsSized<A, D> {}
+impl<H: Copy, D: Clone + Copy> Copy for ArrayPartsSized<H, D> {}
 
 impl<S, D> Borrow<RawRef<S::Elem, D>> for ArrayBase<S, D>
 where S: RawData

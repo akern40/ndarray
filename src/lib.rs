@@ -196,6 +196,7 @@ mod extension;
 mod geomspace;
 mod indexes;
 mod iterators;
+mod accessor;
 pub mod layout;
 mod linalg_traits;
 mod linspace;
@@ -221,6 +222,7 @@ mod dimension;
 
 pub use crate::zip::{FoldWhile, IntoNdProducer, NdProducer, Zip};
 
+pub use crate::accessor::{Accessor, Dense};
 pub use crate::layout::strided::StridedLayout;
 pub use crate::layout::traits::{AxisOps, Layout, Strided};
 pub use crate::layout::LayoutBitset;
@@ -228,6 +230,7 @@ pub use crate::layout::LayoutBitset;
 /// Implementation's prelude. Common types used everywhere.
 mod imp_prelude
 {
+    pub use crate::accessor::Accessor;
     pub use crate::dimension::DimensionExt;
     pub use crate::layout::strided::StridedLayout;
     pub use crate::layout::traits::{AxisOps, Layout, Strided};
@@ -1295,14 +1298,16 @@ pub type Ixs = isize;
 // may change in the future.
 //
 // [`.offset()`]: https://doc.rust-lang.org/stable/std/primitive.pointer.html#method.offset-1
-pub struct ArrayBase<S, D, A = <S as RawData>::Elem>
-where S: RawData<Elem = A>
+pub struct ArrayBase<S, D, A = <S as RawData>::Elem, H = <<S as RawData>::Acc as Accessor>::Handle>
+where
+    S: RawData<Elem = A>,
+    S::Acc: Accessor<Handle = H>,
 {
     /// Data buffer / ownership information. (If owned, contains the data
     /// buffer; if borrowed, contains the lifetime and mutability.)
     data: S,
     /// The dimension, strides, and pointer to inside of `data`
-    parts: ArrayPartsSized<A, D>,
+    parts: ArrayPartsSized<H, D>,
 }
 
 /// A possibly-unsized container for array parts.
@@ -1310,26 +1315,40 @@ where S: RawData<Elem = A>
 /// This type only exists to enable holding the array parts in a single
 /// type, which needs to be sized inside of `ArrayBase` and unsized inside
 /// of the reference types.
-#[derive(Debug)]
-struct ArrayParts<A, D, T: ?Sized>
+struct ArrayParts<H, D, T: ?Sized>
 {
-    /// A non-null pointer into the buffer held by `data`; may point anywhere
-    /// in its range. If `S: Data`, this pointer must be aligned.
-    ptr: NonNull<A>,
+    /// The accessor's handle (`H = <S::Acc as Accessor>::Handle`) into the
+    /// buffer held by `data`; for dense storage a non-null pointer that may
+    /// point anywhere in the buffer's range. If `S: Data`, this pointer must
+    /// be aligned. The handle is a type parameter rather than a projection
+    /// so that `ArrayBase` stays covariant in `S` (and views in their
+    /// lifetime).
+    handle: H,
     /// The axis lengths and strides.
     layout: StridedLayout<D>,
     _dst_control: T,
 }
 
-type ArrayPartsSized<A, D> = ArrayParts<A, D, [usize; 0]>;
-type ArrayPartsUnsized<A, D> = ArrayParts<A, D, [usize]>;
-
-impl<A, D> ArrayPartsSized<A, D>
+impl<H: std::fmt::Debug, D: std::fmt::Debug, T: ?Sized> std::fmt::Debug for ArrayParts<H, D, T>
 {
-    const fn new(ptr: NonNull<A>, dim: D, strides: D) -> ArrayPartsSized<A, D>
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    {
+        f.debug_struct("ArrayParts")
+            .field("handle", &self.handle)
+            .field("layout", &self.layout)
+            .finish()
+    }
+}
+
+type ArrayPartsSized<H, D> = ArrayParts<H, D, [usize; 0]>;
+type ArrayPartsUnsized<H, D> = ArrayParts<H, D, [usize]>;
+
+impl<H, D> ArrayPartsSized<H, D>
+{
+    const fn new(handle: H, dim: D, strides: D) -> ArrayPartsSized<H, D>
     {
         Self {
-            ptr,
+            handle,
             layout: StridedLayout::new(dim, strides),
             _dst_control: [],
         }
@@ -1436,14 +1455,17 @@ impl<A, D> ArrayPartsSized<A, D>
 // alter the offset of the pointer. This is allowed, as it does not
 // cause a pointer deref.
 #[repr(transparent)]
-pub struct LayoutRef<A, D>(ArrayPartsUnsized<A, D>);
+pub struct LayoutRefBase<Acc: Accessor, D>(ArrayPartsUnsized<<Acc as Accessor>::Handle, D>);
+
+/// A [`LayoutRefBase`] over dense storage.
+pub type LayoutRef<A, D> = LayoutRefBase<Dense<A>, D>;
 
 impl<A, D> LayoutRef<A, D>
 {
     /// Get a reference to the data pointer.
     fn _ptr(&self) -> &NonNull<A>
     {
-        &self.0.ptr
+        &self.0.handle
     }
 
     /// Get a reference to the array's dimension.
@@ -1533,7 +1555,10 @@ impl<A, D> LayoutRef<A, D>
 /// into `ArrayRef`. In other words, having a `&mut ArrayRef` guarantees that the underlying
 /// data is un-shared and safe to write to.
 #[repr(transparent)]
-pub struct ArrayRef<A, D>(LayoutRef<A, D>);
+pub struct ArrayRefBase<Acc: Accessor, D>(LayoutRefBase<Acc, D>);
+
+/// An [`ArrayRefBase`] over dense storage.
+pub type ArrayRef<A, D> = ArrayRefBase<Dense<A>, D>;
 
 /// A reference to an *n*-dimensional array whose data is not safe to read or write.
 ///
@@ -1547,7 +1572,10 @@ pub struct ArrayRef<A, D>(LayoutRef<A, D>);
 /// as [`LayoutRef`]; see [its documentation on writing functions](LayoutRef#writing-functions)
 /// for information on how to properly handle functionality on this type.
 #[repr(transparent)]
-pub struct RawRef<A, D>(LayoutRef<A, D>);
+pub struct RawRefBase<Acc: Accessor, D>(LayoutRefBase<Acc, D>);
+
+/// A [`RawRefBase`] over dense storage.
+pub type RawRef<A, D> = RawRefBase<Dense<A>, D>;
 
 /// An array where the data has shared ownership and is copy on write.
 ///

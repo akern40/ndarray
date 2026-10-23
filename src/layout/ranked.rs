@@ -137,7 +137,7 @@ impl<T, const N: usize> Ranked for [T; N]
     }
 }
 
-impl<A, D, T: ?Sized> Ranked for ArrayParts<A, D, T>
+impl<H, D, T: ?Sized> Ranked for ArrayParts<H, D, T>
 where D: Ranked
 {
     type NDim = D::NDim;

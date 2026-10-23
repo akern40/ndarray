@@ -99,10 +99,10 @@ where D: Dimension
     pub unsafe fn deref_into_view<'a>(self) -> ArrayView<'a, A, D>
     {
         debug_assert!(
-            is_aligned(self.parts.ptr.as_ptr()),
+            is_aligned(self.parts.handle.as_ptr()),
             "The pointer must be aligned."
         );
-        ArrayView::new(self.parts.ptr, self.parts.layout)
+        ArrayView::new(self.parts.handle, self.parts.layout)
     }
 
     /// Split the array view along `axis` and return one array pointer strictly
@@ -114,13 +114,13 @@ where D: Dimension
     pub fn split_at(self, axis: Axis, index: Ix) -> (Self, Self)
     {
         assert!(index <= self.len_of(axis));
-        let left_ptr = self.parts.ptr.as_ptr();
+        let left_ptr = self.parts.handle.as_ptr();
         let right_ptr = if index == self.len_of(axis) {
-            self.parts.ptr.as_ptr()
+            self.parts.handle.as_ptr()
         } else {
             let offset = stride_offset(index, self.parts.layout.strides.axis(axis));
             // The `.offset()` is safe due to the guarantees of `RawData`.
-            unsafe { self.parts.ptr.as_ptr().offset(offset) }
+            unsafe { self.parts.handle.as_ptr().offset(offset) }
         };
 
         let mut dim_left = self.parts.layout.dim.clone();
@@ -153,7 +153,7 @@ where D: Dimension
             mem::size_of::<A>(),
             "size mismatch in raw view cast"
         );
-        let ptr = self.parts.ptr.cast::<B>();
+        let ptr = self.parts.handle.cast::<B>();
         unsafe { RawArrayView::new(ptr, self.parts.layout) }
     }
 }
@@ -186,7 +186,7 @@ where D: Dimension
             }
         }
 
-        let ptr_re: *mut T = self.parts.ptr.as_ptr().cast();
+        let ptr_re: *mut T = self.parts.handle.as_ptr().cast();
         let ptr_im: *mut T = if self.is_empty() {
             // In the empty case, we can just reuse the existing pointer since
             // it won't be dereferenced anyway. It is not safe to offset by
@@ -310,7 +310,7 @@ where D: Dimension
     #[inline]
     pub(crate) fn into_raw_view(self) -> RawArrayView<A, D>
     {
-        unsafe { RawArrayView::new(self.parts.ptr, self.parts.layout) }
+        unsafe { RawArrayView::new(self.parts.handle, self.parts.layout) }
     }
 
     /// Converts to a read-only view of the array.
@@ -325,10 +325,10 @@ where D: Dimension
     pub unsafe fn deref_into_view<'a>(self) -> ArrayView<'a, A, D>
     {
         debug_assert!(
-            is_aligned(self.parts.ptr.as_ptr()),
+            is_aligned(self.parts.handle.as_ptr()),
             "The pointer must be aligned."
         );
-        ArrayView::new(self.parts.ptr, self.parts.layout)
+        ArrayView::new(self.parts.handle, self.parts.layout)
     }
 
     /// Converts to a mutable view of the array.
@@ -343,10 +343,10 @@ where D: Dimension
     pub unsafe fn deref_into_view_mut<'a>(self) -> ArrayViewMut<'a, A, D>
     {
         debug_assert!(
-            is_aligned(self.parts.ptr.as_ptr()),
+            is_aligned(self.parts.handle.as_ptr()),
             "The pointer must be aligned."
         );
-        ArrayViewMut::new(self.parts.ptr, self.parts.layout)
+        ArrayViewMut::new(self.parts.handle, self.parts.layout)
     }
 
     /// Split the array view along `axis` and return one array pointer strictly
@@ -360,8 +360,8 @@ where D: Dimension
         let (left, right) = self.into_raw_view().split_at(axis, index);
         unsafe {
             (
-                Self::new(left.parts.ptr, StridedLayout::new(left.parts.layout.dim, left.parts.layout.strides)),
-                Self::new(right.parts.ptr, StridedLayout::new(right.parts.layout.dim, right.parts.layout.strides)),
+                Self::new(left.parts.handle, StridedLayout::new(left.parts.layout.dim, left.parts.layout.strides)),
+                Self::new(right.parts.handle, StridedLayout::new(right.parts.layout.dim, right.parts.layout.strides)),
             )
         }
     }
@@ -384,7 +384,7 @@ where D: Dimension
             mem::size_of::<A>(),
             "size mismatch in raw view cast"
         );
-        let ptr = self.parts.ptr.cast::<B>();
+        let ptr = self.parts.handle.cast::<B>();
         unsafe { RawArrayViewMut::new(ptr, self.parts.layout) }
     }
 }
@@ -400,11 +400,11 @@ where D: Dimension
         unsafe {
             Complex {
                 re: RawArrayViewMut::new(
-                    re.parts.ptr,
+                    re.parts.handle,
                     StridedLayout::new(re.parts.layout.dim, re.parts.layout.strides),
                 ),
                 im: RawArrayViewMut::new(
-                    im.parts.ptr,
+                    im.parts.handle,
                     StridedLayout::new(im.parts.layout.dim, im.parts.layout.strides),
                 ),
             }

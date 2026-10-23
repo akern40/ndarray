@@ -697,7 +697,7 @@ unsafe fn general_mat_vec_mul_impl<A>(
                             let x_offset = offset_from_low_addr_ptr_to_logical_ptr(x._dim(), x._strides());
                             let x_ptr = x._ptr().as_ptr().sub(x_offset);
                             let y_offset = offset_from_low_addr_ptr_to_logical_ptr(&y.parts.layout.dim, &y.parts.layout.strides);
-                            let y_ptr = y.parts.ptr.as_ptr().sub(y_offset);
+                            let y_ptr = y.parts.handle.as_ptr().sub(y_offset);
 
                             let x_stride = x.strides()[0] as blas_index;
                             let y_stride = y.strides()[0] as blas_index;

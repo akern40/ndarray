@@ -405,7 +405,10 @@ impl<A, D: Dimension> NdProducer for RawArrayView<A, D>
 
     unsafe fn uget_ptr(&self, i: &Self::Dim) -> *const A
     {
-        self.parts.ptr.as_ptr().offset(self.parts.layout.offset(i))
+        self.parts
+            .handle
+            .as_ptr()
+            .offset(self.parts.layout.offset(i))
     }
 
     fn stride_of(&self, axis: Axis) -> isize
@@ -461,7 +464,10 @@ impl<A, D: Dimension> NdProducer for RawArrayViewMut<A, D>
 
     unsafe fn uget_ptr(&self, i: &Self::Dim) -> *mut A
     {
-        self.parts.ptr.as_ptr().offset(self.parts.layout.offset(i))
+        self.parts
+            .handle
+            .as_ptr()
+            .offset(self.parts.layout.offset(i))
     }
 
     fn stride_of(&self, axis: Axis) -> isize

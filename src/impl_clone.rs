@@ -16,7 +16,7 @@ impl<S: RawDataClone, D: Clone> Clone for ArrayBase<S, D>
     {
         // safe because `clone_with_ptr` promises to provide equivalent data and ptr
         unsafe {
-            let (data, ptr) = self.data.clone_with_ptr(self.parts.ptr);
+            let (data, ptr) = self.data.clone_with_ptr(self.parts.handle);
             ArrayBase {
                 data,
                 parts: ArrayPartsSized::new(ptr, self.parts.layout.dim.clone(), self.parts.layout.strides.clone()),
@@ -30,7 +30,9 @@ impl<S: RawDataClone, D: Clone> Clone for ArrayBase<S, D>
     fn clone_from(&mut self, other: &Self)
     {
         unsafe {
-            self.parts.ptr = self.data.clone_from_with_ptr(&other.data, other.parts.ptr);
+            self.parts.handle = self
+                .data
+                .clone_from_with_ptr(&other.data, other.parts.handle);
             self.parts.layout.dim.clone_from(&other.parts.layout.dim);
             self.parts
                 .layout
