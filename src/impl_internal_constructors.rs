@@ -59,4 +59,17 @@ where
             parts: ArrayPartsSized::new(self.parts.ptr, dim, strides),
         }
     }
+
+    /// Set the layout of the array, keeping storage and handle.
+    ///
+    /// ## Safety
+    ///
+    /// Every offset the new layout can produce must be in bounds of the
+    /// array data, and the layout must be unique if the array is mutable.
+    #[inline]
+    pub(crate) unsafe fn with_layout<E>(self, layout: StridedLayout<E>) -> ArrayBase<S, E>
+    where E: Dimension
+    {
+        self.with_strides_dim(layout.strides, layout.dim)
+    }
 }

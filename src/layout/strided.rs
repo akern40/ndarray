@@ -6,10 +6,10 @@
 //! fields are deliberately kept as they were; this type does not (yet) have an
 //! API of its own.
 
-use crate::dimension::{self, Dimension};
+use crate::dimension::{self, Dimension, DimensionExt};
 use crate::layout::ranked::Ranked;
-use crate::layout::traits::{Layout, Strided};
-use crate::Axis;
+use crate::layout::traits::{AxisOps, Layout, Strided};
+use crate::{Axis, IxDyn, Slice};
 
 /// A strided layout: axis lengths (`dim`) and element-count strides
 /// (`strides`, to be parsed as `isize`) of the same dimensionality.
@@ -119,5 +119,97 @@ impl<D: Dimension> Strided for StridedLayout<D>
     fn has_overlap(&self) -> bool
     {
         dimension::dim_stride_overlap(&self.dim, &self.strides)
+    }
+}
+
+impl<D: Dimension> AxisOps for StridedLayout<D>
+{
+    type Smaller = StridedLayout<D::Smaller>;
+    type Larger = StridedLayout<D::Larger>;
+    type Dyn = StridedLayout<IxDyn>;
+
+    #[track_caller]
+    fn collapse_axis(&mut self, axis: Axis, index: usize) -> isize
+    {
+        dimension::do_collapse_axis(&mut self.dim, &self.strides, axis.index(), index)
+    }
+
+    #[track_caller]
+    fn slice_axis(&mut self, axis: Axis, slice: Slice) -> isize
+    {
+        dimension::do_slice(&mut self.dim.slice_mut()[axis.index()], &mut self.strides.slice_mut()[axis.index()], slice)
+    }
+
+    #[track_caller]
+    fn invert_axis(&mut self, axis: Axis) -> isize
+    {
+        let s = self.strides.axis(axis) as isize;
+        let m = self.dim.axis(axis);
+        self.strides.set_axis(axis, (-s) as usize);
+        if m != 0 {
+            dimension::stride_offset(m - 1, s as usize)
+        } else {
+            0
+        }
+    }
+
+    #[track_caller]
+    fn swap_axes(&mut self, a: usize, b: usize)
+    {
+        self.dim.slice_mut().swap(a, b);
+        self.strides.slice_mut().swap(a, b);
+    }
+
+    fn reverse_axes(&mut self)
+    {
+        self.dim.slice_mut().reverse();
+        self.strides.slice_mut().reverse();
+    }
+
+    #[track_caller]
+    fn merge_axes(&mut self, take: Axis, into: Axis) -> bool
+    {
+        dimension::merge_axes(&mut self.dim, &mut self.strides, take, into)
+    }
+
+    #[track_caller]
+    fn insert_axis(&self, axis: Axis) -> Self::Larger
+    {
+        assert!(axis.index() <= self.dim.ndim());
+        StridedLayout::new(self.dim.insert_axis(axis), self.strides.insert_axis(axis))
+    }
+
+    #[track_caller]
+    fn remove_axis(&self, axis: Axis) -> Self::Smaller
+    {
+        assert!(self.dim.ndim() > 0, "cannot remove an axis from a 0-dimensional layout");
+        assert!(axis.index() < self.dim.ndim());
+        StridedLayout::new(self.dim.try_remove_axis(axis), self.strides.try_remove_axis(axis))
+    }
+
+    #[track_caller]
+    fn permute_axes(&self, axes: &D) -> Self
+    {
+        let n = self.dim.ndim();
+        assert_eq!(axes.ndim(), n, "the permutation must list every axis");
+        let mut usage_counts = D::zeros(n);
+        for axis in axes.slice() {
+            usage_counts[*axis] += 1;
+        }
+        for count in usage_counts.slice() {
+            assert_eq!(*count, 1, "each axis must be listed exactly once");
+        }
+        let mut new_dim = usage_counts; // reuse to avoid an allocation
+        let mut new_strides = D::zeros(n);
+        for (new_axis, &axis) in axes.slice().iter().enumerate() {
+            new_dim[new_axis] = self.dim[axis];
+            new_strides[new_axis] = self.strides[axis];
+        }
+        StridedLayout::new(new_dim, new_strides)
+    }
+
+    fn into_dyn(self) -> Self::Dyn
+    {
+        StridedLayout::new(self.dim.into_dyn(), self.strides.into_dyn())
     }
 }

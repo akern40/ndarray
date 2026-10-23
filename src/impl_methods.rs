@@ -24,12 +24,9 @@ use crate::dimension::IntoDimension;
 use crate::dimension::{
     abs_index,
     axes_of,
-    do_slice,
-    merge_axes,
     move_min_stride_axis_to_last,
     offset_from_low_addr_ptr_to_logical_ptr,
     size_of_shape_checked,
-    stride_offset,
     Axes,
 };
 use crate::error::{self, from_kind, ErrorKind, ShapeError};
@@ -699,12 +696,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     #[track_caller]
     pub fn slice_axis_inplace(&mut self, axis: Axis, indices: Slice)
     {
-        let parts = &mut self.0;
-        let offset = do_slice(
-            &mut parts.layout.dim.slice_mut()[axis.index()],
-            &mut parts.layout.strides.slice_mut()[axis.index()],
-            indices,
-        );
+        let offset = self.0.layout.slice_axis(axis, indices);
         unsafe {
             self.0.ptr = self._ptr().offset(offset);
         }
@@ -1059,10 +1051,9 @@ where
     where D: RemoveAxis
     {
         self.collapse_axis(axis, index);
-        let dim = self.parts.layout.dim.remove_axis(axis);
-        let strides = self.parts.layout.strides.remove_axis(axis);
         // safe because new dimension, strides allow access to a subset of old data
-        unsafe { self.with_strides_dim(strides, dim) }
+        let layout = self.parts.layout.remove_axis(axis);
+        unsafe { self.with_layout(layout) }
     }
 }
 
@@ -1074,8 +1065,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     #[track_caller]
     pub fn collapse_axis(&mut self, axis: Axis, index: usize)
     {
-        let parts = &mut self.0;
-        let offset = dimension::do_collapse_axis(&mut parts.layout.dim, &parts.layout.strides, axis.index(), index);
+        let offset = self.0.layout.collapse_axis(axis, index);
         self.0.ptr = unsafe { self._ptr().offset(offset) };
         // debug_assert!(self.pointer_is_inbounds());
     }
@@ -2302,10 +2292,7 @@ where
     pub fn into_dyn(self) -> ArrayBase<S, IxDyn>
     {
         // safe because new dims equivalent
-        unsafe {
-            ArrayBase::from_data_ptr(self.data, self.parts.ptr)
-                .with_strides_dim(self.parts.layout.strides.into_dyn(), self.parts.layout.dim.into_dyn())
-        }
+        unsafe { ArrayBase::from_data_ptr(self.data, self.parts.ptr).with_layout(self.parts.layout.into_dyn()) }
     }
 
     /// Convert an array or array view to another with the same type, but different dimensionality
@@ -2496,8 +2483,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     #[track_caller]
     pub fn swap_axes(&mut self, ax: usize, bx: usize)
     {
-        self.0.layout.dim.slice_mut().swap(ax, bx);
-        self.0.layout.strides.slice_mut().swap(ax, bx);
+        self.0.layout.swap_axes(ax, bx);
     }
 }
 
@@ -2533,27 +2519,9 @@ where
     where T: IntoDimension<Dim = D>
     {
         let axes = axes.into_dimension();
-        // Ensure that each axis is used exactly once.
-        let mut usage_counts = D::zeros(self.ndim());
-        for axis in axes.slice() {
-            usage_counts[*axis] += 1;
-        }
-        for count in usage_counts.slice() {
-            assert_eq!(*count, 1, "each axis must be listed exactly once");
-        }
-        // Determine the new shape and strides.
-        let mut new_dim = usage_counts; // reuse to avoid an allocation
-        let mut new_strides = D::zeros(self.ndim());
-        {
-            let dim = self.parts.layout.dim.slice();
-            let strides = self.parts.layout.strides.slice();
-            for (new_axis, &axis) in axes.slice().iter().enumerate() {
-                new_dim[new_axis] = dim[axis];
-                new_strides[new_axis] = strides[axis];
-            }
-        }
-        // safe because axis invariants are checked above; they are a permutation of the old
-        unsafe { self.with_strides_dim(new_strides, new_dim) }
+        // safe because the layout checks that axes is a permutation of the old
+        let layout = self.parts.layout.permute_axes(&axes);
+        unsafe { self.with_layout(layout) }
     }
 
     /// Permute the axes in-place.
@@ -2628,8 +2596,7 @@ where
     /// while retaining the same data.
     pub fn reversed_axes(mut self) -> ArrayBase<S, D>
     {
-        self.parts.layout.dim.slice_mut().reverse();
-        self.parts.layout.strides.slice_mut().reverse();
+        self.parts.layout.reverse_axes();
         self
     }
 
@@ -2685,14 +2652,8 @@ impl<A, D: Dimension> LayoutRef<A, D>
     #[track_caller]
     pub fn invert_axis(&mut self, axis: Axis)
     {
-        unsafe {
-            let s = self._strides().axis(axis) as Ixs;
-            let m = self._dim().axis(axis);
-            if m != 0 {
-                self.0.ptr = self._ptr().offset(stride_offset(m - 1, s as Ix));
-            }
-            self.0.layout.strides.set_axis(axis, (-s) as Ix);
-        }
+        let offset = self.0.layout.invert_axis(axis);
+        self.0.ptr = unsafe { self._ptr().offset(offset) };
     }
 
     /// If possible, merge in the axis `take` to `into`.
@@ -2733,8 +2694,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     #[track_caller]
     pub fn merge_axes(&mut self, take: Axis, into: Axis) -> bool
     {
-        let parts = &mut self.0;
-        merge_axes(&mut parts.layout.dim, &mut parts.layout.strides, take, into)
+        self.0.layout.merge_axes(take, into)
     }
 }
 
@@ -2767,13 +2727,9 @@ where
     #[track_caller]
     pub fn insert_axis(self, axis: Axis) -> ArrayBase<S, D::Larger>
     {
-        assert!(axis.index() <= self.ndim());
         // safe because a new axis of length one does not affect memory layout
-        unsafe {
-            let strides = self.parts.layout.strides.insert_axis(axis);
-            let dim = self.parts.layout.dim.insert_axis(axis);
-            self.with_strides_dim(strides, dim)
-        }
+        let layout = self.parts.layout.insert_axis(axis);
+        unsafe { self.with_layout(layout) }
     }
 
     /// Remove array axis `axis` and return the result.
