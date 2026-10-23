@@ -911,7 +911,7 @@ pub(crate) unsafe fn drop_unreachable_raw<A, D>(
 
     // iter is a raw pointer iterator traversing the array in memory order now with the
     // sorted axes.
-    let mut iter = Baseiter::new(self_.parts.ptr, self_.parts.layout.dim, self_.parts.layout.strides);
+    let mut iter = Baseiter::new(self_.parts.ptr, self_.parts.layout);
     let mut dropped_elements = 0;
 
     let mut last_ptr = data_ptr;

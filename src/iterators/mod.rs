@@ -24,7 +24,9 @@ use std::ptr::NonNull;
 #[allow(unused_imports)] // Needed for Rust 1.64
 use rawpointer::PointerExt;
 
+use crate::layout::traits::Layout;
 use crate::Ix1;
+use crate::StridedLayout;
 
 use super::{ArrayBase, ArrayView, ArrayViewMut, Axis, Data, NdProducer, RemoveAxis};
 use super::{Dimension, Ix, Ixs};
@@ -43,8 +45,7 @@ use std::slice::{self, Iter as SliceIter, IterMut as SliceIterMut};
 pub struct Baseiter<A, D>
 {
     ptr: NonNull<A>,
-    dim: D,
-    strides: D,
+    layout: StridedLayout<D>,
     index: Option<D>,
 }
 
@@ -54,13 +55,12 @@ impl<A, D: Dimension> Baseiter<A, D>
     /// to be correct to avoid performing an unsafe pointer offset while
     /// iterating.
     #[inline]
-    pub unsafe fn new(ptr: NonNull<A>, len: D, stride: D) -> Baseiter<A, D>
+    pub unsafe fn new(ptr: NonNull<A>, layout: StridedLayout<D>) -> Baseiter<A, D>
     {
         Baseiter {
             ptr,
-            index: len.first_index(),
-            dim: len,
-            strides: stride,
+            index: layout.first_index(),
+            layout,
         }
     }
 }
@@ -73,8 +73,8 @@ impl<A, D: Dimension> Iterator for Baseiter<A, D>
     fn next(&mut self) -> Option<Self::Item>
     {
         let index = self.index.as_ref()?.clone();
-        let offset = D::stride_offset(&index, &self.strides);
-        self.index = self.dim.next_for(index);
+        let offset = self.layout.offset(&index);
+        self.index = self.layout.next_index(index);
         unsafe { Some(self.ptr.offset(offset)) }
     }
 
@@ -87,14 +87,14 @@ impl<A, D: Dimension> Iterator for Baseiter<A, D>
     fn fold<Acc, G>(mut self, init: Acc, mut g: G) -> Acc
     where G: FnMut(Acc, Self::Item) -> Acc
     {
-        let ndim = self.dim.ndim();
+        let ndim = self.layout.dim.ndim();
         debug_assert_ne!(ndim, 0);
         let mut accum = init;
         while let Some(mut index) = self.index {
-            let stride = self.strides.last_elem() as isize;
+            let stride = self.layout.strides.last_elem() as isize;
             let elem_index = index.last_elem();
-            let len = self.dim.last_elem();
-            let offset = D::stride_offset(&index, &self.strides);
+            let len = self.layout.dim.last_elem();
+            let offset = D::stride_offset(&index, &self.layout.strides);
             unsafe {
                 let row_ptr = self.ptr.offset(offset);
                 let mut i = 0;
@@ -105,7 +105,7 @@ impl<A, D: Dimension> Iterator for Baseiter<A, D>
                 }
             }
             index.set_last_elem(len - 1);
-            self.index = self.dim.next_for(index);
+            self.index = self.layout.dim.next_for(index);
         }
         accum
     }
@@ -119,13 +119,14 @@ impl<A, D: Dimension> ExactSizeIterator for Baseiter<A, D>
             None => 0,
             Some(ref ix) => {
                 let gone = self
+                    .layout
                     .dim
                     .default_strides()
                     .slice()
                     .iter()
                     .zip(ix.slice().iter())
                     .fold(0, |s, (&a, &b)| s + a * b);
-                self.dim.size() - gone
+                self.layout.dim.size() - gone
             }
         }
     }
@@ -137,9 +138,9 @@ impl<A> DoubleEndedIterator for Baseiter<A, Ix1>
     fn next_back(&mut self) -> Option<Self::Item>
     {
         let index = self.index?;
-        self.dim[0] -= 1;
-        let offset = Ix1::stride_offset(&self.dim, &self.strides);
-        if index == self.dim {
+        self.layout.dim[0] -= 1;
+        let offset = Ix1::stride_offset(&self.layout.dim, &self.layout.strides);
+        if index == self.layout.dim {
             self.index = None;
         }
 
@@ -149,11 +150,11 @@ impl<A> DoubleEndedIterator for Baseiter<A, Ix1>
     fn nth_back(&mut self, n: usize) -> Option<Self::Item>
     {
         let index = self.index?;
-        let len = self.dim[0] - index[0];
+        let len = self.layout.dim[0] - index[0];
         if n < len {
-            self.dim[0] -= n + 1;
-            let offset = Ix1::stride_offset(&self.dim, &self.strides);
-            if index == self.dim {
+            self.layout.dim[0] -= n + 1;
+            let offset = Ix1::stride_offset(&self.layout.dim, &self.layout.strides);
+            if index == self.layout.dim {
                 self.index = None;
             }
             unsafe { Some(self.ptr.offset(offset)) }
@@ -170,13 +171,13 @@ impl<A> DoubleEndedIterator for Baseiter<A, Ix1>
         if let Some(index) = self.index {
             let elem_index = index[0];
             unsafe {
-                // self.dim[0] is the current length
-                while self.dim[0] > elem_index {
-                    self.dim[0] -= 1;
+                // self.layout.dim[0] is the current length
+                while self.layout.dim[0] > elem_index {
+                    self.layout.dim[0] -= 1;
                     accum = g(
                         accum,
                         self.ptr
-                            .offset(Ix1::stride_offset(&self.dim, &self.strides)),
+                            .offset(Ix1::stride_offset(&self.layout.dim, &self.layout.strides)),
                     );
                 }
             }
@@ -191,8 +192,7 @@ clone_bounds!(
         @copy {
             ptr,
         }
-        dim,
-        strides,
+        layout,
         index,
     }
 );

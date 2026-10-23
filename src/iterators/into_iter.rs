@@ -41,7 +41,7 @@ where D: Dimension
             let data_len = array_data.release_all_elements();
             debug_assert!(data_len >= array.parts.layout.dim.size());
             let has_unreachable_elements = array.parts.layout.dim.size() != data_len;
-            let inner = Baseiter::new(array_head_ptr, array.parts.layout.dim, array.parts.layout.strides);
+            let inner = Baseiter::new(array_head_ptr, array.parts.layout);
 
             IntoIter {
                 array_data,
@@ -92,9 +92,13 @@ where D: Dimension
 
         unsafe {
             let data_ptr = self.array_data.as_nonnull_mut();
-            let view = RawArrayViewMut::new(self.array_head_ptr, self.inner.dim.clone(), self.inner.strides.clone());
-            debug_assert!(self.inner.dim.size() < self.data_len, "data_len {} and dim size {}",
-                          self.data_len, self.inner.dim.size());
+            let view = RawArrayViewMut::new(
+                self.array_head_ptr,
+                self.inner.layout.dim.clone(),
+                self.inner.layout.strides.clone(),
+            );
+            debug_assert!(self.inner.layout.dim.size() < self.data_len, "data_len {} and dim size {}",
+                          self.data_len, self.inner.layout.dim.size());
             drop_unreachable_raw(view, data_ptr, self.data_len);
         }
     }
