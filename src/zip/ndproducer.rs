@@ -1,7 +1,6 @@
 use crate::imp_prelude::*;
 use crate::ArrayRef;
 use crate::LayoutBitset;
-use crate::NdIndex;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
@@ -294,9 +293,7 @@ impl<'a, A, D: Dimension> NdProducer for ArrayView<'a, A, D>
 
     unsafe fn uget_ptr(&self, i: &Self::Dim) -> *mut A
     {
-        self._ptr()
-            .as_ptr()
-            .offset(i.index_unchecked(self._strides()))
+        self._ptr().as_ptr().offset(self._layout().offset(i))
     }
 
     fn stride_of(&self, axis: Axis) -> isize
@@ -352,9 +349,7 @@ impl<'a, A, D: Dimension> NdProducer for ArrayViewMut<'a, A, D>
 
     unsafe fn uget_ptr(&self, i: &Self::Dim) -> *mut A
     {
-        self._ptr()
-            .as_ptr()
-            .offset(i.index_unchecked(self._strides()))
+        self._ptr().as_ptr().offset(self._layout().offset(i))
     }
 
     fn stride_of(&self, axis: Axis) -> isize
@@ -410,10 +405,7 @@ impl<A, D: Dimension> NdProducer for RawArrayView<A, D>
 
     unsafe fn uget_ptr(&self, i: &Self::Dim) -> *const A
     {
-        self.parts
-            .ptr
-            .as_ptr()
-            .offset(i.index_unchecked(&self.parts.layout.strides))
+        self.parts.ptr.as_ptr().offset(self.parts.layout.offset(i))
     }
 
     fn stride_of(&self, axis: Axis) -> isize
@@ -469,10 +461,7 @@ impl<A, D: Dimension> NdProducer for RawArrayViewMut<A, D>
 
     unsafe fn uget_ptr(&self, i: &Self::Dim) -> *mut A
     {
-        self.parts
-            .ptr
-            .as_ptr()
-            .offset(i.index_unchecked(&self.parts.layout.strides))
+        self.parts.ptr.as_ptr().offset(self.parts.layout.offset(i))
     }
 
     fn stride_of(&self, axis: Axis) -> isize

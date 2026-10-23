@@ -9,7 +9,7 @@
 use crate::dimension::{self, Dimension, DimensionExt};
 use crate::layout::ranked::Ranked;
 use crate::layout::traits::{AxisOps, Layout, Strided};
-use crate::{Axis, IxDyn, Slice};
+use crate::{Axis, IxDyn, NdIndex, Slice};
 
 /// A strided layout: axis lengths (`dim`) and element-count strides
 /// (`strides`, to be parsed as `isize`) of the same dimensionality.
@@ -27,6 +27,23 @@ impl<D> StridedLayout<D>
     pub(crate) const fn new(dim: D, strides: D) -> Self
     {
         Self { dim, strides }
+    }
+}
+
+impl<D: Dimension> StridedLayout<D>
+{
+    /// The offset of `index`, or `None` if it is out of bounds.
+    #[inline]
+    pub(crate) fn index_offset_checked<I: NdIndex<D>>(&self, index: &I) -> Option<isize>
+    {
+        index.index_checked(&self.dim, &self.strides)
+    }
+
+    /// The offset of `index`, without bounds checking.
+    #[inline]
+    pub(crate) fn index_offset<I: NdIndex<D>>(&self, index: &I) -> isize
+    {
+        index.index_unchecked(&self.strides)
     }
 }
 

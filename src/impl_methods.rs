@@ -828,8 +828,8 @@ impl<A, D: Dimension> RawRef<A, D>
     where I: NdIndex<D>
     {
         let ptr = self._ptr();
-        index
-            .index_checked(self._dim(), self._strides())
+        self._layout()
+            .index_offset_checked(&index)
             .map(move |offset| unsafe { ptr.as_ptr().offset(offset) as *const _ })
     }
 }
@@ -870,8 +870,8 @@ impl<A, D: Dimension> RawRef<A, D>
         // const and mut are separate to enforce &mutness as well as the
         // extra code in as_mut_ptr
         let ptr = self.as_mut_ptr();
-        index
-            .index_checked(self._dim(), self._strides())
+        self._layout()
+            .index_offset_checked(&index)
             .map(move |offset| unsafe { ptr.offset(offset) })
     }
 }
@@ -892,7 +892,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     where I: NdIndex<D>
     {
         arraytraits::debug_bounds_check(self, &index);
-        let off = index.index_unchecked(self._strides());
+        let off = self._layout().index_offset(&index);
         &*self._ptr().as_ptr().offset(off)
     }
 
@@ -916,7 +916,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     {
         // debug_assert!(self.data.is_unique());
         arraytraits::debug_bounds_check(self, &index);
-        let off = index.index_unchecked(self._strides());
+        let off = self._layout().index_offset(&index);
         &mut *self._ptr().as_ptr().offset(off)
     }
 
@@ -930,8 +930,8 @@ impl<A, D: Dimension> ArrayRef<A, D>
     where I: NdIndex<D>
     {
         let ptr = self.as_mut_ptr();
-        let offset1 = index1.index_checked(self._dim(), self._strides());
-        let offset2 = index2.index_checked(self._dim(), self._strides());
+        let offset1 = self._layout().index_offset_checked(&index1);
+        let offset2 = self._layout().index_offset_checked(&index2);
         if let Some(offset1) = offset1 {
             if let Some(offset2) = offset2 {
                 unsafe {
@@ -963,8 +963,8 @@ impl<A, D: Dimension> ArrayRef<A, D>
         // debug_assert!(self.data.is_unique());
         arraytraits::debug_bounds_check(self, &index1);
         arraytraits::debug_bounds_check(self, &index2);
-        let off1 = index1.index_unchecked(self._strides());
-        let off2 = index2.index_unchecked(self._strides());
+        let off1 = self._layout().index_offset(&index1);
+        let off2 = self._layout().index_offset(&index2);
         std::ptr::swap(self._ptr().as_ptr().offset(off1), self._ptr().as_ptr().offset(off2));
     }
 

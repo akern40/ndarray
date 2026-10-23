@@ -63,8 +63,8 @@ where
         debug_bounds_check_ref!(self, index);
         unsafe {
             &*self._ptr().as_ptr().offset(
-                index
-                    .index_checked(self._dim(), self._strides())
+                self._layout()
+                    .index_offset_checked(&index)
                     .unwrap_or_else(|| array_out_of_bounds()),
             )
         }
@@ -85,8 +85,8 @@ where
         debug_bounds_check_ref!(self, index);
         unsafe {
             &mut *self.as_mut_ptr().offset(
-                index
-                    .index_checked(self._dim(), self._strides())
+                self._layout()
+                    .index_offset_checked(&index)
                     .unwrap_or_else(|| array_out_of_bounds()),
             )
         }

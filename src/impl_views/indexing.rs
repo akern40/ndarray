@@ -145,9 +145,7 @@ where
     unsafe fn uget(self, index: I) -> &'a A
     {
         debug_bounds_check!(self, index);
-        &*self
-            .as_ptr()
-            .offset(index.index_unchecked(&self.parts.layout.strides))
+        &*self.as_ptr().offset(self.parts.layout.index_offset(&index))
     }
 }
 
@@ -215,6 +213,6 @@ where
         debug_bounds_check!(self, index);
         &mut *self
             .as_mut_ptr()
-            .offset(index.index_unchecked(&self.parts.layout.strides))
+            .offset(self.parts.layout.index_offset(&index))
     }
 }

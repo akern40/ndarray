@@ -1447,6 +1447,11 @@ impl<A, D> LayoutRef<A, D>
     }
 
     /// Get a reference to the array's dimension.
+    fn _layout(&self) -> &StridedLayout<D>
+    {
+        &self.0.layout
+    }
+
     fn _dim(&self) -> &D
     {
         &self.0.layout.dim
