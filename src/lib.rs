@@ -221,6 +221,7 @@ mod dimension;
 
 pub use crate::zip::{FoldWhile, IntoNdProducer, NdProducer, Zip};
 
+pub use crate::layout::strided::StridedLayout;
 #[allow(deprecated)]
 pub use crate::layout::{Layout, LayoutBitset};
 
@@ -1313,10 +1314,8 @@ struct ArrayParts<A, D, T: ?Sized>
     /// A non-null pointer into the buffer held by `data`; may point anywhere
     /// in its range. If `S: Data`, this pointer must be aligned.
     ptr: NonNull<A>,
-    /// The lengths of the axes.
-    dim: D,
-    /// The element count stride per axis. To be parsed as `isize`.
-    strides: D,
+    /// The axis lengths and strides.
+    layout: StridedLayout<D>,
     _dst_control: T,
 }
 
@@ -1329,8 +1328,7 @@ impl<A, D> ArrayPartsSized<A, D>
     {
         Self {
             ptr,
-            dim,
-            strides,
+            layout: StridedLayout::new(dim, strides),
             _dst_control: [],
         }
     }
@@ -1449,13 +1447,13 @@ impl<A, D> LayoutRef<A, D>
     /// Get a reference to the array's dimension.
     fn _dim(&self) -> &D
     {
-        &self.0.dim
+        &self.0.layout.dim
     }
 
     /// Get a reference to the array's strides.
     fn _strides(&self) -> &D
     {
-        &self.0.strides
+        &self.0.layout.strides
     }
 }
 
@@ -1830,8 +1828,8 @@ where
     /// Remove array axis `axis` and return the result.
     fn try_remove_axis(self, axis: Axis) -> ArrayBase<S, D::Smaller>
     {
-        let d = self.parts.dim.try_remove_axis(axis);
-        let s = self.parts.strides.try_remove_axis(axis);
+        let d = self.parts.layout.dim.try_remove_axis(axis);
+        let s = self.parts.layout.strides.try_remove_axis(axis);
         // safe because new dimension, strides allow access to a subset of old data
         unsafe { self.with_strides_dim(s, d) }
     }

@@ -101,7 +101,7 @@ where D: Dimension
             is_aligned(self.parts.ptr.as_ptr()),
             "The pointer must be aligned."
         );
-        ArrayView::new(self.parts.ptr, self.parts.dim, self.parts.strides)
+        ArrayView::new(self.parts.ptr, self.parts.layout.dim, self.parts.layout.strides)
     }
 
     /// Split the array view along `axis` and return one array pointer strictly
@@ -117,19 +117,19 @@ where D: Dimension
         let right_ptr = if index == self.len_of(axis) {
             self.parts.ptr.as_ptr()
         } else {
-            let offset = stride_offset(index, self.parts.strides.axis(axis));
+            let offset = stride_offset(index, self.parts.layout.strides.axis(axis));
             // The `.offset()` is safe due to the guarantees of `RawData`.
             unsafe { self.parts.ptr.as_ptr().offset(offset) }
         };
 
-        let mut dim_left = self.parts.dim.clone();
+        let mut dim_left = self.parts.layout.dim.clone();
         dim_left.set_axis(axis, index);
-        let left = unsafe { Self::new_(left_ptr, dim_left, self.parts.strides.clone()) };
+        let left = unsafe { Self::new_(left_ptr, dim_left, self.parts.layout.strides.clone()) };
 
-        let mut dim_right = self.parts.dim;
+        let mut dim_right = self.parts.layout.dim;
         let right_len = dim_right.axis(axis) - index;
         dim_right.set_axis(axis, right_len);
-        let right = unsafe { Self::new_(right_ptr, dim_right, self.parts.strides) };
+        let right = unsafe { Self::new_(right_ptr, dim_right, self.parts.layout.strides) };
 
         (left, right)
     }
@@ -153,7 +153,7 @@ where D: Dimension
             "size mismatch in raw view cast"
         );
         let ptr = self.parts.ptr.cast::<B>();
-        unsafe { RawArrayView::new(ptr, self.parts.dim, self.parts.strides) }
+        unsafe { RawArrayView::new(ptr, self.parts.layout.dim, self.parts.layout.strides) }
     }
 }
 
@@ -172,11 +172,11 @@ where D: Dimension
         );
         assert_eq!(mem::align_of::<Complex<T>>(), mem::align_of::<T>());
 
-        let dim = self.parts.dim.clone();
+        let dim = self.parts.layout.dim.clone();
 
         // Double the strides. In the zero-sized element case and for axes of
         // length <= 1, we leave the strides as-is to avoid possible overflow.
-        let mut strides = self.parts.strides.clone();
+        let mut strides = self.parts.layout.strides.clone();
         if mem::size_of::<T>() != 0 {
             for ax in 0..strides.ndim() {
                 if dim[ax] > 1 {
@@ -308,7 +308,7 @@ where D: Dimension
     #[inline]
     pub(crate) fn into_raw_view(self) -> RawArrayView<A, D>
     {
-        unsafe { RawArrayView::new(self.parts.ptr, self.parts.dim, self.parts.strides) }
+        unsafe { RawArrayView::new(self.parts.ptr, self.parts.layout.dim, self.parts.layout.strides) }
     }
 
     /// Converts to a read-only view of the array.
@@ -326,7 +326,7 @@ where D: Dimension
             is_aligned(self.parts.ptr.as_ptr()),
             "The pointer must be aligned."
         );
-        ArrayView::new(self.parts.ptr, self.parts.dim, self.parts.strides)
+        ArrayView::new(self.parts.ptr, self.parts.layout.dim, self.parts.layout.strides)
     }
 
     /// Converts to a mutable view of the array.
@@ -344,7 +344,7 @@ where D: Dimension
             is_aligned(self.parts.ptr.as_ptr()),
             "The pointer must be aligned."
         );
-        ArrayViewMut::new(self.parts.ptr, self.parts.dim, self.parts.strides)
+        ArrayViewMut::new(self.parts.ptr, self.parts.layout.dim, self.parts.layout.strides)
     }
 
     /// Split the array view along `axis` and return one array pointer strictly
@@ -358,8 +358,8 @@ where D: Dimension
         let (left, right) = self.into_raw_view().split_at(axis, index);
         unsafe {
             (
-                Self::new(left.parts.ptr, left.parts.dim, left.parts.strides),
-                Self::new(right.parts.ptr, right.parts.dim, right.parts.strides),
+                Self::new(left.parts.ptr, left.parts.layout.dim, left.parts.layout.strides),
+                Self::new(right.parts.ptr, right.parts.layout.dim, right.parts.layout.strides),
             )
         }
     }
@@ -383,7 +383,7 @@ where D: Dimension
             "size mismatch in raw view cast"
         );
         let ptr = self.parts.ptr.cast::<B>();
-        unsafe { RawArrayViewMut::new(ptr, self.parts.dim, self.parts.strides) }
+        unsafe { RawArrayViewMut::new(ptr, self.parts.layout.dim, self.parts.layout.strides) }
     }
 }
 
@@ -397,8 +397,8 @@ where D: Dimension
         let Complex { re, im } = self.into_raw_view().split_complex();
         unsafe {
             Complex {
-                re: RawArrayViewMut::new(re.parts.ptr, re.parts.dim, re.parts.strides),
-                im: RawArrayViewMut::new(im.parts.ptr, im.parts.dim, im.parts.strides),
+                re: RawArrayViewMut::new(re.parts.ptr, re.parts.layout.dim, re.parts.layout.strides),
+                im: RawArrayViewMut::new(im.parts.ptr, im.parts.layout.dim, im.parts.layout.strides),
             }
         }
     }

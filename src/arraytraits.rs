@@ -654,7 +654,10 @@ where D: Dimension
     {
         let data = OwnedArcRepr(Arc::new(arr.data));
         // safe because: equivalent unmoved data, ptr and dims remain valid
-        unsafe { ArrayBase::from_data_ptr(data, arr.parts.ptr).with_strides_dim(arr.parts.strides, arr.parts.dim) }
+        unsafe {
+            ArrayBase::from_data_ptr(data, arr.parts.ptr)
+                .with_strides_dim(arr.parts.layout.strides, arr.parts.layout.dim)
+        }
     }
 }
 

@@ -144,7 +144,7 @@ where D: Ranked
 
     fn ndim(&self) -> usize
     {
-        self.dim.ndim()
+        self.layout.dim.ndim()
     }
 }
 

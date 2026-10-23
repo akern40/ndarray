@@ -39,8 +39,7 @@ where
             parts:
                 ArrayParts {
                     ptr,
-                    dim,
-                    strides,
+                    layout,
                     _dst_control: [],
                 },
         } = self;
@@ -48,6 +47,6 @@ where
         // "transmute" from storage of MaybeUninit<A> to storage of A
         let data = S::data_subst(data);
         let ptr = ptr.cast::<A>();
-        ArrayBase::from_data_ptr(data, ptr).with_strides_dim(strides, dim)
+        ArrayBase::from_data_ptr(data, ptr).with_strides_dim(layout.strides, layout.dim)
     }
 }

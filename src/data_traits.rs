@@ -251,7 +251,7 @@ where A: Clone
         if Arc::get_mut(&mut self_.data.0).is_some() {
             return;
         }
-        if self_.parts.dim.size() <= self_.data.0.len() / 2 {
+        if self_.parts.layout.dim.size() <= self_.data.0.len() / 2 {
             // Clone only the visible elements if the current view is less than
             // half of backing data.
             *self_ = self_.to_owned().into_shared();
@@ -287,7 +287,8 @@ unsafe impl<A> Data for OwnedArcRepr<A>
         let data = Arc::try_unwrap(self_.data.0).ok().unwrap();
         // safe because data is equivalent
         unsafe {
-            ArrayBase::from_data_ptr(data, self_.parts.ptr).with_strides_dim(self_.parts.strides, self_.parts.dim)
+            ArrayBase::from_data_ptr(data, self_.parts.ptr)
+                .with_strides_dim(self_.parts.layout.strides, self_.parts.layout.dim)
         }
     }
 
@@ -298,13 +299,13 @@ unsafe impl<A> Data for OwnedArcRepr<A>
             Ok(owned_data) => unsafe {
                 // Safe because the data is equivalent.
                 Ok(ArrayBase::from_data_ptr(owned_data, self_.parts.ptr)
-                    .with_strides_dim(self_.parts.strides, self_.parts.dim))
+                    .with_strides_dim(self_.parts.layout.strides, self_.parts.layout.dim))
             },
             Err(arc_data) => unsafe {
                 // Safe because the data is equivalent; we're just
                 // reconstructing `self_`.
                 Err(ArrayBase::from_data_ptr(OwnedArcRepr(arc_data), self_.parts.ptr)
-                    .with_strides_dim(self_.parts.strides, self_.parts.dim))
+                    .with_strides_dim(self_.parts.layout.strides, self_.parts.layout.dim))
             },
         }
     }
@@ -604,8 +605,8 @@ where A: Clone
                 let owned = ArrayRef::to_owned(array);
                 array.data = CowRepr::Owned(owned.data);
                 array.parts.ptr = owned.parts.ptr;
-                array.parts.dim = owned.parts.dim;
-                array.parts.strides = owned.parts.strides;
+                array.parts.layout.dim = owned.parts.layout.dim;
+                array.parts.layout.strides = owned.parts.layout.strides;
             }
             CowRepr::Owned(_) => {}
         }
@@ -666,7 +667,8 @@ unsafe impl<'a, A> Data for CowRepr<'a, A>
             CowRepr::View(_) => self_.to_owned(),
             CowRepr::Owned(data) => unsafe {
                 // safe because the data is equivalent so ptr, dims remain valid
-                ArrayBase::from_data_ptr(data, self_.parts.ptr).with_strides_dim(self_.parts.strides, self_.parts.dim)
+                ArrayBase::from_data_ptr(data, self_.parts.ptr)
+                    .with_strides_dim(self_.parts.layout.strides, self_.parts.layout.dim)
             },
         }
     }
@@ -679,7 +681,7 @@ unsafe impl<'a, A> Data for CowRepr<'a, A>
             CowRepr::Owned(data) => unsafe {
                 // safe because the data is equivalent so ptr, dims remain valid
                 Ok(ArrayBase::from_data_ptr(data, self_.parts.ptr)
-                    .with_strides_dim(self_.parts.strides, self_.parts.dim))
+                    .with_strides_dim(self_.parts.layout.strides, self_.parts.layout.dim))
             },
         }
     }

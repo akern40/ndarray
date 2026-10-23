@@ -299,8 +299,7 @@ impl<A, D: Clone> Clone for ArrayPartsSized<A, D>
     fn clone(&self) -> Self
     {
         Self {
-            dim: self.dim.clone(),
-            strides: self.strides.clone(),
+            layout: self.layout.clone(),
             ptr: self.ptr,
             _dst_control: [0; 0],
         }

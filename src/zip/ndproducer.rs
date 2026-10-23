@@ -390,7 +390,7 @@ impl<A, D: Dimension> NdProducer for RawArrayView<A, D>
 
     fn equal_dim(&self, dim: &Self::Dim) -> bool
     {
-        self.parts.dim.equal(dim)
+        self.parts.layout.dim.equal(dim)
     }
 
     fn as_ptr(&self) -> *const A
@@ -413,7 +413,7 @@ impl<A, D: Dimension> NdProducer for RawArrayView<A, D>
         self.parts
             .ptr
             .as_ptr()
-            .offset(i.index_unchecked(&self.parts.strides))
+            .offset(i.index_unchecked(&self.parts.layout.strides))
     }
 
     fn stride_of(&self, axis: Axis) -> isize
@@ -449,7 +449,7 @@ impl<A, D: Dimension> NdProducer for RawArrayViewMut<A, D>
 
     fn equal_dim(&self, dim: &Self::Dim) -> bool
     {
-        self.parts.dim.equal(dim)
+        self.parts.layout.dim.equal(dim)
     }
 
     fn as_ptr(&self) -> *mut A
@@ -472,7 +472,7 @@ impl<A, D: Dimension> NdProducer for RawArrayViewMut<A, D>
         self.parts
             .ptr
             .as_ptr()
-            .offset(i.index_unchecked(&self.parts.strides))
+            .offset(i.index_unchecked(&self.parts.layout.strides))
     }
 
     fn stride_of(&self, axis: Axis) -> isize

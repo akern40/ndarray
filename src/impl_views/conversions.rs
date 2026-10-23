@@ -29,7 +29,7 @@ where D: Dimension
     pub fn reborrow<'b>(self) -> ArrayView<'b, A, D>
     where 'a: 'b
     {
-        unsafe { ArrayView::new(self.parts.ptr, self.parts.dim, self.parts.strides) }
+        unsafe { ArrayView::new(self.parts.ptr, self.parts.layout.dim, self.parts.layout.strides) }
     }
 
     /// Return the array’s data as a slice, if it is contiguous and in standard order.
@@ -55,7 +55,7 @@ where D: Dimension
     pub fn to_slice_memory_order(&self) -> Option<&'a [A]>
     {
         if self.is_contiguous() {
-            let offset = offset_from_low_addr_ptr_to_logical_ptr(&self.parts.dim, &self.parts.strides);
+            let offset = offset_from_low_addr_ptr_to_logical_ptr(&self.parts.layout.dim, &self.parts.layout.strides);
             unsafe { Some(slice::from_raw_parts(self.parts.ptr.sub(offset).as_ptr(), self.len())) }
         } else {
             None
@@ -66,7 +66,7 @@ where D: Dimension
     #[inline]
     pub(crate) fn into_raw_view(self) -> RawArrayView<A, D>
     {
-        unsafe { RawArrayView::new(self.parts.ptr, self.parts.dim, self.parts.strides) }
+        unsafe { RawArrayView::new(self.parts.ptr, self.parts.layout.dim, self.parts.layout.strides) }
     }
 }
 
@@ -199,7 +199,7 @@ where D: Dimension
     #[inline]
     pub(crate) fn into_base_iter(self) -> Baseiter<A, D>
     {
-        unsafe { Baseiter::new(self.parts.ptr, self.parts.dim, self.parts.strides) }
+        unsafe { Baseiter::new(self.parts.ptr, self.parts.layout.dim, self.parts.layout.strides) }
     }
 }
 
@@ -209,7 +209,7 @@ where D: Dimension
     #[inline]
     pub(crate) fn into_base_iter(self) -> Baseiter<A, D>
     {
-        unsafe { Baseiter::new(self.parts.ptr, self.parts.dim, self.parts.strides) }
+        unsafe { Baseiter::new(self.parts.ptr, self.parts.layout.dim, self.parts.layout.strides) }
     }
 }
 
@@ -220,7 +220,7 @@ where D: Dimension
     #[inline]
     pub(crate) fn into_base_iter(self) -> Baseiter<A, D>
     {
-        unsafe { Baseiter::new(self.parts.ptr, self.parts.dim, self.parts.strides) }
+        unsafe { Baseiter::new(self.parts.ptr, self.parts.layout.dim, self.parts.layout.strides) }
     }
 
     #[inline]
@@ -276,19 +276,19 @@ where D: Dimension
     // Convert into a read-only view
     pub(crate) fn into_view(self) -> ArrayView<'a, A, D>
     {
-        unsafe { ArrayView::new(self.parts.ptr, self.parts.dim, self.parts.strides) }
+        unsafe { ArrayView::new(self.parts.ptr, self.parts.layout.dim, self.parts.layout.strides) }
     }
 
     /// Converts to a mutable raw array view.
     pub(crate) fn into_raw_view_mut(self) -> RawArrayViewMut<A, D>
     {
-        unsafe { RawArrayViewMut::new(self.parts.ptr, self.parts.dim, self.parts.strides) }
+        unsafe { RawArrayViewMut::new(self.parts.ptr, self.parts.layout.dim, self.parts.layout.strides) }
     }
 
     #[inline]
     pub(crate) fn into_base_iter(self) -> Baseiter<A, D>
     {
-        unsafe { Baseiter::new(self.parts.ptr, self.parts.dim, self.parts.strides) }
+        unsafe { Baseiter::new(self.parts.ptr, self.parts.layout.dim, self.parts.layout.strides) }
     }
 
     #[inline]
@@ -313,7 +313,7 @@ where D: Dimension
     fn try_into_slice_memory_order(self) -> Result<&'a mut [A], Self>
     {
         if self.is_contiguous() {
-            let offset = offset_from_low_addr_ptr_to_logical_ptr(&self.parts.dim, &self.parts.strides);
+            let offset = offset_from_low_addr_ptr_to_logical_ptr(&self.parts.layout.dim, &self.parts.layout.strides);
             unsafe { Ok(slice::from_raw_parts_mut(self.parts.ptr.sub(offset).as_ptr(), self.len())) }
         } else {
             Err(self)

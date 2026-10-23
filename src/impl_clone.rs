@@ -19,7 +19,7 @@ impl<S: RawDataClone, D: Clone> Clone for ArrayBase<S, D>
             let (data, ptr) = self.data.clone_with_ptr(self.parts.ptr);
             ArrayBase {
                 data,
-                parts: ArrayPartsSized::new(ptr, self.parts.dim.clone(), self.parts.strides.clone()),
+                parts: ArrayPartsSized::new(ptr, self.parts.layout.dim.clone(), self.parts.layout.strides.clone()),
             }
         }
     }
@@ -31,8 +31,11 @@ impl<S: RawDataClone, D: Clone> Clone for ArrayBase<S, D>
     {
         unsafe {
             self.parts.ptr = self.data.clone_from_with_ptr(&other.data, other.parts.ptr);
-            self.parts.dim.clone_from(&other.parts.dim);
-            self.parts.strides.clone_from(&other.parts.strides);
+            self.parts.layout.dim.clone_from(&other.parts.layout.dim);
+            self.parts
+                .layout
+                .strides
+                .clone_from(&other.parts.layout.strides);
         }
     }
 }

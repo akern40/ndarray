@@ -69,7 +69,9 @@ where D: Dimension
             return None;
         }
         if std::mem::size_of::<A>() == 0 {
-            Some(dimension::offset_from_low_addr_ptr_to_logical_ptr(&self.parts.dim, &self.parts.strides))
+            Some(dimension::offset_from_low_addr_ptr_to_logical_ptr(
+                &self.parts.layout.dim, &self.parts.layout.strides,
+            ))
         } else {
             let offset = unsafe { self.as_ptr().offset_from(self.data.as_ptr()) };
             debug_assert!(offset >= 0);
@@ -476,8 +478,8 @@ where D: Dimension
         } else {
             dim.slice_mut()[..=growing_axis.index()].rotate_right(1);
             new_array = Self::uninit(dim);
-            new_array.parts.dim.slice_mut()[..=growing_axis.index()].rotate_left(1);
-            new_array.parts.strides.slice_mut()[..=growing_axis.index()].rotate_left(1);
+            new_array.parts.layout.dim.slice_mut()[..=growing_axis.index()].rotate_left(1);
+            new_array.parts.layout.strides.slice_mut()[..=growing_axis.index()].rotate_left(1);
         }
 
         // self -> old_self.
@@ -631,7 +633,7 @@ where D: Dimension
             // either the dimension increment is zero, or there is an existing
             // zero in another axis in self.
             debug_assert_eq!(self.len(), new_len);
-            self.parts.dim = res_dim;
+            self.parts.layout.dim = res_dim;
             return Ok(());
         }
 
@@ -701,11 +703,11 @@ where D: Dimension
                     }
                 }
             });
-            let mut strides = self.parts.strides.clone();
+            let mut strides = self.parts.layout.strides.clone();
             strides[axis.index()] = new_stride as usize;
             strides
         } else {
-            self.parts.strides.clone()
+            self.parts.layout.strides.clone()
         };
 
         // grow backing storage and update head ptr
@@ -785,8 +787,8 @@ where D: Dimension
             drop(data_length_guard);
 
             // update array dimension
-            self.parts.strides = strides;
-            self.parts.dim = res_dim;
+            self.parts.layout.strides = strides;
+            self.parts.layout.dim = res_dim;
         }
         // multiple assertions after pointer & dimension update
         debug_assert_eq!(self.data.len(), self.len());
@@ -897,19 +899,19 @@ pub(crate) unsafe fn drop_unreachable_raw<A, D>(
     // As an optimization, the innermost axis is removed if it has stride 1, because
     // we then have a long stretch of contiguous elements we can skip as one.
     let inner_lane_len;
-    if self_.ndim() > 1 && self_.parts.strides.last_elem() == 1 {
-        self_.parts.dim.slice_mut().rotate_right(1);
-        self_.parts.strides.slice_mut().rotate_right(1);
-        inner_lane_len = self_.parts.dim[0];
-        self_.parts.dim[0] = 1;
-        self_.parts.strides[0] = 1;
+    if self_.ndim() > 1 && self_.parts.layout.strides.last_elem() == 1 {
+        self_.parts.layout.dim.slice_mut().rotate_right(1);
+        self_.parts.layout.strides.slice_mut().rotate_right(1);
+        inner_lane_len = self_.parts.layout.dim[0];
+        self_.parts.layout.dim[0] = 1;
+        self_.parts.layout.strides[0] = 1;
     } else {
         inner_lane_len = 1;
     }
 
     // iter is a raw pointer iterator traversing the array in memory order now with the
     // sorted axes.
-    let mut iter = Baseiter::new(self_.parts.ptr, self_.parts.dim, self_.parts.strides);
+    let mut iter = Baseiter::new(self_.parts.ptr, self_.parts.layout.dim, self_.parts.layout.strides);
     let mut dropped_elements = 0;
 
     let mut last_ptr = data_ptr;
@@ -948,7 +950,7 @@ where
     if a.ndim() <= 1 {
         return;
     }
-    sort_axes1_impl(&mut a.parts.dim, &mut a.parts.strides);
+    sort_axes1_impl(&mut a.parts.layout.dim, &mut a.parts.layout.strides);
 }
 
 fn sort_axes1_impl<D>(adim: &mut D, astrides: &mut D)
@@ -988,7 +990,9 @@ where
     if a.ndim() <= 1 {
         return;
     }
-    sort_axes2_impl(&mut a.parts.dim, &mut a.parts.strides, &mut b.parts.dim, &mut b.parts.strides);
+    sort_axes2_impl(
+        &mut a.parts.layout.dim, &mut a.parts.layout.strides, &mut b.parts.layout.dim, &mut b.parts.layout.strides,
+    );
 }
 
 fn sort_axes2_impl<D>(adim: &mut D, astrides: &mut D, bdim: &mut D, bstrides: &mut D)

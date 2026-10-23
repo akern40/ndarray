@@ -590,8 +590,8 @@ where
                 // Slice the axis in-place to update the `dim`, `strides`, and `ptr`.
                 self.slice_axis_inplace(Axis(old_axis), Slice { start, end, step });
                 // Copy the sliced dim and stride to corresponding axis.
-                new_dim[new_axis] = self.parts.dim[old_axis];
-                new_strides[new_axis] = self.parts.strides[old_axis];
+                new_dim[new_axis] = self.parts.layout.dim[old_axis];
+                new_strides[new_axis] = self.parts.layout.strides[old_axis];
                 old_axis += 1;
                 new_axis += 1;
             }
@@ -703,8 +703,11 @@ impl<A, D: Dimension> LayoutRef<A, D>
     pub fn slice_axis_inplace(&mut self, axis: Axis, indices: Slice)
     {
         let parts = &mut self.0;
-        let offset =
-            do_slice(&mut parts.dim.slice_mut()[axis.index()], &mut parts.strides.slice_mut()[axis.index()], indices);
+        let offset = do_slice(
+            &mut parts.layout.dim.slice_mut()[axis.index()],
+            &mut parts.layout.strides.slice_mut()[axis.index()],
+            indices,
+        );
         unsafe {
             self.0.ptr = self._ptr().offset(offset);
         }
@@ -1059,8 +1062,8 @@ where
     where D: RemoveAxis
     {
         self.collapse_axis(axis, index);
-        let dim = self.parts.dim.remove_axis(axis);
-        let strides = self.parts.strides.remove_axis(axis);
+        let dim = self.parts.layout.dim.remove_axis(axis);
+        let strides = self.parts.layout.strides.remove_axis(axis);
         // safe because new dimension, strides allow access to a subset of old data
         unsafe { self.with_strides_dim(strides, dim) }
     }
@@ -1075,7 +1078,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     pub fn collapse_axis(&mut self, axis: Axis, index: usize)
     {
         let parts = &mut self.0;
-        let offset = dimension::do_collapse_axis(&mut parts.dim, &parts.strides, axis.index(), index);
+        let offset = dimension::do_collapse_axis(&mut parts.layout.dim, &parts.layout.strides, axis.index(), index);
         self.0.ptr = unsafe { self._ptr().offset(offset) };
         // debug_assert!(self.pointer_is_inbounds());
     }
@@ -1575,7 +1578,15 @@ where
     fn diag_params(&self) -> (Ix, Ixs)
     {
         /* empty shape has len 1 */
-        let len = self.parts.dim.slice().iter().cloned().min().unwrap_or(1);
+        let len = self
+            .parts
+            .layout
+            .dim
+            .slice()
+            .iter()
+            .cloned()
+            .min()
+            .unwrap_or(1);
         let stride = self.strides().iter().sum();
         (len, stride)
     }
@@ -1755,7 +1766,9 @@ where
     where S: RawDataMut
     {
         self.try_ensure_unique(); // for ArcArray
-        unsafe { RawArrayViewMut::new(self.parts.ptr, self.parts.dim.clone(), self.parts.strides.clone()) }
+        unsafe {
+            RawArrayViewMut::new(self.parts.ptr, self.parts.layout.dim.clone(), self.parts.layout.strides.clone())
+        }
     }
 
     /// Return a raw mutable view of the array.
@@ -2037,8 +2050,8 @@ where
     where E: Dimension
     {
         let shape = shape.into_dimension();
-        if size_of_shape_checked(&shape) != Ok(self.parts.dim.size()) {
-            return Err(error::incompatible_shapes(&self.parts.dim, &shape));
+        if size_of_shape_checked(&shape) != Ok(self.parts.layout.dim.size()) {
+            return Err(error::incompatible_shapes(&self.parts.layout.dim, &shape));
         }
 
         // Check if contiguous, then we can change shape
@@ -2082,8 +2095,8 @@ where
     where E: IntoDimension
     {
         let shape = shape.into_dimension();
-        if size_of_shape_checked(&shape) != Ok(self.parts.dim.size()) {
-            return Err(error::incompatible_shapes(&self.parts.dim, &shape));
+        if size_of_shape_checked(&shape) != Ok(self.parts.layout.dim.size()) {
+            return Err(error::incompatible_shapes(&self.parts.layout.dim, &shape));
         }
         // Check if contiguous, if not => copy all, else just adapt strides
         unsafe {
@@ -2294,7 +2307,7 @@ where
         // safe because new dims equivalent
         unsafe {
             ArrayBase::from_data_ptr(self.data, self.parts.ptr)
-                .with_strides_dim(self.parts.strides.into_dyn(), self.parts.dim.into_dyn())
+                .with_strides_dim(self.parts.layout.strides.into_dyn(), self.parts.layout.dim.into_dyn())
         }
     }
 
@@ -2320,14 +2333,14 @@ where
         unsafe {
             if D::NDIM == D2::NDIM {
                 // safe because D == D2
-                let dim = unlimited_transmute::<D, D2>(self.parts.dim);
-                let strides = unlimited_transmute::<D, D2>(self.parts.strides);
+                let dim = unlimited_transmute::<D, D2>(self.parts.layout.dim);
+                let strides = unlimited_transmute::<D, D2>(self.parts.layout.strides);
                 return Ok(ArrayBase::from_data_ptr(self.data, self.parts.ptr).with_strides_dim(strides, dim));
             } else if D::NDIM.is_none() || D2::NDIM.is_none() {
                 // one is dynamic dim
                 // safe because dim, strides are equivalent under a different type
-                if let Some(dim) = D2::from_dimension(&self.parts.dim) {
-                    if let Some(strides) = D2::from_dimension(&self.parts.strides) {
+                if let Some(dim) = D2::from_dimension(&self.parts.layout.dim) {
+                    if let Some(strides) = D2::from_dimension(&self.parts.layout.strides) {
                         return Ok(self.with_strides_dim(strides, dim));
                     }
                 }
@@ -2486,8 +2499,8 @@ impl<A, D: Dimension> LayoutRef<A, D>
     #[track_caller]
     pub fn swap_axes(&mut self, ax: usize, bx: usize)
     {
-        self.0.dim.slice_mut().swap(ax, bx);
-        self.0.strides.slice_mut().swap(ax, bx);
+        self.0.layout.dim.slice_mut().swap(ax, bx);
+        self.0.layout.strides.slice_mut().swap(ax, bx);
     }
 }
 
@@ -2535,8 +2548,8 @@ where
         let mut new_dim = usage_counts; // reuse to avoid an allocation
         let mut new_strides = D::zeros(self.ndim());
         {
-            let dim = self.parts.dim.slice();
-            let strides = self.parts.strides.slice();
+            let dim = self.parts.layout.dim.slice();
+            let strides = self.parts.layout.strides.slice();
             for (new_axis, &axis) in axes.slice().iter().enumerate() {
                 new_dim[new_axis] = dim[axis];
                 new_strides[new_axis] = strides[axis];
@@ -2583,8 +2596,8 @@ where
             assert_eq!(*count, 1, "each axis must be listed exactly once");
         }
 
-        let dim = self.parts.dim.slice_mut();
-        let strides = self.parts.strides.slice_mut();
+        let dim = self.parts.layout.dim.slice_mut();
+        let strides = self.parts.layout.strides.slice_mut();
         let axes = axes.slice();
 
         // The cycle detection is done using a bitmask to track visited positions.
@@ -2618,8 +2631,8 @@ where
     /// while retaining the same data.
     pub fn reversed_axes(mut self) -> ArrayBase<S, D>
     {
-        self.parts.dim.slice_mut().reverse();
-        self.parts.strides.slice_mut().reverse();
+        self.parts.layout.dim.slice_mut().reverse();
+        self.parts.layout.strides.slice_mut().reverse();
         self
     }
 
@@ -2629,8 +2642,8 @@ where
     /// and strides.
     pub fn reverse_axes(&mut self)
     {
-        self.parts.dim.slice_mut().reverse();
-        self.parts.strides.slice_mut().reverse();
+        self.parts.layout.dim.slice_mut().reverse();
+        self.parts.layout.strides.slice_mut().reverse();
     }
 }
 
@@ -2681,7 +2694,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
             if m != 0 {
                 self.0.ptr = self._ptr().offset(stride_offset(m - 1, s as Ix));
             }
-            self.0.strides.set_axis(axis, (-s) as Ix);
+            self.0.layout.strides.set_axis(axis, (-s) as Ix);
         }
     }
 
@@ -2724,7 +2737,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     pub fn merge_axes(&mut self, take: Axis, into: Axis) -> bool
     {
         let parts = &mut self.0;
-        merge_axes(&mut parts.dim, &mut parts.strides, take, into)
+        merge_axes(&mut parts.layout.dim, &mut parts.layout.strides, take, into)
     }
 }
 
@@ -2760,8 +2773,8 @@ where
         assert!(axis.index() <= self.ndim());
         // safe because a new axis of length one does not affect memory layout
         unsafe {
-            let strides = self.parts.strides.insert_axis(axis);
-            let dim = self.parts.dim.insert_axis(axis);
+            let strides = self.parts.layout.strides.insert_axis(axis);
+            let dim = self.parts.layout.dim.insert_axis(axis);
             self.with_strides_dim(strides, dim)
         }
     }
@@ -2908,7 +2921,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
             slc.iter().fold(init, f)
         } else {
             let mut v = self.view();
-            move_min_stride_axis_to_last(&mut v.parts.dim, &mut v.parts.strides);
+            move_min_stride_axis_to_last(&mut v.parts.layout.dim, &mut v.parts.layout.strides);
             v.into_elements_base().fold(init, f)
         }
     }
@@ -3072,7 +3085,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
             Ok(slc) => slc.iter_mut().for_each(f),
             Err(arr) => {
                 let mut v = arr.view_mut();
-                move_min_stride_axis_to_last(&mut v.parts.dim, &mut v.parts.strides);
+                move_min_stride_axis_to_last(&mut v.parts.layout.dim, &mut v.parts.layout.strides);
                 v.into_elements_base().for_each(f);
             }
         }

@@ -147,7 +147,7 @@ where
         debug_bounds_check!(self, index);
         &*self
             .as_ptr()
-            .offset(index.index_unchecked(&self.parts.strides))
+            .offset(index.index_unchecked(&self.parts.layout.strides))
     }
 }
 
@@ -215,6 +215,6 @@ where
         debug_bounds_check!(self, index);
         &mut *self
             .as_mut_ptr()
-            .offset(index.index_unchecked(&self.parts.strides))
+            .offset(index.index_unchecked(&self.parts.layout.strides))
     }
 }
