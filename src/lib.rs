@@ -1823,7 +1823,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
         let ptr = self._ptr();
         let mut strides = dim.clone();
         strides.slice_mut().copy_from_slice(self._strides().slice());
-        unsafe { ArrayView::new(*ptr, dim, strides) }
+        unsafe { ArrayView::new(*ptr, StridedLayout::new(dim, strides)) }
     }
 }
 

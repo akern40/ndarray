@@ -6,18 +6,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::layout::traits::Strided;
 use core::cmp::min;
 
 use num_traits::Zero;
 
-use crate::{
-    dimension::{is_layout_c, is_layout_f},
-    Array,
-    ArrayRef,
-    Axis,
-    Dimension,
-    Zip,
-};
+use crate::{Array, ArrayRef, Axis, Dimension, Zip};
 
 impl<A, D> ArrayRef<A, D>
 where
@@ -59,7 +53,7 @@ where
         // C-order array check prevents infinite recursion in edge cases like [[1]].
         // k-size check prevents underflow when k == isize::MIN
         let n = self.ndim();
-        if is_layout_f(self._dim(), self._strides()) && !is_layout_c(self._dim(), self._strides()) && k > isize::MIN {
+        if self._layout().is_fortran_layout() && !self._layout().is_standard_layout() && k > isize::MIN {
             let mut x = self.view();
             x.swap_axes(n - 2, n - 1);
             let mut tril = x.tril(-k);
@@ -124,7 +118,7 @@ where
         // C-order array check prevents infinite recursion in edge cases like [[1]].
         // k-size check prevents underflow when k == isize::MIN
         let n = self.ndim();
-        if is_layout_f(self._dim(), self._strides()) && !is_layout_c(self._dim(), self._strides()) && k > isize::MIN {
+        if self._layout().is_fortran_layout() && !self._layout().is_standard_layout() && k > isize::MIN {
             let mut x = self.view();
             x.swap_axes(n - 2, n - 1);
             let mut triu = x.triu(-k);

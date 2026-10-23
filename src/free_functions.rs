@@ -362,6 +362,7 @@ mod meshgrid_impl
 {
     use super::MeshIndex;
     use crate::extension::nonnull::nonnull_debug_checked_from_ptr;
+    use crate::StridedLayout;
     use crate::{
         ArrayBase,
         ArrayRef1,
@@ -427,7 +428,7 @@ mod meshgrid_impl
             (
                 $({
                     let strides = construct_strides::<_, $count>($arr, $idx, $indexing);
-                    unsafe { ArrayView::new(nonnull_debug_checked_from_ptr($arr.as_ptr() as *mut A), shape, strides) }
+                    unsafe { ArrayView::new(nonnull_debug_checked_from_ptr($arr.as_ptr() as *mut A), StridedLayout::new(shape, strides)) }
                 }),+
             )
         }

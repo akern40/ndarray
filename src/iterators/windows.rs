@@ -65,8 +65,7 @@ impl_ndproducer! {
         type Dim = D;
 
         unsafe fn item(&self, ptr) {
-            ArrayView::new_(ptr, self.window.clone(),
-                            self.strides.clone())
+            ArrayView::new_(ptr, StridedLayout::new(self.window.clone(), self.strides.clone()))
         }
     }
 }
@@ -115,10 +114,7 @@ impl_iterator! {
 
         fn item(&mut self, ptr) {
             unsafe {
-                ArrayView::new(
-                    ptr,
-                    self.window.clone(),
-                    self.strides.clone())
+                ArrayView::new(ptr, StridedLayout::new(self.window.clone(), self.strides.clone()))
             }
         }
     }
@@ -193,7 +189,7 @@ impl<'a, A, D: Dimension> NdProducer for AxisWindows<'a, A, D>
 
     unsafe fn as_ref(&self, ptr: *mut A) -> Self::Item
     {
-        ArrayView::new_(ptr, self.window.clone(), self.strides.clone())
+        ArrayView::new_(ptr, StridedLayout::new(self.window.clone(), self.strides.clone()))
     }
 
     unsafe fn uget_ptr(&self, i: &Self::Dim) -> *mut A

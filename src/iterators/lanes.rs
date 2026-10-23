@@ -18,7 +18,7 @@ impl_ndproducer! {
         type Dim = D;
 
         unsafe fn item(&self, ptr) {
-            ArrayView::new_(ptr, Ix1(self.inner_len), Ix1(self.inner_stride as Ix))
+            ArrayView::new_(ptr, StridedLayout::new(Ix1(self.inner_len), Ix1(self.inner_stride as Ix)))
         }
     }
 }
@@ -71,7 +71,7 @@ impl_ndproducer! {
         type Dim = D;
 
         unsafe fn item(&self, ptr) {
-            ArrayViewMut::new_(ptr, Ix1(self.inner_len), Ix1(self.inner_stride as Ix))
+            ArrayViewMut::new_(ptr, StridedLayout::new(Ix1(self.inner_len), Ix1(self.inner_stride as Ix)))
         }
     }
 }

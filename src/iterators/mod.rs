@@ -744,9 +744,9 @@ where D: Dimension
     type Item = ArrayView<'a, A, Ix1>;
     fn next(&mut self) -> Option<Self::Item>
     {
-        self.iter
-            .next()
-            .map(|ptr| unsafe { ArrayView::new(ptr, Ix1(self.inner_len), Ix1(self.inner_stride as Ix)) })
+        self.iter.next().map(|ptr| unsafe {
+            ArrayView::new(ptr, StridedLayout::new(Ix1(self.inner_len), Ix1(self.inner_stride as Ix)))
+        })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>)
@@ -768,9 +768,9 @@ impl<A> DoubleEndedIterator for LanesIter<'_, A, Ix1>
 {
     fn next_back(&mut self) -> Option<Self::Item>
     {
-        self.iter
-            .next_back()
-            .map(|ptr| unsafe { ArrayView::new(ptr, Ix1(self.inner_len), Ix1(self.inner_stride as Ix)) })
+        self.iter.next_back().map(|ptr| unsafe {
+            ArrayView::new(ptr, StridedLayout::new(Ix1(self.inner_len), Ix1(self.inner_stride as Ix)))
+        })
     }
 }
 
@@ -796,9 +796,9 @@ where D: Dimension
     type Item = ArrayViewMut<'a, A, Ix1>;
     fn next(&mut self) -> Option<Self::Item>
     {
-        self.iter
-            .next()
-            .map(|ptr| unsafe { ArrayViewMut::new(ptr, Ix1(self.inner_len), Ix1(self.inner_stride as Ix)) })
+        self.iter.next().map(|ptr| unsafe {
+            ArrayViewMut::new(ptr, StridedLayout::new(Ix1(self.inner_len), Ix1(self.inner_stride as Ix)))
+        })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>)
@@ -820,9 +820,9 @@ impl<A> DoubleEndedIterator for LanesIterMut<'_, A, Ix1>
 {
     fn next_back(&mut self) -> Option<Self::Item>
     {
-        self.iter
-            .next_back()
-            .map(|ptr| unsafe { ArrayViewMut::new(ptr, Ix1(self.inner_len), Ix1(self.inner_stride as Ix)) })
+        self.iter.next_back().map(|ptr| unsafe {
+            ArrayViewMut::new(ptr, StridedLayout::new(Ix1(self.inner_len), Ix1(self.inner_stride as Ix)))
+        })
     }
 }
 
@@ -1213,7 +1213,7 @@ impl<A, D: Dimension> NdProducer for AxisIter<'_, A, D>
 
     unsafe fn as_ref(&self, ptr: Self::Ptr) -> Self::Item
     {
-        ArrayView::new_(ptr, self.iter.inner_dim.clone(), self.iter.inner_strides.clone())
+        ArrayView::new_(ptr, StridedLayout::new(self.iter.inner_dim.clone(), self.iter.inner_strides.clone()))
     }
 
     unsafe fn uget_ptr(&self, i: &Self::Dim) -> Self::Ptr
@@ -1272,7 +1272,7 @@ impl<A, D: Dimension> NdProducer for AxisIterMut<'_, A, D>
 
     unsafe fn as_ref(&self, ptr: Self::Ptr) -> Self::Item
     {
-        ArrayViewMut::new_(ptr, self.iter.inner_dim.clone(), self.iter.inner_strides.clone())
+        ArrayViewMut::new_(ptr, StridedLayout::new(self.iter.inner_dim.clone(), self.iter.inner_strides.clone()))
     }
 
     unsafe fn uget_ptr(&self, i: &Self::Dim) -> Self::Ptr
@@ -1399,19 +1399,11 @@ macro_rules! chunk_iter_impl {
             fn get_subview(&self, index: usize, ptr: *mut A) -> $array<'a, A, D> {
                 if index != self.partial_chunk_index {
                     unsafe {
-                        $array::new_(
-                            ptr,
-                            self.iter.inner_dim.clone(),
-                            self.iter.inner_strides.clone(),
-                        )
+                        $array::new_(ptr, StridedLayout::new(self.iter.inner_dim.clone(), self.iter.inner_strides.clone()))
                     }
                 } else {
                     unsafe {
-                        $array::new_(
-                            ptr,
-                            self.partial_chunk_dim.clone(),
-                            self.iter.inner_strides.clone(),
-                        )
+                        $array::new_(ptr, StridedLayout::new(self.partial_chunk_dim.clone(), self.iter.inner_strides.clone()))
                     }
                 }
             }

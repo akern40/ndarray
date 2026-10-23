@@ -60,8 +60,7 @@ where D: Dimension
             Ok(Self::new_(
                 xs.as_ptr()
                     .add(offset_from_low_addr_ptr_to_logical_ptr(&dim, &strides)),
-                dim,
-                strides,
+                StridedLayout::new(dim, strides),
             ))
         }
     }
@@ -163,8 +162,7 @@ where D: Dimension
             Ok(Self::new_(
                 xs.as_mut_ptr()
                     .add(offset_from_low_addr_ptr_to_logical_ptr(&dim, &strides)),
-                dim,
-                strides,
+                StridedLayout::new(dim, strides),
             ))
         }
     }
@@ -225,7 +223,7 @@ where D: Dimension
     pub fn reborrow<'b>(self) -> ArrayViewMut<'b, A, D>
     where 'a: 'b
     {
-        unsafe { ArrayViewMut::new(self.parts.ptr, self.parts.layout.dim, self.parts.layout.strides) }
+        unsafe { ArrayViewMut::new(self.parts.ptr, self.parts.layout) }
     }
 }
 
@@ -237,8 +235,9 @@ where D: Dimension
     ///
     /// Unsafe because: `ptr` must be valid for the given dimension and strides.
     #[inline(always)]
-    pub(crate) unsafe fn new(ptr: NonNull<A>, dim: D, strides: D) -> Self
+    pub(crate) unsafe fn new(ptr: NonNull<A>, layout: StridedLayout<D>) -> Self
     {
+        let StridedLayout { dim, strides } = layout;
         if cfg!(debug_assertions) {
             assert!(is_aligned(ptr.as_ptr()), "The pointer must be aligned.");
             dimension::max_abs_offset_check_overflow::<A, _>(&dim, &strides).unwrap();
@@ -248,9 +247,9 @@ where D: Dimension
 
     /// Unsafe because: `ptr` must be valid for the given dimension and strides.
     #[inline]
-    pub(crate) unsafe fn new_(ptr: *const A, dim: D, strides: D) -> Self
+    pub(crate) unsafe fn new_(ptr: *const A, layout: StridedLayout<D>) -> Self
     {
-        Self::new(nonnull_debug_checked_from_ptr(ptr as *mut A), dim, strides)
+        Self::new(nonnull_debug_checked_from_ptr(ptr as *mut A), layout)
     }
 }
 
@@ -261,8 +260,9 @@ where D: Dimension
     ///
     /// Unsafe because: `ptr` must be valid for the given dimension and strides.
     #[inline(always)]
-    pub(crate) unsafe fn new(ptr: NonNull<A>, dim: D, strides: D) -> Self
+    pub(crate) unsafe fn new(ptr: NonNull<A>, layout: StridedLayout<D>) -> Self
     {
+        let StridedLayout { dim, strides } = layout;
         if cfg!(debug_assertions) {
             assert!(is_aligned(ptr.as_ptr()), "The pointer must be aligned.");
             dimension::max_abs_offset_check_overflow::<A, _>(&dim, &strides).unwrap();
@@ -274,8 +274,8 @@ where D: Dimension
     ///
     /// Unsafe because: `ptr` must be valid for the given dimension and strides.
     #[inline(always)]
-    pub(crate) unsafe fn new_(ptr: *mut A, dim: D, strides: D) -> Self
+    pub(crate) unsafe fn new_(ptr: *mut A, layout: StridedLayout<D>) -> Self
     {
-        Self::new(nonnull_debug_checked_from_ptr(ptr), dim, strides)
+        Self::new(nonnull_debug_checked_from_ptr(ptr), layout)
     }
 }

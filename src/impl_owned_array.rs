@@ -742,7 +742,7 @@ where D: Dimension
 
             // With > 0 strides, the current end of data is the correct base pointer for tail_view
             let tail_ptr = self.data.as_end_nonnull();
-            let mut tail_view = RawArrayViewMut::new(tail_ptr, array_dim, tail_strides);
+            let mut tail_view = RawArrayViewMut::new(tail_ptr, StridedLayout::new(array_dim, tail_strides));
 
             if tail_view.ndim() > 1 {
                 sort_axes_in_default_order_tandem(&mut tail_view, &mut array);

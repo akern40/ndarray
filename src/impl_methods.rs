@@ -17,18 +17,10 @@ use std::mem::{size_of, ManuallyDrop};
 use crate::imp_prelude::*;
 
 use crate::argument_traits::AssignElem;
-use crate::dimension;
 use crate::dimension::broadcast::co_broadcast;
 use crate::dimension::reshape_dim;
 use crate::dimension::IntoDimension;
-use crate::dimension::{
-    abs_index,
-    axes_of,
-    move_min_stride_axis_to_last,
-    offset_from_low_addr_ptr_to_logical_ptr,
-    size_of_shape_checked,
-    Axes,
-};
+use crate::dimension::{abs_index, axes_of, move_min_stride_axis_to_last, size_of_shape_checked, Axes};
 use crate::error::{self, from_kind, ErrorKind, ShapeError};
 use crate::itertools::zip;
 use crate::math_cell::MathCell;
@@ -175,13 +167,13 @@ impl<A, D: Dimension> ArrayRef<A, D>
     pub fn view(&self) -> ArrayView<'_, A, D>
     {
         // debug_assert!(self.pointer_is_inbounds());
-        unsafe { ArrayView::new(*self._ptr(), self._dim().clone(), self._strides().clone()) }
+        unsafe { ArrayView::new(*self._ptr(), StridedLayout::new(self._dim().clone(), self._strides().clone())) }
     }
 
     /// Return a read-write view of the array
     pub fn view_mut(&mut self) -> ArrayViewMut<'_, A, D>
     {
-        unsafe { ArrayViewMut::new(*self._ptr(), self._dim().clone(), self._strides().clone()) }
+        unsafe { ArrayViewMut::new(*self._ptr(), StridedLayout::new(self._dim().clone(), self._strides().clone())) }
     }
 
     /// Return a shared view of the array with elements as if they were embedded in cells.
@@ -1620,13 +1612,13 @@ impl<A, D: Dimension> LayoutRef<A, D>
     /// contiguous in memory, it has custom strides, etc.
     pub fn is_standard_layout(&self) -> bool
     {
-        dimension::is_layout_c(self._dim(), self._strides())
+        self._layout().is_standard_layout()
     }
 
     /// Return true if the array is known to be contiguous.
     pub(crate) fn is_contiguous(&self) -> bool
     {
-        D::is_contiguous(self._dim(), self._strides())
+        self._layout().is_contiguous()
     }
 }
 
@@ -1728,14 +1720,14 @@ impl<A, D: Dimension> RawRef<A, D>
     #[inline]
     pub fn raw_view(&self) -> RawArrayView<A, D>
     {
-        unsafe { RawArrayView::new(*self._ptr(), self._dim().clone(), self._strides().clone()) }
+        unsafe { RawArrayView::new(*self._ptr(), StridedLayout::new(self._dim().clone(), self._strides().clone())) }
     }
 
     /// Return a raw mutable view of the array.
     #[inline]
     pub fn raw_view_mut(&mut self) -> RawArrayViewMut<A, D>
     {
-        unsafe { RawArrayViewMut::new(*self._ptr(), self._dim().clone(), self._strides().clone()) }
+        unsafe { RawArrayViewMut::new(*self._ptr(), StridedLayout::new(self._dim().clone(), self._strides().clone())) }
     }
 }
 
@@ -1754,7 +1746,10 @@ where
     {
         self.try_ensure_unique(); // for ArcArray
         unsafe {
-            RawArrayViewMut::new(self.parts.ptr, self.parts.layout.dim.clone(), self.parts.layout.strides.clone())
+            RawArrayViewMut::new(
+                self.parts.ptr,
+                StridedLayout::new(self.parts.layout.dim.clone(), self.parts.layout.strides.clone()),
+            )
         }
     }
 
@@ -1765,7 +1760,7 @@ where
     pub(crate) unsafe fn raw_view_mut_unchecked(&mut self) -> RawArrayViewMut<A, D>
     where S: DataOwned
     {
-        RawArrayViewMut::new(*self._ptr(), self._dim().clone(), self._strides().clone())
+        RawArrayViewMut::new(*self._ptr(), StridedLayout::new(self._dim().clone(), self._strides().clone()))
     }
 
     /// Return the array’s data as a slice, if it is contiguous and in standard order.
@@ -1800,7 +1795,7 @@ where
     {
         if self.is_contiguous() {
             self.ensure_unique();
-            let offset = offset_from_low_addr_ptr_to_logical_ptr(self._dim(), self._strides());
+            let offset = self._layout().low_addr_offset();
             unsafe { Ok(slice::from_raw_parts_mut(self._ptr().sub(offset).as_ptr(), self.len())) }
         } else {
             Err(self)
@@ -1843,7 +1838,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     pub fn as_slice_memory_order(&self) -> Option<&[A]>
     {
         if self.is_contiguous() {
-            let offset = offset_from_low_addr_ptr_to_logical_ptr(self._dim(), self._strides());
+            let offset = self._layout().low_addr_offset();
             unsafe { Some(slice::from_raw_parts(self._ptr().sub(offset).as_ptr(), self.len())) }
         } else {
             None
@@ -1866,7 +1861,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     pub(crate) fn try_as_slice_memory_order_mut(&mut self) -> Result<&mut [A], &mut Self>
     {
         if self.is_contiguous() {
-            let offset = offset_from_low_addr_ptr_to_logical_ptr(self._dim(), self._strides());
+            let offset = self._layout().low_addr_offset();
             unsafe { Ok(slice::from_raw_parts_mut(self._ptr().sub(offset).as_ptr(), self.len())) }
         } else {
             Err(self)
@@ -1957,7 +1952,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
         // Try to reshape the array as a view into the existing data
         match reshape_dim(self._dim(), self._strides(), &shape, order) {
             Ok(to_strides) => unsafe {
-                return Ok(CowArray::from(ArrayView::new(*self._ptr(), shape, to_strides)));
+                return Ok(CowArray::from(ArrayView::new(*self._ptr(), StridedLayout::new(shape, to_strides))));
             },
             Err(err) if err.kind() == ErrorKind::IncompatibleShape => {
                 return Err(error::incompatible_shapes(self._dim(), &shape));
@@ -2423,7 +2418,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
 
         // Note: zero strides are safe precisely because we return an read-only view
         let broadcast_strides = upcast(&dim, self._dim(), self._strides())?;
-        unsafe { Some(ArrayView::new(*self._ptr(), dim, broadcast_strides)) }
+        unsafe { Some(ArrayView::new(*self._ptr(), StridedLayout::new(dim, broadcast_strides))) }
     }
 
     /// For two arrays or views, find their common shape if possible and

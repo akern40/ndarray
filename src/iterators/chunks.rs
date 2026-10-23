@@ -19,8 +19,7 @@ impl_ndproducer! {
         type Dim = D;
 
         unsafe fn item(&self, ptr) {
-            ArrayView::new_(ptr, self.chunk.clone(),
-                            self.inner_strides.clone())
+            ArrayView::new_(ptr, StridedLayout::new(self.chunk.clone(), self.inner_strides.clone()))
         }
     }
 }
@@ -117,9 +116,7 @@ impl_ndproducer! {
         type Dim = D;
 
         unsafe fn item(&self, ptr) {
-            ArrayViewMut::new_(ptr,
-                               self.chunk.clone(),
-                               self.inner_strides.clone())
+            ArrayViewMut::new_(ptr, StridedLayout::new(self.chunk.clone(), self.inner_strides.clone()))
         }
     }
 }
@@ -204,10 +201,7 @@ impl_iterator! {
 
         fn item(&mut self, ptr) {
             unsafe {
-                ArrayView::new(
-                    ptr,
-                    self.chunk.clone(),
-                    self.inner_strides.clone())
+                ArrayView::new(ptr, StridedLayout::new(self.chunk.clone(), self.inner_strides.clone()))
             }
         }
     }
@@ -226,10 +220,7 @@ impl_iterator! {
 
         fn item(&mut self, ptr) {
             unsafe {
-                ArrayViewMut::new(
-                    ptr,
-                    self.chunk.clone(),
-                    self.inner_strides.clone())
+                ArrayViewMut::new(ptr, StridedLayout::new(self.chunk.clone(), self.inner_strides.clone()))
             }
         }
     }
