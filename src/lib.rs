@@ -222,13 +222,14 @@ mod dimension;
 pub use crate::zip::{FoldWhile, IntoNdProducer, NdProducer, Zip};
 
 pub use crate::layout::strided::StridedLayout;
-#[allow(deprecated)]
-pub use crate::layout::{Layout, LayoutBitset};
+pub use crate::layout::traits::{Layout, Strided};
+pub use crate::layout::LayoutBitset;
 
 /// Implementation's prelude. Common types used everywhere.
 mod imp_prelude
 {
     pub use crate::dimension::DimensionExt;
+    pub use crate::layout::traits::{Layout, Strided};
     pub use crate::prelude::*;
     pub use crate::ArcArray;
     pub use crate::{

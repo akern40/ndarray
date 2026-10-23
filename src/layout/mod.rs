@@ -12,6 +12,6 @@ mod bitset;
 pub mod rank;
 pub mod ranked;
 pub mod strided;
+pub mod traits;
 
-#[allow(deprecated)]
-pub use bitset::{Layout, LayoutBitset};
+pub use bitset::LayoutBitset;

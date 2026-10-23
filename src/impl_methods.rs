@@ -70,7 +70,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     /// Return the total number of elements in the array.
     pub fn len(&self) -> usize
     {
-        self._dim().size()
+        self.0.layout.len()
     }
 
     /// Return the length of `axis`.
@@ -82,7 +82,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     #[track_caller]
     pub fn len_of(&self, axis: Axis) -> usize
     {
-        self._dim()[axis.index()]
+        self.0.layout.len_of(axis)
     }
 
     /// Return whether the array has any elements
@@ -94,7 +94,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     /// Return the number of dimensions (axes) in the array
     pub fn ndim(&self) -> usize
     {
-        self._dim().ndim()
+        self.0.layout.ndim()
     }
 
     /// Return the shape of the array in its “pattern” form,
@@ -150,15 +150,13 @@ impl<A, D: Dimension> LayoutRef<A, D>
     /// ```
     pub fn shape(&self) -> &[usize]
     {
-        self._dim().slice()
+        self.0.layout.shape()
     }
 
     /// Return the strides of the array as a slice.
     pub fn strides(&self) -> &[isize]
     {
-        let s = self._strides().slice();
-        // reinterpret unsigned integer as signed
-        unsafe { slice::from_raw_parts(s.as_ptr() as *const _, s.len()) }
+        self.0.layout.strides()
     }
 
     /// Return the stride of `axis`.
@@ -170,8 +168,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     #[track_caller]
     pub fn stride_of(&self, axis: Axis) -> isize
     {
-        // strides are reinterpreted as isize
-        self._strides()[axis.index()] as isize
+        self.0.layout.stride_of(axis)
     }
 }
 
