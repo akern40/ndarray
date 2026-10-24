@@ -196,6 +196,7 @@ mod geomspace;
 mod indexes;
 mod iterators;
 mod accessor;
+mod sparse;
 pub mod layout;
 mod linalg_traits;
 mod linspace;
@@ -225,6 +226,7 @@ pub use crate::accessor::{Accessor, Dense};
 pub use crate::layout::strided::StridedLayout;
 pub use crate::layout::traits::{AxisOps, Layout, Strided};
 pub use crate::layout::LayoutBitset;
+pub use crate::sparse::{OwnedSparse, Sparse, SparseArray, SparseHandle};
 
 /// Implementation's prelude. Common types used everywhere.
 mod imp_prelude

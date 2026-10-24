@@ -175,6 +175,164 @@ impl<Acc: Accessor, D: Dimension> ArrayRefBase<Acc, D>
     }
 }
 
+impl<Acc: Accessor, D: Dimension> ArrayRefBase<Acc, D>
+{
+    /// Return a sliced view of the array.
+    ///
+    /// See [*Slicing*](#slicing) for full documentation.
+    /// See also [`s!`], [`SliceArg`], and [`SliceInfo`](crate::SliceInfo).
+    ///
+    /// **Panics** if an index is out of bounds or step size is zero.<br>
+    /// (**Panics** if `D` is `IxDyn` and `info` does not match the number of array axes.)
+    #[track_caller]
+    pub fn slice<I>(&self, info: I) -> ArrayBase<ViewRepr<&'_ Acc>, I::OutDim>
+    where I: SliceArg<D>
+    {
+        self.view().slice_move(info)
+    }
+
+    /// Return a sliced read-write view of the array.
+    ///
+    /// See [*Slicing*](#slicing) for full documentation.
+    /// See also [`s!`], [`SliceArg`], and [`SliceInfo`](crate::SliceInfo).
+    ///
+    /// **Panics** if an index is out of bounds or step size is zero.<br>
+    /// (**Panics** if `D` is `IxDyn` and `info` does not match the number of array axes.)
+    #[track_caller]
+    pub fn slice_mut<I>(&mut self, info: I) -> ArrayBase<ViewRepr<&'_ mut Acc>, I::OutDim>
+    where I: SliceArg<D>
+    {
+        self.view_mut().slice_move(info)
+    }
+
+    /// Return a view of the array, sliced along the specified axis.
+    ///
+    /// **Panics** if an index is out of bounds or step size is zero.<br>
+    /// **Panics** if `axis` is out of bounds.
+    #[track_caller]
+    #[must_use = "slice_axis returns an array view with the sliced result"]
+    pub fn slice_axis(&self, axis: Axis, indices: Slice) -> ArrayBase<ViewRepr<&'_ Acc>, D>
+    {
+        let mut view = self.view();
+        view.slice_axis_inplace(axis, indices);
+        view
+    }
+
+    /// Return a mutable view of the array, sliced along the specified axis.
+    ///
+    /// **Panics** if an index is out of bounds or step size is zero.<br>
+    /// **Panics** if `axis` is out of bounds.
+    #[track_caller]
+    #[must_use = "slice_axis_mut returns an array view with the sliced result"]
+    pub fn slice_axis_mut(&mut self, axis: Axis, indices: Slice) -> ArrayBase<ViewRepr<&'_ mut Acc>, D>
+    {
+        let mut view_mut = self.view_mut();
+        view_mut.slice_axis_inplace(axis, indices);
+        view_mut
+    }
+
+    /// Return a view of a slice of the array, with a closure specifying the
+    /// slice for each axis.
+    ///
+    /// This is especially useful for code which is generic over the
+    /// dimensionality of the array.
+    ///
+    /// **Panics** if an index is out of bounds or step size is zero.
+    #[track_caller]
+    pub fn slice_each_axis<F>(&self, f: F) -> ArrayBase<ViewRepr<&'_ Acc>, D>
+    where F: FnMut(AxisDescription) -> Slice
+    {
+        let mut view = self.view();
+        view.slice_each_axis_inplace(f);
+        view
+    }
+
+    /// Return a mutable view of a slice of the array, with a closure
+    /// specifying the slice for each axis.
+    ///
+    /// This is especially useful for code which is generic over the
+    /// dimensionality of the array.
+    ///
+    /// **Panics** if an index is out of bounds or step size is zero.
+    #[track_caller]
+    pub fn slice_each_axis_mut<F>(&mut self, f: F) -> ArrayBase<ViewRepr<&'_ mut Acc>, D>
+    where F: FnMut(AxisDescription) -> Slice
+    {
+        let mut view = self.view_mut();
+        view.slice_each_axis_inplace(f);
+        view
+    }
+
+    /// Returns a view restricted to `index` along the axis, with the axis
+    /// removed.
+    ///
+    /// See [*Subviews*](#subviews) for full documentation.
+    ///
+    /// **Panics** if `axis` or `index` is out of bounds.
+    ///
+    /// ```
+    /// use ndarray::{arr2, ArrayView, Axis};
+    ///
+    /// let a = arr2(&[[1., 2. ],    // ... axis 0, row 0
+    ///                [3., 4. ],    // --- axis 0, row 1
+    ///                [5., 6. ]]);  // ... axis 0, row 2
+    /// //               .   \
+    /// //                .   axis 1, column 1
+    /// //                 axis 1, column 0
+    /// assert!(
+    ///     a.index_axis(Axis(0), 1) == ArrayView::from(&[3., 4.]) &&
+    ///     a.index_axis(Axis(1), 1) == ArrayView::from(&[2., 4., 6.])
+    /// );
+    /// ```
+    #[track_caller]
+    pub fn index_axis(&self, axis: Axis, index: usize) -> ArrayBase<ViewRepr<&'_ Acc>, D::Smaller>
+    where D: RemoveAxis
+    {
+        self.view().index_axis_move(axis, index)
+    }
+
+    /// Returns a mutable view restricted to `index` along the axis, with the
+    /// axis removed.
+    ///
+    /// **Panics** if `axis` or `index` is out of bounds.
+    ///
+    /// ```
+    /// use ndarray::{arr2, aview2, Axis};
+    ///
+    /// let mut a = arr2(&[[1., 2. ],
+    ///                    [3., 4. ]]);
+    /// //                   .   \
+    /// //                    .   axis 1, column 1
+    /// //                     axis 1, column 0
+    ///
+    /// {
+    ///     let mut column1 = a.index_axis_mut(Axis(1), 1);
+    ///     column1 += 10.;
+    /// }
+    ///
+    /// assert!(
+    ///     a == aview2(&[[1., 12.],
+    ///                   [3., 14.]])
+    /// );
+    /// ```
+    #[track_caller]
+    pub fn index_axis_mut(&mut self, axis: Axis, index: usize) -> ArrayBase<ViewRepr<&'_ mut Acc>, D::Smaller>
+    where D: RemoveAxis
+    {
+        self.view_mut().index_axis_move(axis, index)
+    }
+
+    /// Return a transposed view of the array.
+    ///
+    /// This is a shorthand for `self.view().reversed_axes()`.
+    ///
+    /// See also the more general methods `.reversed_axes()` and `.swap_axes()`.
+    pub fn t(&self) -> ArrayBase<ViewRepr<&'_ Acc>, D>
+    {
+        self.view().reversed_axes()
+    }
+}
+
 impl<A, D: Dimension> ArrayRef<A, D>
 {
     /// Return a shared view of the array with elements as if they were embedded in cells.
@@ -490,34 +648,6 @@ impl<A, D: Dimension> ArrayRef<A, D>
         IndexedIterMut::new(self.view_mut().into_elements_base())
     }
 
-    /// Return a sliced view of the array.
-    ///
-    /// See [*Slicing*](#slicing) for full documentation.
-    /// See also [`s!`], [`SliceArg`], and [`SliceInfo`](crate::SliceInfo).
-    ///
-    /// **Panics** if an index is out of bounds or step size is zero.<br>
-    /// (**Panics** if `D` is `IxDyn` and `info` does not match the number of array axes.)
-    #[track_caller]
-    pub fn slice<I>(&self, info: I) -> ArrayView<'_, A, I::OutDim>
-    where I: SliceArg<D>
-    {
-        self.view().slice_move(info)
-    }
-
-    /// Return a sliced read-write view of the array.
-    ///
-    /// See [*Slicing*](#slicing) for full documentation.
-    /// See also [`s!`], [`SliceArg`], and [`SliceInfo`](crate::SliceInfo).
-    ///
-    /// **Panics** if an index is out of bounds or step size is zero.<br>
-    /// (**Panics** if `D` is `IxDyn` and `info` does not match the number of array axes.)
-    #[track_caller]
-    pub fn slice_mut<I>(&mut self, info: I) -> ArrayViewMut<'_, A, I::OutDim>
-    where I: SliceArg<D>
-    {
-        self.view_mut().slice_move(info)
-    }
-
     /// Return multiple disjoint, sliced, mutable views of the array.
     ///
     /// See [*Slicing*](#slicing) for full documentation. See also
@@ -651,34 +781,7 @@ impl<Acc: Accessor, D: Dimension> LayoutRefBase<Acc, D>
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
-{
-    /// Return a view of the array, sliced along the specified axis.
-    ///
-    /// **Panics** if an index is out of bounds or step size is zero.<br>
-    /// **Panics** if `axis` is out of bounds.
-    #[track_caller]
-    #[must_use = "slice_axis returns an array view with the sliced result"]
-    pub fn slice_axis(&self, axis: Axis, indices: Slice) -> ArrayView<'_, A, D>
-    {
-        let mut view = self.view();
-        view.slice_axis_inplace(axis, indices);
-        view
-    }
-
-    /// Return a mutable view of the array, sliced along the specified axis.
-    ///
-    /// **Panics** if an index is out of bounds or step size is zero.<br>
-    /// **Panics** if `axis` is out of bounds.
-    #[track_caller]
-    #[must_use = "slice_axis_mut returns an array view with the sliced result"]
-    pub fn slice_axis_mut(&mut self, axis: Axis, indices: Slice) -> ArrayViewMut<'_, A, D>
-    {
-        let mut view_mut = self.view_mut();
-        view_mut.slice_axis_inplace(axis, indices);
-        view_mut
-    }
-}
+impl<A, D: Dimension> ArrayRef<A, D> {}
 
 impl<Acc: Accessor, D: Dimension> LayoutRefBase<Acc, D>
 {
@@ -714,40 +817,7 @@ where
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
-{
-    /// Return a view of a slice of the array, with a closure specifying the
-    /// slice for each axis.
-    ///
-    /// This is especially useful for code which is generic over the
-    /// dimensionality of the array.
-    ///
-    /// **Panics** if an index is out of bounds or step size is zero.
-    #[track_caller]
-    pub fn slice_each_axis<F>(&self, f: F) -> ArrayView<'_, A, D>
-    where F: FnMut(AxisDescription) -> Slice
-    {
-        let mut view = self.view();
-        view.slice_each_axis_inplace(f);
-        view
-    }
-
-    /// Return a mutable view of a slice of the array, with a closure
-    /// specifying the slice for each axis.
-    ///
-    /// This is especially useful for code which is generic over the
-    /// dimensionality of the array.
-    ///
-    /// **Panics** if an index is out of bounds or step size is zero.
-    #[track_caller]
-    pub fn slice_each_axis_mut<F>(&mut self, f: F) -> ArrayViewMut<'_, A, D>
-    where F: FnMut(AxisDescription) -> Slice
-    {
-        let mut view = self.view_mut();
-        view.slice_each_axis_inplace(f);
-        view
-    }
-}
+impl<A, D: Dimension> ArrayRef<A, D> {}
 
 impl<Acc: Accessor, D: Dimension> LayoutRefBase<Acc, D>
 {
@@ -969,65 +1039,6 @@ impl<A, D: Dimension> ArrayRef<A, D>
     {
         assert!(self.ndim() == 0);
         unsafe { &*self.as_ptr() }
-    }
-
-    /// Returns a view restricted to `index` along the axis, with the axis
-    /// removed.
-    ///
-    /// See [*Subviews*](#subviews) for full documentation.
-    ///
-    /// **Panics** if `axis` or `index` is out of bounds.
-    ///
-    /// ```
-    /// use ndarray::{arr2, ArrayView, Axis};
-    ///
-    /// let a = arr2(&[[1., 2. ],    // ... axis 0, row 0
-    ///                [3., 4. ],    // --- axis 0, row 1
-    ///                [5., 6. ]]);  // ... axis 0, row 2
-    /// //               .   \
-    /// //                .   axis 1, column 1
-    /// //                 axis 1, column 0
-    /// assert!(
-    ///     a.index_axis(Axis(0), 1) == ArrayView::from(&[3., 4.]) &&
-    ///     a.index_axis(Axis(1), 1) == ArrayView::from(&[2., 4., 6.])
-    /// );
-    /// ```
-    #[track_caller]
-    pub fn index_axis(&self, axis: Axis, index: usize) -> ArrayView<'_, A, D::Smaller>
-    where D: RemoveAxis
-    {
-        self.view().index_axis_move(axis, index)
-    }
-
-    /// Returns a mutable view restricted to `index` along the axis, with the
-    /// axis removed.
-    ///
-    /// **Panics** if `axis` or `index` is out of bounds.
-    ///
-    /// ```
-    /// use ndarray::{arr2, aview2, Axis};
-    ///
-    /// let mut a = arr2(&[[1., 2. ],
-    ///                    [3., 4. ]]);
-    /// //                   .   \
-    /// //                    .   axis 1, column 1
-    /// //                     axis 1, column 0
-    ///
-    /// {
-    ///     let mut column1 = a.index_axis_mut(Axis(1), 1);
-    ///     column1 += 10.;
-    /// }
-    ///
-    /// assert!(
-    ///     a == aview2(&[[1., 12.],
-    ///                   [3., 14.]])
-    /// );
-    /// ```
-    #[track_caller]
-    pub fn index_axis_mut(&mut self, axis: Axis, index: usize) -> ArrayViewMut<'_, A, D::Smaller>
-    where D: RemoveAxis
-    {
-        self.view_mut().index_axis_move(axis, index)
     }
 }
 
@@ -2615,18 +2626,7 @@ where
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
-{
-    /// Return a transposed view of the array.
-    ///
-    /// This is a shorthand for `self.view().reversed_axes()`.
-    ///
-    /// See also the more general methods `.reversed_axes()` and `.swap_axes()`.
-    pub fn t(&self) -> ArrayView<'_, A, D>
-    {
-        self.view().reversed_axes()
-    }
-}
+impl<A, D: Dimension> ArrayRef<A, D> {}
 
 impl<Acc: Accessor, D: Dimension> LayoutRefBase<Acc, D>
 {
