@@ -235,6 +235,7 @@ mod imp_prelude
     pub use crate::layout::traits::{AxisOps, Layout, Strided};
     pub use crate::prelude::*;
     pub use crate::ArcArray;
+    pub use crate::{ArrayRefBase, LayoutRefBase, RawRefBase};
     pub use crate::{
         CowRepr,
         Data,
@@ -249,7 +250,6 @@ mod imp_prelude
         RemoveAxis,
         ViewRepr,
     };
-    pub use crate::{LayoutRefBase, RawRefBase};
 }
 
 pub mod prelude;

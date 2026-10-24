@@ -773,7 +773,8 @@ impl<Acc: Accessor, D: Dimension> LayoutRefBase<Acc, D>
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+/// Element access through the accessor: valid for any storage family.
+impl<Acc: Accessor, D: Dimension> ArrayRefBase<Acc, D>
 {
     /// Return a reference to the element at `index`, or return `None`
     /// if the index is out of bounds.
@@ -793,10 +794,64 @@ impl<A, D: Dimension> ArrayRef<A, D>
     ///     a[[0, 1]] == 2.
     /// );
     /// ```
-    pub fn get<I>(&self, index: I) -> Option<&A>
+    pub fn get<I>(&self, index: I) -> Option<&Acc::Elem>
     where I: NdIndex<D>
     {
-        unsafe { self.get_ptr(index).map(|ptr| &*ptr) }
+        self._layout()
+            .index_offset_checked(&index)
+            .map(|offset| unsafe { Acc::get(*self._ptr(), offset) })
+    }
+
+    /// Return a mutable reference to the element at `index`, or return `None`
+    /// if the index is out of bounds.
+    pub fn get_mut<I>(&mut self, index: I) -> Option<&mut Acc::Elem>
+    where I: NdIndex<D>
+    {
+        self._layout()
+            .index_offset_checked(&index)
+            .map(|offset| unsafe { Acc::get_mut(*self._ptr(), offset) })
+    }
+
+    /// Perform *unchecked* array indexing.
+    ///
+    /// Return a reference to the element at `index`.
+    ///
+    /// **Note:** only unchecked for non-debug builds of ndarray.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the index is in-bounds.
+    #[inline]
+    pub unsafe fn uget<I>(&self, index: I) -> &Acc::Elem
+    where I: NdIndex<D>
+    {
+        arraytraits::debug_bounds_check(self, &index);
+        let off = self._layout().index_offset(&index);
+        Acc::get(*self._ptr(), off)
+    }
+
+    /// Perform *unchecked* array indexing.
+    ///
+    /// Return a mutable reference to the element at `index`.
+    ///
+    /// **Note:** Only unchecked for non-debug builds of ndarray.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that:
+    ///
+    /// 1. the index is in-bounds and
+    ///
+    /// 2. the data is uniquely held by the array. (This property is guaranteed
+    ///    for `Array` and `ArrayViewMut`, but not for `ArcArray` or `CowArray`.)
+    #[inline]
+    pub unsafe fn uget_mut<I>(&mut self, index: I) -> &mut Acc::Elem
+    where I: NdIndex<D>
+    {
+        // debug_assert!(self.data.is_unique());
+        arraytraits::debug_bounds_check(self, &index);
+        let off = self._layout().index_offset(&index);
+        Acc::get_mut(*self._ptr(), off)
     }
 }
 
@@ -822,17 +877,6 @@ impl<A, D: Dimension> RawRef<A, D>
         self._layout()
             .index_offset_checked(&index)
             .map(move |offset| unsafe { ptr.as_ptr().offset(offset) as *const _ })
-    }
-}
-
-impl<A, D: Dimension> ArrayRef<A, D>
-{
-    /// Return a mutable reference to the element at `index`, or return `None`
-    /// if the index is out of bounds.
-    pub fn get_mut<I>(&mut self, index: I) -> Option<&mut A>
-    where I: NdIndex<D>
-    {
-        unsafe { self.get_mut_ptr(index).map(|ptr| &mut *ptr) }
     }
 }
 
@@ -869,48 +913,6 @@ impl<A, D: Dimension> RawRef<A, D>
 
 impl<A, D: Dimension> ArrayRef<A, D>
 {
-    /// Perform *unchecked* array indexing.
-    ///
-    /// Return a reference to the element at `index`.
-    ///
-    /// **Note:** only unchecked for non-debug builds of ndarray.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that the index is in-bounds.
-    #[inline]
-    pub unsafe fn uget<I>(&self, index: I) -> &A
-    where I: NdIndex<D>
-    {
-        arraytraits::debug_bounds_check(self, &index);
-        let off = self._layout().index_offset(&index);
-        &*self._ptr().as_ptr().offset(off)
-    }
-
-    /// Perform *unchecked* array indexing.
-    ///
-    /// Return a mutable reference to the element at `index`.
-    ///
-    /// **Note:** Only unchecked for non-debug builds of ndarray.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that:
-    ///
-    /// 1. the index is in-bounds and
-    ///
-    /// 2. the data is uniquely held by the array. (This property is guaranteed
-    ///    for `Array` and `ArrayViewMut`, but not for `ArcArray` or `CowArray`.)
-    #[inline]
-    pub unsafe fn uget_mut<I>(&mut self, index: I) -> &mut A
-    where I: NdIndex<D>
-    {
-        // debug_assert!(self.data.is_unique());
-        arraytraits::debug_bounds_check(self, &index);
-        let off = self._layout().index_offset(&index);
-        &mut *self._ptr().as_ptr().offset(off)
-    }
-
     /// Swap elements at indices `index1` and `index2`.
     ///
     /// Indices may be equal.

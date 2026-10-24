@@ -31,6 +31,22 @@ pub unsafe trait Accessor
     ///
     /// The resulting handle must stay within (or one past) the buffer.
     unsafe fn offset(handle: Self::Handle, by: isize) -> Self::Handle;
+
+    /// The element at `offset` from `handle`.
+    ///
+    /// # Safety
+    ///
+    /// `offset` must be in bounds of the buffer and the element initialized;
+    /// the returned borrow must not alias a live `&mut` to the same element.
+    unsafe fn get<'a>(handle: Self::Handle, offset: isize) -> &'a Self::Elem;
+
+    /// The element at `offset` from `handle`, mutably.
+    ///
+    /// # Safety
+    ///
+    /// As [`get`](Self::get), and the caller must have unique access to the
+    /// element (the layout must be unique and the storage uniquely owned).
+    unsafe fn get_mut<'a>(handle: Self::Handle, offset: isize) -> &'a mut Self::Elem;
 }
 
 /// The dense family: elements in one contiguous allocation, addressed by a
@@ -54,5 +70,17 @@ unsafe impl<A> Accessor for Dense<A>
     unsafe fn offset(handle: NonNull<A>, by: isize) -> NonNull<A>
     {
         NonNull::new_unchecked(handle.as_ptr().offset(by))
+    }
+
+    #[inline(always)]
+    unsafe fn get<'a>(handle: NonNull<A>, offset: isize) -> &'a A
+    {
+        &*handle.as_ptr().offset(offset)
+    }
+
+    #[inline(always)]
+    unsafe fn get_mut<'a>(handle: NonNull<A>, offset: isize) -> &'a mut A
+    {
+        &mut *handle.as_ptr().offset(offset)
     }
 }

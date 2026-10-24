@@ -18,6 +18,7 @@ use std::{iter::FromIterator, slice};
 
 use crate::imp_prelude::*;
 use crate::Arc;
+use crate::{Accessor, ArrayRefBase};
 
 use crate::{
     dimension,
@@ -37,11 +38,12 @@ pub(crate) fn array_out_of_bounds() -> !
 }
 
 #[inline(always)]
-pub fn debug_bounds_check<A, D, I, T>(_a: &T, _index: &I)
+pub fn debug_bounds_check<Acc, D, I, T>(_a: &T, _index: &I)
 where
+    Acc: Accessor,
     D: Dimension,
     I: NdIndex<D>,
-    T: AsRef<LayoutRef<A, D>> + ?Sized,
+    T: AsRef<LayoutRefBase<Acc, D>> + ?Sized,
 {
     let _layout_ref = _a.as_ref();
     debug_bounds_check_ref!(_layout_ref, *_index);
@@ -50,46 +52,43 @@ where
 /// Access the element at **index**.
 ///
 /// **Panics** if index is out of bounds.
-impl<A, D, I> Index<I> for ArrayRef<A, D>
+impl<Acc, D, I> Index<I> for ArrayRefBase<Acc, D>
 where
+    Acc: Accessor,
     D: Dimension,
     I: NdIndex<D>,
 {
-    type Output = A;
-
+    type Output = Acc::Elem;
     #[inline]
     fn index(&self, index: I) -> &Self::Output
     {
         debug_bounds_check_ref!(self, index);
-        unsafe {
-            &*self._ptr().as_ptr().offset(
-                self._layout()
-                    .index_offset_checked(&index)
-                    .unwrap_or_else(|| array_out_of_bounds()),
-            )
-        }
+        let offset = self
+            ._layout()
+            .index_offset_checked(&index)
+            .unwrap_or_else(|| array_out_of_bounds());
+        unsafe { Acc::get(*self._ptr(), offset) }
     }
 }
 
 /// Access the element at **index** mutably.
 ///
 /// **Panics** if index is out of bounds.
-impl<A, D, I> IndexMut<I> for ArrayRef<A, D>
+impl<Acc, D, I> IndexMut<I> for ArrayRefBase<Acc, D>
 where
+    Acc: Accessor,
     D: Dimension,
     I: NdIndex<D>,
 {
     #[inline]
-    fn index_mut(&mut self, index: I) -> &mut A
+    fn index_mut(&mut self, index: I) -> &mut Acc::Elem
     {
         debug_bounds_check_ref!(self, index);
-        unsafe {
-            &mut *self.as_mut_ptr().offset(
-                self._layout()
-                    .index_offset_checked(&index)
-                    .unwrap_or_else(|| array_out_of_bounds()),
-            )
-        }
+        let offset = self
+            ._layout()
+            .index_offset_checked(&index)
+            .unwrap_or_else(|| array_out_of_bounds());
+        unsafe { Acc::get_mut(*self._ptr(), offset) }
     }
 }
 
@@ -100,7 +99,7 @@ impl<S, D, I> Index<I> for ArrayBase<S, D>
 where
     D: Dimension,
     I: NdIndex<D>,
-    S: Data<Acc = Dense<<S as RawData>::Elem>>,
+    S: Data,
 {
     type Output = S::Elem;
 
@@ -118,7 +117,7 @@ impl<S, D, I> IndexMut<I> for ArrayBase<S, D>
 where
     D: Dimension,
     I: NdIndex<D>,
-    S: DataMut<Acc = Dense<<S as RawData>::Elem>>,
+    S: DataMut,
 {
     #[inline]
     fn index_mut(&mut self, index: I) -> &mut S::Elem
