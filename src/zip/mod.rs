@@ -76,7 +76,7 @@ fn array_layout<D: Dimension>(dim: &D, strides: &D) -> LayoutBitset
     }
 }
 
-impl<H: Handle, D> LayoutRefBase<H, D>
+impl<B: Buffer, D> LayoutRefBase<B, D>
 where D: Dimension
 {
     pub(crate) fn layout_impl(&self) -> LayoutBitset
@@ -306,9 +306,9 @@ where D: Dimension
 impl<P, D> Zip<P, D>
 where D: Dimension
 {
-    fn for_each_core<F, H>(&mut self, acc: H, mut function: F) -> FoldWhile<H>
+    fn for_each_core<F, Acc>(&mut self, acc: Acc, mut function: F) -> FoldWhile<Acc>
     where
-        F: FnMut(H, P::Item) -> FoldWhile<H>,
+        F: FnMut(Acc, P::Item) -> FoldWhile<Acc>,
         P: ZippableTuple<Dim = D>,
     {
         if self.dimension.ndim() == 0 {
@@ -320,9 +320,9 @@ where D: Dimension
         }
     }
 
-    fn for_each_core_contiguous<F, H>(&mut self, acc: H, mut function: F) -> FoldWhile<H>
+    fn for_each_core_contiguous<F, Acc>(&mut self, acc: Acc, mut function: F) -> FoldWhile<Acc>
     where
-        F: FnMut(H, P::Item) -> FoldWhile<H>,
+        F: FnMut(Acc, P::Item) -> FoldWhile<Acc>,
         P: ZippableTuple<Dim = D>,
     {
         debug_assert!(self.layout.is(LayoutBitset::CORDER | LayoutBitset::FORDER));
@@ -340,11 +340,11 @@ where D: Dimension
     /// `strides`: strides for the elements in this stretch
     /// `len`: number of elements
     /// `function`: closure
-    unsafe fn inner<F, H>(
-        &self, mut acc: H, ptr: P::Ptr, strides: P::Stride, len: usize, function: &mut F,
-    ) -> FoldWhile<H>
+    unsafe fn inner<F, Acc>(
+        &self, mut acc: Acc, ptr: P::Ptr, strides: P::Stride, len: usize, function: &mut F,
+    ) -> FoldWhile<Acc>
     where
-        F: FnMut(H, P::Item) -> FoldWhile<H>,
+        F: FnMut(Acc, P::Item) -> FoldWhile<Acc>,
         P: ZippableTuple,
     {
         let mut i = 0;
@@ -356,9 +356,9 @@ where D: Dimension
         FoldWhile::Continue(acc)
     }
 
-    fn for_each_core_strided<F, H>(&mut self, acc: H, function: F) -> FoldWhile<H>
+    fn for_each_core_strided<F, Acc>(&mut self, acc: Acc, function: F) -> FoldWhile<Acc>
     where
-        F: FnMut(H, P::Item) -> FoldWhile<H>,
+        F: FnMut(Acc, P::Item) -> FoldWhile<Acc>,
         P: ZippableTuple<Dim = D>,
     {
         let n = self.dimension.ndim();
@@ -373,9 +373,9 @@ where D: Dimension
     }
 
     // Non-contiguous but preference for C - unroll over Axis(ndim - 1)
-    fn for_each_core_strided_c<F, H>(&mut self, mut acc: H, mut function: F) -> FoldWhile<H>
+    fn for_each_core_strided_c<F, Acc>(&mut self, mut acc: Acc, mut function: F) -> FoldWhile<Acc>
     where
-        F: FnMut(H, P::Item) -> FoldWhile<H>,
+        F: FnMut(Acc, P::Item) -> FoldWhile<Acc>,
         P: ZippableTuple<Dim = D>,
     {
         let n = self.dimension.ndim();
@@ -397,9 +397,9 @@ where D: Dimension
     }
 
     // Non-contiguous but preference for F - unroll over Axis(0)
-    fn for_each_core_strided_f<F, H>(&mut self, mut acc: H, mut function: F) -> FoldWhile<H>
+    fn for_each_core_strided_f<F, Acc>(&mut self, mut acc: Acc, mut function: F) -> FoldWhile<Acc>
     where
-        F: FnMut(H, P::Item) -> FoldWhile<H>,
+        F: FnMut(Acc, P::Item) -> FoldWhile<Acc>,
         P: ZippableTuple<Dim = D>,
     {
         let unroll_axis = 0;
@@ -612,9 +612,9 @@ macro_rules! map_impl {
             ///
             /// assert_eq!(sum_prod_nonzip, sum_prod_zip);
             /// ```
-            pub fn fold<F, H>(mut self, acc: H, mut function: F) -> H
+            pub fn fold<F, Acc>(mut self, acc: Acc, mut function: F) -> Acc
             where
-                F: FnMut(H, $($p::Item),*) -> H,
+                F: FnMut(Acc, $($p::Item),*) -> Acc,
             {
                 self.for_each_core(acc, move |acc, args| {
                     let ($($p,)*) = args;
@@ -625,9 +625,9 @@ macro_rules! map_impl {
             /// Apply a fold function to the input arrays while the return
             /// value is `FoldWhile::Continue`, visiting elements in lock step.
             ///
-            pub fn fold_while<F, H>(mut self, acc: H, mut function: F)
-                -> FoldWhile<H>
-                where F: FnMut(H, $($p::Item),*) -> FoldWhile<H>
+            pub fn fold_while<F, Acc>(mut self, acc: Acc, mut function: F)
+                -> FoldWhile<Acc>
+                where F: FnMut(Acc, $($p::Item),*) -> FoldWhile<Acc>
             {
                 self.for_each_core(acc, move |acc, args| {
                     let ($($p,)*) = args;

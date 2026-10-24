@@ -21,7 +21,7 @@ where S: RawData<Elem = A>
     ///
     /// See ArrayView::from_shape_ptr for general pointer validity documentation.
     #[inline]
-    pub(crate) unsafe fn from_data_ptr(data: S, ptr: S::Handle) -> Self
+    pub(crate) unsafe fn from_data_ptr(data: S, ptr: <S::Buf as Buffer>::Handle) -> Self
     {
         let array = ArrayBase {
             data,

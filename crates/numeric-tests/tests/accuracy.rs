@@ -42,8 +42,8 @@ where A: LinalgScalar
 fn reference_mat_mul<A, S, S2>(lhs: &ArrayBase<S, Ix2>, rhs: &ArrayBase<S2, Ix2>) -> Array<A, Ix2>
 where
     A: LinalgScalar,
-    S: Data<Elem = A, Handle = std::ptr::NonNull<A>>,
-    S2: Data<Elem = A, Handle = std::ptr::NonNull<A>>,
+    S: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
+    S2: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
 {
     let ((m, k), (_, n)) = (lhs.dim(), rhs.dim());
     let mut res_elems = Array::zeros(m * n);

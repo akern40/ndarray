@@ -44,7 +44,7 @@ impl<A> ArrayRef<A, Ix2>
     }
 }
 
-impl<H: Handle> LayoutRefBase<H, Ix2>
+impl<B: Buffer> LayoutRefBase<B, Ix2>
 {
     /// Return the number of rows (length of `Axis(0)`) in the two-dimensional array.
     ///
@@ -103,7 +103,7 @@ impl<A> ArrayRef<A, Ix2>
     }
 }
 
-impl<H: Handle> LayoutRefBase<H, Ix2>
+impl<B: Buffer> LayoutRefBase<B, Ix2>
 {
     /// Return the number of columns (length of `Axis(1)`) in the two-dimensional array.
     ///

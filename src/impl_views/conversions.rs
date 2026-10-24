@@ -14,7 +14,6 @@ use std::mem::MaybeUninit;
 
 use crate::imp_prelude::*;
 
-use crate::handle::Handle;
 use crate::{Baseiter, ElementsBase, ElementsBaseMut};
 
 use crate::dimension::offset_from_low_addr_ptr_to_logical_ptr;
@@ -23,25 +22,25 @@ use crate::math_cell::MathCell;
 use crate::IndexLonger;
 
 /// Methods for read-only array views.
-impl<H, D> ArrayBase<ViewRepr<&H>, D>
+impl<B, D> ArrayBase<View<'_, B>, D>
 where
-    H: Handle,
+    B: Buffer,
     D: Dimension,
 {
     #[inline]
-    pub(crate) fn into_base_iter(self) -> Baseiter<H, D>
+    pub(crate) fn into_base_iter(self) -> Baseiter<B::Handle, D>
     {
         unsafe { Baseiter::new(self.parts.handle, self.parts.layout) }
     }
 }
 
-impl<H, D> ArrayBase<ViewRepr<&mut H>, D>
+impl<B, D> ArrayBase<ViewMut<'_, B>, D>
 where
-    H: Handle,
+    B: Buffer,
     D: Dimension,
 {
     #[inline]
-    pub(crate) fn into_base_iter(self) -> Baseiter<H, D>
+    pub(crate) fn into_base_iter(self) -> Baseiter<B::Handle, D>
     {
         unsafe { Baseiter::new(self.parts.handle, self.parts.layout) }
     }

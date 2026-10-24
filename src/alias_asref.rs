@@ -1,3 +1,4 @@
+use crate::DenseBuf;
 use crate::{
     iter::Axes,
     ArrayBase,
@@ -13,9 +14,7 @@ use crate::{
 };
 
 /// Functions coming from RawRef
-use core::ptr::NonNull;
-
-impl<A, S: RawData<Elem = A, Handle = NonNull<A>>, D: Dimension> ArrayBase<S, D>
+impl<A, S: RawData<Elem = A, Buf = DenseBuf<A>>, D: Dimension> ArrayBase<S, D>
 {
     /// Return a raw pointer to the element at `index`, or return `None`
     /// if the index is out of bounds.

@@ -4,23 +4,36 @@
 use std::fmt;
 use std::ptr::NonNull;
 
-use crate::data_traits::{Data, DataMut, RawData, RawDataClone, RawDataMut};
+use crate::buffer::Buffer;
 use crate::dimension::IntoDimension;
 use crate::handle::Handle;
-use crate::{ArrayBase, Dimension};
+use crate::storage::{Owned, View};
+use crate::{ArrayBase, Dimension, RawData};
 
 /// The buffer behind a sparse array: a fill value plus `(offset, value)` entries sorted by offset.
-pub struct SparseBuf<A>
+pub struct SparseBuf<A>(Box<SparseInner<A>>);
+
+/// Heap-allocated so handles stay valid when the `SparseBuf` value moves.
+#[derive(Debug, Clone)]
+pub struct SparseInner<A>
 {
     span: usize,
     fill: A,
     entries: Vec<(usize, A)>,
 }
 
+impl<A: Clone> Clone for SparseBuf<A>
+{
+    fn clone(&self) -> Self
+    {
+        SparseBuf(self.0.clone())
+    }
+}
+
 /// Handle into a `SparseBuf`: the buffer plus the logical offset of element `[0, .., 0]`.
 pub struct SparseHandle<A>
 {
-    buf: NonNull<SparseBuf<A>>,
+    buf: NonNull<SparseInner<A>>,
     base: isize,
 }
 
@@ -84,99 +97,63 @@ unsafe impl<A: Clone> Handle for SparseHandle<A>
 }
 
 /// Owning sparse storage: a boxed `SparseBuf` (boxed so the handle survives moves of the array).
-pub struct OwnedSparse<A>(NonNull<SparseBuf<A>>);
-
-impl<A> OwnedSparse<A>
-{
-    fn new(buf: SparseBuf<A>) -> (Self, SparseHandle<A>)
-    {
-        let ptr = NonNull::from(Box::leak(Box::new(buf)));
-        (OwnedSparse(ptr), SparseHandle { buf: ptr, base: 0 })
-    }
-
-    fn buf(&self) -> &SparseBuf<A>
-    {
-        unsafe { self.0.as_ref() }
-    }
-}
-
-impl<A> Drop for OwnedSparse<A>
-{
-    fn drop(&mut self)
-    {
-        unsafe { drop(Box::from_raw(self.0.as_ptr())) }
-    }
-}
-
-unsafe impl<A: Send> Send for OwnedSparse<A> {}
-unsafe impl<A: Sync> Sync for OwnedSparse<A> {}
-
-unsafe impl<A: Clone> RawData for OwnedSparse<A>
+unsafe impl<A: Clone> Buffer for SparseBuf<A>
 {
     type Elem = A;
     type Handle = SparseHandle<A>;
 
-    fn _is_pointer_inbounds(&self, handle: SparseHandle<A>) -> bool
+    fn origin(&self) -> SparseHandle<A>
     {
-        handle.buf == self.0 && handle.base >= 0 && handle.base as usize <= self.buf().span
+        SparseHandle {
+            buf: NonNull::from(&*self.0),
+            base: 0,
+        }
     }
 
-    private_impl! {}
-}
-
-unsafe impl<A: Clone> RawDataMut for OwnedSparse<A>
-{
-    fn try_ensure_unique<D>(_: &mut ArrayBase<Self, D>)
-    where
-        Self: Sized,
-        D: Dimension,
+    fn offset_of(&self, handle: SparseHandle<A>) -> isize
     {
+        handle.base
     }
 
-    fn try_is_unique(&mut self) -> Option<bool>
+    fn is_inbounds(&self, handle: SparseHandle<A>) -> bool
     {
-        Some(true)
-    }
-}
-
-unsafe impl<A: Clone> Data for OwnedSparse<A>
-{
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> crate::Array<A, D>
-    where
-        A: Clone,
-        D: Dimension,
-    {
-        self_.view().into_owned()
+        handle.buf == NonNull::from(&*self.0) && handle.base >= 0 && handle.base as usize <= self.0.span
     }
 
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<crate::Array<A, D>, ArrayBase<Self, D>>
-    where D: Dimension
+    fn len(&self) -> usize
     {
-        Err(self_)
+        self.0.span
     }
-}
 
-unsafe impl<A: Clone> DataMut for OwnedSparse<A> {}
-
-unsafe impl<A: Clone> RawDataClone for OwnedSparse<A>
-{
-    unsafe fn clone_with_ptr(&self, handle: SparseHandle<A>) -> (Self, SparseHandle<A>)
+    fn clone_buf(&self) -> Self
     {
-        let buf = self.buf();
-        let (data, fresh) = OwnedSparse::new(SparseBuf {
-            span: buf.span,
-            fill: buf.fill.clone(),
-            entries: buf.entries.clone(),
-        });
-        (data, SparseHandle {
-            buf: fresh.buf,
-            base: handle.base,
-        })
+        self.clone()
+    }
+
+    fn collect<D: Dimension>(view: ArrayBase<View<'_, Self>, D>) -> ArrayBase<Owned<Self>, D>
+    {
+        // Standard layout; keep only the slots that have an explicit entry.
+        let fill = unsafe { &*view.parts.handle.buf.as_ptr() }.fill.clone();
+        let mut entries = Vec::new();
+        let span = view.len();
+        let dim = view.raw_dim();
+        for (k, h) in view.into_base_iter().enumerate() {
+            let inner = unsafe { &*h.buf.as_ptr() };
+            if let Ok(i) = inner
+                .entries
+                .binary_search_by_key(&(h.base as usize), |e| e.0)
+            {
+                entries.push((k, inner.entries[i].1.clone()));
+            }
+        }
+        let buf = SparseBuf(Box::new(SparseInner { span, fill, entries }));
+        let handle = buf.origin();
+        unsafe { ArrayBase::from_data_ptr(Owned(buf), handle).with_strides_dim(dim.default_strides(), dim) }
     }
 }
 
-/// An owned sparse array with a fill value.
-pub type SparseArray<A, D> = ArrayBase<OwnedSparse<A>, D>;
+/// An array in the sparse format, uniquely owned.
+pub type SparseArray<A, D> = ArrayBase<Owned<SparseBuf<A>>, D>;
 
 impl<A: Clone, D: Dimension> SparseArray<A, D>
 {
@@ -189,23 +166,33 @@ impl<A: Clone, D: Dimension> SparseArray<A, D>
             .size_checked()
             .expect("SparseArray::from_elem: shape overflow");
         let strides = dim.default_strides();
-        let (data, handle) = OwnedSparse::new(SparseBuf {
+        let buf = SparseBuf(Box::new(SparseInner {
             span,
             fill,
             entries: Vec::new(),
-        });
-        unsafe { ArrayBase::from_data_ptr(data, handle).with_strides_dim(strides, dim) }
+        }));
+        let handle = buf.origin();
+        unsafe { ArrayBase::from_data_ptr(Owned(buf), handle).with_strides_dim(strides, dim) }
+    }
+}
+
+/// Any storage of the sparse format (owned, shared, view, ...).
+impl<A: Clone, S: RawData<Buf = SparseBuf<A>>, D: Dimension> ArrayBase<S, D>
+{
+    fn inner(&self) -> &SparseInner<A>
+    {
+        unsafe { &*self.parts.handle.buf.as_ptr() }
     }
 
-    /// Number of explicitly stored elements.
+    /// Number of explicitly stored elements in the whole buffer.
     pub fn nnz(&self) -> usize
     {
-        self.data.buf().entries.len()
+        self.inner().entries.len()
     }
 
     /// The fill value.
     pub fn fill_value(&self) -> &A
     {
-        &self.data.buf().fill
+        &self.inner().fill
     }
 }

@@ -14,6 +14,7 @@ pub mod iter;
 mod lanes;
 mod windows;
 
+use crate::DenseBuf;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 use core::ptr::NonNull;
@@ -28,7 +29,7 @@ use crate::handle::Handle;
 use crate::layout::traits::Layout;
 use crate::Ix1;
 use crate::StridedLayout;
-use crate::ViewRepr;
+use crate::{Buffer, View, ViewMut};
 
 use super::{ArrayBase, ArrayView, ArrayViewMut, Axis, Data, NdProducer, RemoveAxis};
 use super::{Dimension, Ix, Ixs};
@@ -211,7 +212,7 @@ clone_bounds!(
 
 impl<'a, H: Handle, D: Dimension> ElementsBase<'a, H, D>
 {
-    pub fn new(v: ArrayBase<ViewRepr<&'a H>, D>) -> Self
+    pub fn new<B: Buffer<Handle = H>>(v: ArrayBase<View<'a, B>, D>) -> Self
     {
         ElementsBase {
             inner: v.into_base_iter(),
@@ -370,7 +371,7 @@ pub struct ElementsBaseMut<'a, H: Handle, D>
 
 impl<'a, H: Handle, D: Dimension> ElementsBaseMut<'a, H, D>
 {
-    pub fn new(v: ArrayBase<ViewRepr<&'a mut H>, D>) -> Self
+    pub fn new<B: Buffer<Handle = H>>(v: ArrayBase<ViewMut<'a, B>, D>) -> Self
     {
         ElementsBaseMut {
             inner: v.into_base_iter(),
@@ -867,7 +868,7 @@ impl<A, D: Dimension> AxisIterCore<A, D>
     fn new<S, Di>(v: ArrayBase<S, Di>, axis: Axis) -> Self
     where
         Di: RemoveAxis<Smaller = D>,
-        S: Data<Elem = A, Handle = NonNull<A>>,
+        S: Data<Elem = A, Buf = DenseBuf<A>>,
     {
         AxisIterCore {
             index: 0,
@@ -875,7 +876,7 @@ impl<A, D: Dimension> AxisIterCore<A, D>
             stride: v.stride_of(axis),
             inner_dim: v.parts.layout.dim.remove_axis(axis),
             inner_strides: v.parts.layout.strides.remove_axis(axis),
-            ptr: v._ptr().as_ptr(),
+            ptr: v.parts.handle.as_ptr(),
         }
     }
 

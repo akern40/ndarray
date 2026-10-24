@@ -108,7 +108,7 @@ pub fn rcarr1<A: Clone>(xs: &[A]) -> ArcArray1<A>
 pub const fn aview0<A>(x: &A) -> ArrayView0<'_, A>
 {
     ArrayBase {
-        data: ViewRepr::new(),
+        data: View::new(),
         parts: ArrayPartsSized::new(
             // Safe because references are always non-null.
             unsafe { NonNull::new_unchecked(x as *const A as *mut A) },
@@ -148,7 +148,7 @@ pub const fn aview1<A>(xs: &[A]) -> ArrayView1<'_, A>
         );
     }
     ArrayBase {
-        data: ViewRepr::new(),
+        data: View::new(),
         parts: ArrayPartsSized::new(
             // Safe because references are always non-null.
             unsafe { NonNull::new_unchecked(xs.as_ptr() as *mut A) },
@@ -206,7 +206,7 @@ pub const fn aview2<A, const N: usize>(xs: &[[A; N]]) -> ArrayView2<'_, A>
         Ix2(cols, 1)
     };
     ArrayBase {
-        data: ViewRepr::new(),
+        data: View::new(),
         parts: ArrayPartsSized::new(ptr, dim, strides),
     }
 }
@@ -362,6 +362,7 @@ mod meshgrid_impl
 {
     use super::MeshIndex;
     use crate::extension::nonnull::nonnull_debug_checked_from_ptr;
+    use crate::DenseBuf;
     use crate::StridedLayout;
     use crate::{
         ArrayBase,
@@ -379,7 +380,6 @@ mod meshgrid_impl
         Ix1,
         LayoutRef1,
     };
-    use core::ptr::NonNull;
 
     /// Construct the correct strides for the `idx`-th entry into meshgrid
     fn construct_strides<A, const N: usize>(
@@ -448,8 +448,8 @@ mod meshgrid_impl
 
     impl<'a, 'b, S1, S2, A: 'b + 'a> Meshgrid for (&'a ArrayBase<S1, Ix1>, &'b ArrayBase<S2, Ix1>)
     where
-        S1: Data<Elem = A, Handle = NonNull<A>>,
-        S2: Data<Elem = A, Handle = NonNull<A>>,
+        S1: Data<Elem = A, Buf = DenseBuf<A>>,
+        S2: Data<Elem = A, Buf = DenseBuf<A>>,
     {
         type Output = (ArrayView2<'a, A>, ArrayView2<'b, A>);
 
@@ -472,9 +472,9 @@ mod meshgrid_impl
     impl<'a, 'b, 'c, S1, S2, S3, A: 'b + 'a + 'c> Meshgrid
         for (&'a ArrayBase<S1, Ix1>, &'b ArrayBase<S2, Ix1>, &'c ArrayBase<S3, Ix1>)
     where
-        S1: Data<Elem = A, Handle = NonNull<A>>,
-        S2: Data<Elem = A, Handle = NonNull<A>>,
-        S3: Data<Elem = A, Handle = NonNull<A>>,
+        S1: Data<Elem = A, Buf = DenseBuf<A>>,
+        S2: Data<Elem = A, Buf = DenseBuf<A>>,
+        S3: Data<Elem = A, Buf = DenseBuf<A>>,
     {
         type Output = (ArrayView3<'a, A>, ArrayView3<'b, A>, ArrayView3<'c, A>);
 
@@ -497,10 +497,10 @@ mod meshgrid_impl
     impl<'a, 'b, 'c, 'd, S1, S2, S3, S4, A: 'a + 'b + 'c + 'd> Meshgrid
         for (&'a ArrayBase<S1, Ix1>, &'b ArrayBase<S2, Ix1>, &'c ArrayBase<S3, Ix1>, &'d ArrayBase<S4, Ix1>)
     where
-        S1: Data<Elem = A, Handle = NonNull<A>>,
-        S2: Data<Elem = A, Handle = NonNull<A>>,
-        S3: Data<Elem = A, Handle = NonNull<A>>,
-        S4: Data<Elem = A, Handle = NonNull<A>>,
+        S1: Data<Elem = A, Buf = DenseBuf<A>>,
+        S2: Data<Elem = A, Buf = DenseBuf<A>>,
+        S3: Data<Elem = A, Buf = DenseBuf<A>>,
+        S4: Data<Elem = A, Buf = DenseBuf<A>>,
     {
         type Output = (ArrayView4<'a, A>, ArrayView4<'b, A>, ArrayView4<'c, A>, ArrayView4<'d, A>);
 
@@ -530,11 +530,11 @@ mod meshgrid_impl
             &'e ArrayBase<S5, Ix1>,
         )
     where
-        S1: Data<Elem = A, Handle = NonNull<A>>,
-        S2: Data<Elem = A, Handle = NonNull<A>>,
-        S3: Data<Elem = A, Handle = NonNull<A>>,
-        S4: Data<Elem = A, Handle = NonNull<A>>,
-        S5: Data<Elem = A, Handle = NonNull<A>>,
+        S1: Data<Elem = A, Buf = DenseBuf<A>>,
+        S2: Data<Elem = A, Buf = DenseBuf<A>>,
+        S3: Data<Elem = A, Buf = DenseBuf<A>>,
+        S4: Data<Elem = A, Buf = DenseBuf<A>>,
+        S5: Data<Elem = A, Buf = DenseBuf<A>>,
     {
         type Output = (ArrayView5<'a, A>, ArrayView5<'b, A>, ArrayView5<'c, A>, ArrayView5<'d, A>, ArrayView5<'e, A>);
 
@@ -579,12 +579,12 @@ mod meshgrid_impl
             &'f ArrayBase<S6, Ix1>,
         )
     where
-        S1: Data<Elem = A, Handle = NonNull<A>>,
-        S2: Data<Elem = A, Handle = NonNull<A>>,
-        S3: Data<Elem = A, Handle = NonNull<A>>,
-        S4: Data<Elem = A, Handle = NonNull<A>>,
-        S5: Data<Elem = A, Handle = NonNull<A>>,
-        S6: Data<Elem = A, Handle = NonNull<A>>,
+        S1: Data<Elem = A, Buf = DenseBuf<A>>,
+        S2: Data<Elem = A, Buf = DenseBuf<A>>,
+        S3: Data<Elem = A, Buf = DenseBuf<A>>,
+        S4: Data<Elem = A, Buf = DenseBuf<A>>,
+        S5: Data<Elem = A, Buf = DenseBuf<A>>,
+        S6: Data<Elem = A, Buf = DenseBuf<A>>,
     {
         type Output = (
             ArrayView6<'a, A>,

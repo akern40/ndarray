@@ -10,7 +10,7 @@ use std::mem;
 use std::ptr::NonNull;
 
 use crate::imp_prelude::*;
-use crate::OwnedRepr;
+use crate::DenseBuf;
 
 use super::Baseiter;
 use crate::impl_owned_array::drop_unreachable_raw;
@@ -19,7 +19,7 @@ use crate::impl_owned_array::drop_unreachable_raw;
 pub struct IntoIter<A, D>
 where D: Dimension
 {
-    array_data: OwnedRepr<A>,
+    array_data: DenseBuf<A>,
     inner: Baseiter<NonNull<A>, D>,
     data_len: usize,
     /// first memory address of an array element
@@ -44,7 +44,7 @@ where D: Dimension
             let inner = Baseiter::new(array_head_ptr, array.parts.layout);
 
             IntoIter {
-                array_data,
+                array_data: array_data.0,
                 inner,
                 data_len,
                 array_head_ptr,

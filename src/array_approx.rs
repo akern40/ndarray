@@ -63,8 +63,8 @@ macro_rules! impl_approx_traits {
             where
                 A: AbsDiffEq<B>,
                 A::Epsilon: Clone,
-                S: Data<Elem = A, Handle = core::ptr::NonNull<A>>,
-                S2: Data<Elem = B, Handle = core::ptr::NonNull<B>>,
+                S: Data<Elem = A, Buf = DenseBuf<A>>,
+                S2: Data<Elem = B, Buf = DenseBuf<B>>,
                 D: Dimension,
             {
                 type Epsilon = A::Epsilon;
@@ -110,8 +110,8 @@ macro_rules! impl_approx_traits {
             where
                 A: RelativeEq<B>,
                 A::Epsilon: Clone,
-                S: Data<Elem = A, Handle = core::ptr::NonNull<A>>,
-                S2: Data<Elem = B, Handle = core::ptr::NonNull<B>>,
+                S: Data<Elem = A, Buf = DenseBuf<A>>,
+                S2: Data<Elem = B, Buf = DenseBuf<B>>,
                 D: Dimension,
             {
                 fn default_max_relative() -> A::Epsilon {
@@ -160,8 +160,8 @@ macro_rules! impl_approx_traits {
             where
                 A: UlpsEq<B>,
                 A::Epsilon: Clone,
-                S: Data<Elem = A, Handle = core::ptr::NonNull<A>>,
-                S2: Data<Elem = B, Handle = core::ptr::NonNull<B>>,
+                S: Data<Elem = A, Buf = DenseBuf<A>>,
+                S2: Data<Elem = B, Buf = DenseBuf<B>>,
                 D: Dimension,
             {
                 fn default_max_ulps() -> u32 {

@@ -80,8 +80,8 @@ fn range_i32(m: Ix, n: Ix) -> Array2<i32>
 fn reference_mat_mul<A, S, S2>(lhs: &ArrayBase<S, Ix2>, rhs: &ArrayBase<S2, Ix2>) -> Array2<A>
 where
     A: LinalgScalar,
-    S: Data<Elem = A, Handle = std::ptr::NonNull<A>>,
-    S2: Data<Elem = A, Handle = std::ptr::NonNull<A>>,
+    S: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
+    S2: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
 {
     let ((m, k), (k2, n)) = (lhs.dim(), rhs.dim());
     assert!(m.checked_mul(n).is_some());
@@ -110,8 +110,8 @@ where
 fn reference_mat_vec_mul<A, S, S2>(lhs: &ArrayBase<S, Ix2>, rhs: &ArrayBase<S2, Ix1>) -> Array1<A>
 where
     A: LinalgScalar,
-    S: Data<Elem = A, Handle = std::ptr::NonNull<A>>,
-    S2: Data<Elem = A, Handle = std::ptr::NonNull<A>>,
+    S: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
+    S2: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
 {
     let ((m, _), k) = (lhs.dim(), rhs.dim());
     reference_mat_mul(
@@ -128,8 +128,8 @@ where
 fn reference_vec_mat_mul<A, S, S2>(lhs: &ArrayBase<S, Ix1>, rhs: &ArrayBase<S2, Ix2>) -> Array1<A>
 where
     A: LinalgScalar,
-    S: Data<Elem = A, Handle = std::ptr::NonNull<A>>,
-    S2: Data<Elem = A, Handle = std::ptr::NonNull<A>>,
+    S: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
+    S2: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
 {
     let (m, (_, n)) = (lhs.dim(), rhs.dim());
     reference_mat_mul(

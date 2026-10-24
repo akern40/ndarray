@@ -8,10 +8,8 @@
 
 //! The data (inner representation) traits for ndarray
 
-use crate::handle::Handle;
 #[allow(unused_imports)]
 use rawpointer::PointerExt;
-use std::ptr::NonNull;
 
 #[cfg(target_has_atomic = "ptr")]
 use alloc::sync::Arc;
@@ -22,9 +20,11 @@ use portable_atomic_util::Arc;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 use std::mem::MaybeUninit;
-use std::mem::{self, size_of};
 
-use crate::{ArcArray, Array, ArrayBase, ArrayRef, CowRepr, Dimension, OwnedArcRepr, OwnedRepr, RawViewRepr, ViewRepr};
+use crate::buffer::Buffer;
+use crate::data_repr::DenseBuf;
+use crate::storage::{Cow, Owned, RawView, RawViewMut, Shared, View, ViewMut};
+use crate::{ArrayBase, Dimension};
 
 /// Array representation trait.
 ///
@@ -41,12 +41,12 @@ pub unsafe trait RawData: Sized
     /// The array element type.
     type Elem;
 
-    /// The storage family: how offsets become elements. Every storage in
-    /// the crate is dense today.
-    type Handle: Handle<Elem = Self::Elem>;
+    /// The buffer type: which format the elements are stored in. The handle
+    /// type is `<Self::Buf as Buffer>::Handle`.
+    type Buf: Buffer<Elem = Self::Elem>;
 
     #[doc(hidden)]
-    fn _is_pointer_inbounds(&self, handle: Self::Handle) -> bool;
+    fn _is_pointer_inbounds(&self, handle: <Self::Buf as Buffer>::Handle) -> bool;
 
     private_decl! {}
 }
@@ -90,10 +90,12 @@ pub unsafe trait RawDataClone: RawData
 {
     #[doc(hidden)]
     /// Unsafe because, `ptr` must point inside the current storage.
-    unsafe fn clone_with_ptr(&self, ptr: Self::Handle) -> (Self, Self::Handle);
+    unsafe fn clone_with_ptr(&self, ptr: <Self::Buf as Buffer>::Handle) -> (Self, <Self::Buf as Buffer>::Handle);
 
     #[doc(hidden)]
-    unsafe fn clone_from_with_ptr(&mut self, other: &Self, ptr: Self::Handle) -> Self::Handle
+    unsafe fn clone_from_with_ptr(
+        &mut self, other: &Self, ptr: <Self::Buf as Buffer>::Handle,
+    ) -> <Self::Buf as Buffer>::Handle
     {
         let (data, ptr) = other.clone_with_ptr(ptr);
         *self = data;
@@ -107,36 +109,7 @@ pub unsafe trait RawDataClone: RawData
 ///
 /// ***Internal trait, see `RawData`.***
 #[allow(clippy::missing_safety_doc)] // not implementable downstream
-pub unsafe trait Data: RawData
-{
-    /// Converts the array to a uniquely owned array, cloning elements if necessary.
-    #[doc(hidden)]
-    #[allow(clippy::wrong_self_convention)]
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
-    where
-        Self::Elem: Clone,
-        D: Dimension;
-
-    /// Converts the array into `Array<A, D>` if this is possible without
-    /// cloning the array elements. Otherwise, returns `self_` unchanged.
-    #[doc(hidden)]
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
-    where D: Dimension;
-
-    /// Return a shared ownership (copy on write) array based on the existing one,
-    /// cloning elements if necessary.
-    #[doc(hidden)]
-    #[allow(clippy::wrong_self_convention)]
-    fn to_shared<D>(self_: &ArrayBase<Self, D>) -> ArcArray<Self::Elem, D>
-    where
-        Self: RawData<Handle = NonNull<<Self as RawData>::Elem>>,
-        Self::Elem: Clone,
-        D: Dimension,
-    {
-        // clone to shared
-        self_.to_owned().into_shared()
-    }
-}
+pub unsafe trait Data: RawData {}
 
 /// Array representation trait.
 ///
@@ -174,346 +147,55 @@ pub unsafe trait DataMut: Data + RawDataMut
     }
 }
 
-unsafe impl<A> RawData for RawViewRepr<*const A>
+/// Array representation trait.
+///
+/// A representation that can become uniquely owned, keeping its format
+/// (a dense view becomes a dense array, a sparse view a sparse array).
+///
+/// ***Internal trait, see `Data`.***
+#[allow(clippy::missing_safety_doc)] // not implementable downstream
+pub unsafe trait IntoOwned: RawData
 {
-    type Elem = A;
-    type Handle = NonNull<A>;
+    /// The uniquely owned storage of this format.
+    type Owned: DataMut<Elem = Self::Elem, Buf = Self::Buf>;
 
-    #[inline(always)]
-    fn _is_pointer_inbounds(&self, _ptr: NonNull<A>) -> bool
-    {
-        true
-    }
-
-    private_impl! {}
-}
-
-unsafe impl<A> RawDataClone for RawViewRepr<*const A>
-{
-    unsafe fn clone_with_ptr(&self, ptr: Self::Handle) -> (Self, Self::Handle)
-    {
-        (*self, ptr)
-    }
-}
-
-unsafe impl<A> RawData for RawViewRepr<*mut A>
-{
-    type Elem = A;
-    type Handle = NonNull<A>;
-
-    #[inline(always)]
-    fn _is_pointer_inbounds(&self, _ptr: NonNull<A>) -> bool
-    {
-        true
-    }
-
-    private_impl! {}
-}
-
-unsafe impl<A> RawDataMut for RawViewRepr<*mut A>
-{
-    #[inline]
-    fn try_ensure_unique<D>(_: &mut ArrayBase<Self, D>)
-    where
-        Self: Sized,
-        D: Dimension,
-    {
-    }
-
-    #[inline]
-    fn try_is_unique(&mut self) -> Option<bool>
-    {
-        None
-    }
-}
-
-unsafe impl<A> RawDataClone for RawViewRepr<*mut A>
-{
-    unsafe fn clone_with_ptr(&self, ptr: Self::Handle) -> (Self, Self::Handle)
-    {
-        (*self, ptr)
-    }
-}
-
-unsafe impl<A> RawData for OwnedArcRepr<A>
-{
-    type Elem = A;
-    type Handle = NonNull<A>;
-
-    fn _is_pointer_inbounds(&self, self_ptr: NonNull<A>) -> bool
-    {
-        self.0._is_pointer_inbounds(self_ptr)
-    }
-
-    private_impl! {}
-}
-
-// NOTE: Copy on write
-unsafe impl<A> RawDataMut for OwnedArcRepr<A>
-where A: Clone
-{
-    fn try_ensure_unique<D>(self_: &mut ArrayBase<Self, D>)
-    where
-        Self: Sized,
-        D: Dimension,
-    {
-        if Arc::get_mut(&mut self_.data.0).is_some() {
-            return;
-        }
-        if self_.parts.layout.dim.size() <= self_.data.0.len() / 2 {
-            // Clone only the visible elements if the current view is less than
-            // half of backing data.
-            *self_ = self_.to_owned().into_shared();
-            return;
-        }
-        let rcvec = &mut self_.data.0;
-        let a_size = mem::size_of::<A>() as isize;
-        let our_off = if a_size != 0 {
-            (self_.parts.handle.as_ptr() as isize - rcvec.as_ptr() as isize) / a_size
-        } else {
-            0
-        };
-        let rvec = Arc::make_mut(rcvec);
-        unsafe {
-            self_.parts.handle = rvec.as_nonnull_mut().offset(our_off);
-        }
-    }
-
-    fn try_is_unique(&mut self) -> Option<bool>
-    {
-        Some(Arc::get_mut(&mut self.0).is_some())
-    }
-}
-
-unsafe impl<A> Data for OwnedArcRepr<A>
-{
-    fn into_owned<D>(mut self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
-    where
-        A: Clone,
-        D: Dimension,
-    {
-        Self::ensure_unique(&mut self_);
-        let data = Arc::try_unwrap(self_.data.0).ok().unwrap();
-        // safe because data is equivalent
-        unsafe {
-            ArrayBase::from_data_ptr(data, self_.parts.handle)
-                .with_strides_dim(self_.parts.layout.strides, self_.parts.layout.dim)
-        }
-    }
-
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
-    where D: Dimension
-    {
-        match Arc::try_unwrap(self_.data.0) {
-            Ok(owned_data) => unsafe {
-                // Safe because the data is equivalent.
-                Ok(ArrayBase::from_data_ptr(owned_data, self_.parts.handle)
-                    .with_strides_dim(self_.parts.layout.strides, self_.parts.layout.dim))
-            },
-            Err(arc_data) => unsafe {
-                // Safe because the data is equivalent; we're just
-                // reconstructing `self_`.
-                Err(ArrayBase::from_data_ptr(OwnedArcRepr(arc_data), self_.parts.handle)
-                    .with_strides_dim(self_.parts.layout.strides, self_.parts.layout.dim))
-            },
-        }
-    }
-
+    #[doc(hidden)]
     #[allow(clippy::wrong_self_convention)]
-    fn to_shared<D>(self_: &ArrayBase<Self, D>) -> ArcArray<Self::Elem, D>
+    fn into_owned<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Self::Owned, D>
     where
         Self::Elem: Clone,
-        D: Dimension,
-    {
-        // to shared using clone of OwnedArcRepr without clone of raw data.
-        self_.clone()
-    }
+        D: Dimension;
+
+    #[doc(hidden)]
+    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<ArrayBase<Self::Owned, D>, ArrayBase<Self, D>>
+    where D: Dimension;
 }
 
-unsafe impl<A> DataMut for OwnedArcRepr<A> where A: Clone {}
-
-unsafe impl<A> RawDataClone for OwnedArcRepr<A>
+/// Array representation trait.
+///
+/// A representation that can become shared (copy-on-write), keeping its format.
+///
+/// ***Internal trait, see `Data`.***
+#[allow(clippy::missing_safety_doc)] // not implementable downstream
+pub unsafe trait IntoShared: Data
 {
-    unsafe fn clone_with_ptr(&self, ptr: Self::Handle) -> (Self, Self::Handle)
-    {
-        // pointer is preserved
-        (self.clone(), ptr)
-    }
-}
+    /// The shared storage of this format.
+    type Shared: DataShared<Elem = Self::Elem, Buf = Self::Buf>;
 
-unsafe impl<A> RawData for OwnedRepr<A>
-{
-    type Elem = A;
-    type Handle = NonNull<A>;
-
-    fn _is_pointer_inbounds(&self, self_ptr: NonNull<A>) -> bool
-    {
-        let slc = self.as_slice();
-        let ptr = slc.as_ptr() as *mut A;
-        let end = unsafe { ptr.add(slc.len()) };
-        self_ptr.as_ptr() >= ptr && self_ptr.as_ptr() <= end
-    }
-
-    private_impl! {}
-}
-
-unsafe impl<A> RawDataMut for OwnedRepr<A>
-{
-    #[inline]
-    fn try_ensure_unique<D>(_: &mut ArrayBase<Self, D>)
-    where
-        Self: Sized,
-        D: Dimension,
-    {
-    }
-
-    #[inline]
-    fn try_is_unique(&mut self) -> Option<bool>
-    {
-        Some(true)
-    }
-}
-
-unsafe impl<A> Data for OwnedRepr<A>
-{
-    #[inline]
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
-    where
-        A: Clone,
-        D: Dimension,
-    {
-        self_
-    }
-
-    #[inline]
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
-    where D: Dimension
-    {
-        Ok(self_)
-    }
-}
-
-unsafe impl<A> DataMut for OwnedRepr<A> {}
-
-unsafe impl<A> RawDataClone for OwnedRepr<A>
-where A: Clone
-{
-    unsafe fn clone_with_ptr(&self, ptr: Self::Handle) -> (Self, Self::Handle)
-    {
-        let mut u = self.clone();
-        let mut new_ptr = u.as_nonnull_mut();
-        if size_of::<A>() != 0 {
-            let our_off = (ptr.as_ptr() as isize - self.as_ptr() as isize) / mem::size_of::<A>() as isize;
-            new_ptr = new_ptr.offset(our_off);
-        }
-        (u, new_ptr)
-    }
-
-    unsafe fn clone_from_with_ptr(&mut self, other: &Self, ptr: Self::Handle) -> Self::Handle
-    {
-        let our_off = if size_of::<A>() != 0 {
-            (ptr.as_ptr() as isize - other.as_ptr() as isize) / mem::size_of::<A>() as isize
-        } else {
-            0
-        };
-        self.clone_from(other);
-        self.as_nonnull_mut().offset(our_off)
-    }
-}
-
-unsafe impl<H: Handle> RawData for ViewRepr<&H>
-{
-    type Elem = H::Elem;
-    type Handle = H;
-    #[inline(always)]
-    fn _is_pointer_inbounds(&self, _handle: H) -> bool
-    {
-        true
-    }
-    private_impl! {}
-}
-
-unsafe impl<H: Handle> Data for ViewRepr<&H>
-{
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
+    #[doc(hidden)]
+    #[allow(clippy::wrong_self_convention)]
+    fn into_shared<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Self::Shared, D>
     where
         Self::Elem: Clone,
-        D: Dimension,
-    {
-        // Densify: visit every logical index in row-major order and copy the element out.
-        let dim = self_.parts.layout.dim.clone();
-        let elems: Vec<H::Elem> = self_
-            .into_base_iter()
-            .map(|handle| unsafe { handle.get(0) }.clone())
-            .collect();
-        unsafe { Array::from_shape_vec_unchecked(dim, elems) }
-    }
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
-    where D: Dimension
-    {
-        Err(self_)
-    }
-}
+        D: Dimension;
 
-unsafe impl<H: Handle> RawDataClone for ViewRepr<&H>
-{
-    unsafe fn clone_with_ptr(&self, ptr: H) -> (Self, H)
-    {
-        (*self, ptr)
-    }
-}
-
-unsafe impl<H: Handle> RawData for ViewRepr<&mut H>
-{
-    type Elem = H::Elem;
-    type Handle = H;
-    #[inline(always)]
-    fn _is_pointer_inbounds(&self, _handle: H) -> bool
-    {
-        true
-    }
-    private_impl! {}
-}
-
-unsafe impl<H: Handle> RawDataMut for ViewRepr<&mut H>
-{
-    #[inline]
-    fn try_ensure_unique<D>(_: &mut ArrayBase<Self, D>)
-    where
-        Self: Sized,
-        D: Dimension,
-    {
-    }
-    #[inline]
-    fn try_is_unique(&mut self) -> Option<bool>
-    {
-        Some(true)
-    }
-}
-
-unsafe impl<H: Handle> Data for ViewRepr<&mut H>
-{
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
+    #[doc(hidden)]
+    #[allow(clippy::wrong_self_convention)]
+    fn to_shared<D>(self_: &ArrayBase<Self, D>) -> ArrayBase<Self::Shared, D>
     where
         Self::Elem: Clone,
-        D: Dimension,
-    {
-        // Densify: visit every logical index in row-major order and copy the element out.
-        let dim = self_.parts.layout.dim.clone();
-        let elems: Vec<H::Elem> = self_
-            .into_base_iter()
-            .map(|handle| unsafe { handle.get(0) }.clone())
-            .collect();
-        unsafe { Array::from_shape_vec_unchecked(dim, elems) }
-    }
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
-    where D: Dimension
-    {
-        Err(self_)
-    }
+        D: Dimension;
 }
-
-unsafe impl<H: Handle> DataMut for ViewRepr<&mut H> {}
 
 /// Array representation trait.
 ///
@@ -528,21 +210,13 @@ unsafe impl<H: Handle> DataMut for ViewRepr<&mut H> {}
 // unsharing storage before mutating it. The initially allocated storage must be mutable so
 // that it can be mutated directly - through .raw_view_mut_unchecked() - for initialization.
 #[allow(clippy::missing_safety_doc)] // not implementable downstream
-pub unsafe trait DataOwned: Data<Handle = NonNull<<Self as RawData>::Elem>>
+pub unsafe trait DataOwned:
+    Data<Buf = DenseBuf<<Self as RawData>::Elem>> + IntoOwned<Owned = Owned<DenseBuf<<Self as RawData>::Elem>>>
 {
     /// Corresponding owned data with MaybeUninit elements
     type MaybeUninit: DataOwned<Elem = MaybeUninit<Self::Elem>> + RawDataSubst<Self::Elem, Output = Self>;
     #[doc(hidden)]
     fn new(elements: Vec<Self::Elem>) -> Self;
-
-    /// Converts the data representation to a shared (copy on write)
-    /// representation, cloning the array elements if necessary.
-    #[doc(hidden)]
-    #[allow(clippy::wrong_self_convention)]
-    fn into_shared<D>(self_: ArrayBase<Self, D>) -> ArcArray<Self::Elem, D>
-    where
-        Self::Elem: Clone,
-        D: Dimension;
 }
 
 /// Array representation trait.
@@ -552,176 +226,33 @@ pub unsafe trait DataOwned: Data<Handle = NonNull<<Self as RawData>::Elem>>
 /// ***Internal trait, see `Data`.***
 #[allow(clippy::missing_safety_doc)] // not implementable downstream
 pub unsafe trait DataShared: Clone + Data + RawDataClone {}
-
-unsafe impl<A> DataShared for OwnedArcRepr<A> {}
-unsafe impl<H: Handle> DataShared for ViewRepr<&H> {}
-
-unsafe impl<A> DataOwned for OwnedRepr<A>
+unsafe impl<A> DataOwned for Owned<DenseBuf<A>>
 {
-    type MaybeUninit = OwnedRepr<MaybeUninit<A>>;
+    type MaybeUninit = Owned<DenseBuf<MaybeUninit<A>>>;
 
     fn new(elements: Vec<A>) -> Self
     {
-        OwnedRepr::from(elements)
-    }
-
-    fn into_shared<D>(self_: ArrayBase<Self, D>) -> ArcArray<A, D>
-    where
-        A: Clone,
-        D: Dimension,
-    {
-        ArcArray::from(self_)
+        Owned(DenseBuf::from(elements))
     }
 }
 
-unsafe impl<A> DataOwned for OwnedArcRepr<A>
+unsafe impl<A> DataOwned for Shared<DenseBuf<A>>
 {
-    type MaybeUninit = OwnedArcRepr<MaybeUninit<A>>;
+    type MaybeUninit = Shared<DenseBuf<MaybeUninit<A>>>;
 
     fn new(elements: Vec<A>) -> Self
     {
-        OwnedArcRepr(Arc::new(OwnedRepr::from(elements)))
-    }
-
-    fn into_shared<D>(self_: ArrayBase<Self, D>) -> ArcArray<A, D>
-    where
-        A: Clone,
-        D: Dimension,
-    {
-        self_
+        Shared(Arc::new(DenseBuf::from(elements)))
     }
 }
 
-unsafe impl<A> RawData for CowRepr<'_, A>
+unsafe impl<'a, A> DataOwned for Cow<'a, DenseBuf<A>>
 {
-    type Elem = A;
-    type Handle = NonNull<A>;
-
-    #[inline]
-    fn _is_pointer_inbounds(&self, ptr: NonNull<A>) -> bool
-    {
-        match self {
-            CowRepr::View(view) => view._is_pointer_inbounds(ptr),
-            CowRepr::Owned(data) => data._is_pointer_inbounds(ptr),
-        }
-    }
-
-    private_impl! {}
-}
-
-unsafe impl<A> RawDataMut for CowRepr<'_, A>
-where A: Clone
-{
-    #[inline]
-    fn try_ensure_unique<D>(array: &mut ArrayBase<Self, D>)
-    where
-        Self: Sized,
-        D: Dimension,
-    {
-        match array.data {
-            CowRepr::View(_) => {
-                let owned = ArrayRef::to_owned(array);
-                array.data = CowRepr::Owned(owned.data);
-                array.parts.handle = owned.parts.handle;
-                array.parts.layout.dim = owned.parts.layout.dim;
-                array.parts.layout.strides = owned.parts.layout.strides;
-            }
-            CowRepr::Owned(_) => {}
-        }
-    }
-
-    #[inline]
-    fn try_is_unique(&mut self) -> Option<bool>
-    {
-        Some(self.is_owned())
-    }
-}
-
-unsafe impl<A> RawDataClone for CowRepr<'_, A>
-where A: Clone
-{
-    unsafe fn clone_with_ptr(&self, ptr: Self::Handle) -> (Self, Self::Handle)
-    {
-        match self {
-            CowRepr::View(view) => {
-                let (new_view, ptr) = view.clone_with_ptr(ptr);
-                (CowRepr::View(new_view), ptr)
-            }
-            CowRepr::Owned(data) => {
-                let (new_data, ptr) = data.clone_with_ptr(ptr);
-                (CowRepr::Owned(new_data), ptr)
-            }
-        }
-    }
-
-    unsafe fn clone_from_with_ptr(&mut self, other: &Self, ptr: Self::Handle) -> Self::Handle
-    {
-        match (&mut *self, other) {
-            (CowRepr::View(self_), CowRepr::View(other)) => self_.clone_from_with_ptr(other, ptr),
-            (CowRepr::Owned(self_), CowRepr::Owned(other)) => self_.clone_from_with_ptr(other, ptr),
-            (_, CowRepr::Owned(other)) => {
-                let (cloned, ptr) = other.clone_with_ptr(ptr);
-                *self = CowRepr::Owned(cloned);
-                ptr
-            }
-            (_, CowRepr::View(other)) => {
-                let (cloned, ptr) = other.clone_with_ptr(ptr);
-                *self = CowRepr::View(cloned);
-                ptr
-            }
-        }
-    }
-}
-
-unsafe impl<'a, A> Data for CowRepr<'a, A>
-{
-    #[inline]
-    fn into_owned<D>(self_: ArrayBase<CowRepr<'a, A>, D>) -> Array<Self::Elem, D>
-    where
-        A: Clone,
-        D: Dimension,
-    {
-        match self_.data {
-            CowRepr::View(_) => self_.to_owned(),
-            CowRepr::Owned(data) => unsafe {
-                // safe because the data is equivalent so ptr, dims remain valid
-                ArrayBase::from_data_ptr(data, self_.parts.handle)
-                    .with_strides_dim(self_.parts.layout.strides, self_.parts.layout.dim)
-            },
-        }
-    }
-
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
-    where D: Dimension
-    {
-        match self_.data {
-            CowRepr::View(_) => Err(self_),
-            CowRepr::Owned(data) => unsafe {
-                // safe because the data is equivalent so ptr, dims remain valid
-                Ok(ArrayBase::from_data_ptr(data, self_.parts.handle)
-                    .with_strides_dim(self_.parts.layout.strides, self_.parts.layout.dim))
-            },
-        }
-    }
-}
-
-unsafe impl<A> DataMut for CowRepr<'_, A> where A: Clone {}
-
-unsafe impl<'a, A> DataOwned for CowRepr<'a, A>
-{
-    type MaybeUninit = CowRepr<'a, MaybeUninit<A>>;
+    type MaybeUninit = Cow<'a, DenseBuf<MaybeUninit<A>>>;
 
     fn new(elements: Vec<A>) -> Self
     {
-        CowRepr::Owned(OwnedRepr::new(elements))
-    }
-
-    fn into_shared<D>(self_: ArrayBase<Self, D>) -> ArcArray<A, D>
-    where
-        A: Clone,
-        D: Dimension,
-    {
-        self_.into_owned().into_shared()
+        Cow::Owned(Owned(DenseBuf::from(elements)))
     }
 }
 
@@ -731,10 +262,10 @@ unsafe impl<'a, A> DataOwned for CowRepr<'a, A>
 /// keeping the same kind of storage.
 ///
 /// For example, `RawDataSubst<B>` can map the type `OwnedRepr<A>` to `OwnedRepr<B>`.
-pub trait RawDataSubst<A>: RawData<Handle = NonNull<<Self as RawData>::Elem>>
+pub trait RawDataSubst<A>: RawData<Buf = DenseBuf<<Self as RawData>::Elem>>
 {
     /// The resulting array storage of the same kind but substituted element type
-    type Output: RawData<Elem = A, Handle = NonNull<A>>;
+    type Output: RawData<Elem = A, Buf = DenseBuf<A>>;
 
     /// Unsafely translate the data representation from one element
     /// representation to another.
@@ -745,75 +276,75 @@ pub trait RawDataSubst<A>: RawData<Handle = NonNull<<Self as RawData>::Elem>>
     unsafe fn data_subst(self) -> Self::Output;
 }
 
-impl<A, B> RawDataSubst<B> for OwnedRepr<A>
+impl<A, B> RawDataSubst<B> for Owned<DenseBuf<A>>
 {
-    type Output = OwnedRepr<B>;
+    type Output = Owned<DenseBuf<B>>;
 
     unsafe fn data_subst(self) -> Self::Output
     {
-        self.data_subst()
+        Owned(self.0.data_subst())
     }
 }
 
-impl<A, B> RawDataSubst<B> for OwnedArcRepr<A>
+impl<A, B> RawDataSubst<B> for Shared<DenseBuf<A>>
 {
-    type Output = OwnedArcRepr<B>;
+    type Output = Shared<DenseBuf<B>>;
 
     unsafe fn data_subst(self) -> Self::Output
     {
-        OwnedArcRepr(Arc::from_raw(Arc::into_raw(self.0) as *const OwnedRepr<B>))
+        Shared(Arc::from_raw(Arc::into_raw(self.0) as *const DenseBuf<B>))
     }
 }
 
-impl<A, B> RawDataSubst<B> for RawViewRepr<*const A>
+impl<A, B> RawDataSubst<B> for RawView<DenseBuf<A>>
 {
-    type Output = RawViewRepr<*const B>;
+    type Output = RawView<DenseBuf<B>>;
 
     unsafe fn data_subst(self) -> Self::Output
     {
-        RawViewRepr::new()
+        RawView::new()
     }
 }
 
-impl<A, B> RawDataSubst<B> for RawViewRepr<*mut A>
+impl<A, B> RawDataSubst<B> for RawViewMut<DenseBuf<A>>
 {
-    type Output = RawViewRepr<*mut B>;
+    type Output = RawViewMut<DenseBuf<B>>;
 
     unsafe fn data_subst(self) -> Self::Output
     {
-        RawViewRepr::new()
+        RawViewMut::new()
     }
 }
 
-impl<'a, A: 'a, B: 'a> RawDataSubst<B> for ViewRepr<&'a NonNull<A>>
+impl<'a, A: 'a, B: 'a> RawDataSubst<B> for View<'a, DenseBuf<A>>
 {
-    type Output = ViewRepr<&'a NonNull<B>>;
+    type Output = View<'a, DenseBuf<B>>;
 
     unsafe fn data_subst(self) -> Self::Output
     {
-        ViewRepr::new()
+        View::new()
     }
 }
 
-impl<'a, A: 'a, B: 'a> RawDataSubst<B> for ViewRepr<&'a mut NonNull<A>>
+impl<'a, A: 'a, B: 'a> RawDataSubst<B> for ViewMut<'a, DenseBuf<A>>
 {
-    type Output = ViewRepr<&'a mut NonNull<B>>;
+    type Output = ViewMut<'a, DenseBuf<B>>;
 
     unsafe fn data_subst(self) -> Self::Output
     {
-        ViewRepr::new()
+        ViewMut::new()
     }
 }
 
-impl<'a, A: 'a, B: 'a> RawDataSubst<B> for CowRepr<'a, A>
+impl<'a, A: 'a, B: 'a> RawDataSubst<B> for Cow<'a, DenseBuf<A>>
 {
-    type Output = CowRepr<'a, B>;
+    type Output = Cow<'a, DenseBuf<B>>;
 
     unsafe fn data_subst(self) -> Self::Output
     {
         match self {
-            CowRepr::View(view) => CowRepr::View(view.data_subst()),
-            CowRepr::Owned(owned) => CowRepr::Owned(owned.data_subst()),
+            Cow::View(view) => Cow::View(view.data_subst()),
+            Cow::Owned(owned) => Cow::Owned(owned.data_subst()),
         }
     }
 }

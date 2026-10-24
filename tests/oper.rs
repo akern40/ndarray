@@ -10,7 +10,6 @@ use ndarray::{rcarr1, rcarr2};
 use ndarray::{Data, LinalgScalar};
 use ndarray::{Ix, Ixs};
 use ndarray_gen::array_builder::ArrayBuilder;
-use std::ptr::NonNull;
 
 use approx::assert_abs_diff_eq;
 use defmac::defmac;
@@ -296,8 +295,8 @@ fn range_i32(m: Ix, n: Ix) -> Array2<i32>
 fn reference_mat_mul<A, S, S2>(lhs: &ArrayBase<S, Ix2>, rhs: &ArrayBase<S2, Ix2>) -> Array2<A>
 where
     A: LinalgScalar,
-    S: Data<Elem = A, Handle = NonNull<A>>,
-    S2: Data<Elem = A, Handle = NonNull<A>>,
+    S: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
+    S2: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
 {
     let ((m, k), (k2, n)) = (lhs.dim(), rhs.dim());
     assert!(m.checked_mul(n).is_some());
@@ -695,8 +694,8 @@ fn gen_mat_vec_mul()
     fn reference_mat_vec_mul<A, S, S2>(lhs: &ArrayBase<S, Ix2>, rhs: &ArrayBase<S2, Ix1>) -> Array1<A>
     where
         A: LinalgScalar,
-        S: Data<Elem = A, Handle = NonNull<A>>,
-        S2: Data<Elem = A, Handle = NonNull<A>>,
+        S: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
+        S2: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
     {
         let ((m, _), k) = (lhs.dim(), rhs.dim());
         reference_mat_mul(
@@ -761,8 +760,8 @@ fn vec_mat_mul()
     fn reference_vec_mat_mul<A, S, S2>(lhs: &ArrayBase<S, Ix1>, rhs: &ArrayBase<S2, Ix2>) -> Array1<A>
     where
         A: LinalgScalar,
-        S: Data<Elem = A, Handle = NonNull<A>>,
-        S2: Data<Elem = A, Handle = NonNull<A>>,
+        S: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
+        S2: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
     {
         let (m, (_, n)) = (lhs.dim(), rhs.dim());
         reference_mat_mul(

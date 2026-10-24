@@ -4,7 +4,6 @@
 //!
 use ndarray::prelude::*;
 use ndarray::{Data, RemoveAxis, Zip};
-use std::ptr::NonNull;
 
 use rawpointer::PointerExt;
 
@@ -70,7 +69,7 @@ pub trait PermuteArray
 
 impl<A, S, D> SortArray for ArrayBase<S, D>
 where
-    S: Data<Elem = A, Handle = NonNull<A>>,
+    S: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
     D: Dimension,
 {
     fn identity(&self, axis: Axis) -> Permutation

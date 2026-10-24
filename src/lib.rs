@@ -131,15 +131,11 @@ extern crate cblas_sys;
 #[cfg(docsrs)]
 pub mod doc;
 
-use alloc::fmt::Debug;
 #[cfg(target_has_atomic = "ptr")]
 use alloc::sync::Arc;
 
 #[cfg(not(target_has_atomic = "ptr"))]
 use portable_atomic_util::Arc;
-
-use std::marker::PhantomData;
-use std::ptr::NonNull;
 
 pub use crate::dimension::dim::*;
 pub use crate::dimension::{Axis, AxisDescription, Dimension, IntoDimension, RemoveAxis};
@@ -185,7 +181,18 @@ mod data_traits;
 
 pub use crate::aliases::*;
 
-pub use crate::data_traits::{Data, DataMut, DataOwned, DataShared, RawData, RawDataClone, RawDataMut, RawDataSubst};
+pub use crate::data_traits::{
+    Data,
+    DataMut,
+    DataOwned,
+    DataShared,
+    IntoOwned,
+    IntoShared,
+    RawData,
+    RawDataClone,
+    RawDataMut,
+    RawDataSubst,
+};
 
 mod free_functions;
 pub use crate::free_functions::*;
@@ -196,7 +203,9 @@ mod extension;
 mod geomspace;
 mod indexes;
 mod iterators;
+mod buffer;
 mod handle;
+mod storage;
 mod sparse;
 pub mod layout;
 mod linalg_traits;
@@ -223,35 +232,39 @@ mod dimension;
 
 pub use crate::zip::{FoldWhile, IntoNdProducer, NdProducer, Zip};
 
+pub use crate::buffer::Buffer;
 pub use crate::handle::Handle;
 pub use crate::layout::strided::StridedLayout;
 pub use crate::layout::traits::{AxisOps, Layout, Strided};
 pub use crate::layout::LayoutBitset;
-pub use crate::sparse::{OwnedSparse, SparseArray, SparseHandle};
+pub use crate::sparse::{SparseArray, SparseBuf, SparseHandle};
+pub use crate::storage::{Cow, Owned, RawView, RawViewMut, Shared, View, ViewMut};
 
 /// Implementation's prelude. Common types used everywhere.
 mod imp_prelude
 {
+    pub use crate::buffer::Buffer;
+    pub use crate::data_repr::DenseBuf;
     pub use crate::dimension::DimensionExt;
     pub use crate::handle::Handle;
     pub use crate::layout::strided::StridedLayout;
     pub use crate::layout::traits::{AxisOps, Layout, Strided};
     pub use crate::prelude::*;
+    pub use crate::storage::{Owned, RawView, RawViewMut, Shared, View, ViewMut};
     pub use crate::ArcArray;
     pub use crate::{ArrayRefBase, LayoutRefBase, RawRefBase};
     pub use crate::{
-        CowRepr,
         Data,
         DataMut,
         DataOwned,
         DataShared,
+        IntoOwned,
+        IntoShared,
         Ix,
         Ixs,
         RawData,
         RawDataMut,
-        RawViewRepr,
         RemoveAxis,
-        ViewRepr,
     };
 }
 
@@ -618,7 +631,7 @@ pub type Ixs = isize;
 /// // have indices in the lower half along all axes.
 /// fn fill_lower<S, D>(arr: &mut ArrayBase<S, D>, x: S::Elem)
 /// where
-///     S: DataMut<Handle = core::ptr::NonNull<<S as ndarray::RawData>::Elem>>,
+///     S: DataMut<Buf = ndarray::DenseBuf<<S as ndarray::RawData>::Elem>>,
 ///     S::Elem: Clone,
 ///     D: Dimension,
 /// {
@@ -1301,8 +1314,10 @@ pub type Ixs = isize;
 // may change in the future.
 //
 // [`.offset()`]: https://doc.rust-lang.org/stable/std/primitive.pointer.html#method.offset-1
-pub struct ArrayBase<S, D, A = <S as RawData>::Elem, H = <S as RawData>::Handle>
-where S: RawData<Elem = A, Handle = H>
+pub struct ArrayBase<S, D, A = <S as RawData>::Elem, H = <<S as RawData>::Buf as Buffer>::Handle>
+where
+    S: RawData<Elem = A>,
+    S::Buf: Buffer<Handle = H>,
 {
     /// Data buffer / ownership information. (If owned, contains the data
     /// buffer; if borrowed, contains the lifetime and mutability.)
@@ -1318,7 +1333,7 @@ where S: RawData<Elem = A, Handle = H>
 /// of the reference types.
 struct ArrayParts<H, D, T: ?Sized>
 {
-    /// The storage's handle (`H = S::Handle`) into the
+    /// The storage's handle (`H = <S::Buf as Buffer>::Handle`) into the
     /// buffer held by `data`; for dense storage a non-null pointer that may
     /// point anywhere in the buffer's range. If `S: Data`, this pointer must
     /// be aligned. The handle is a type parameter rather than a projection
@@ -1456,15 +1471,15 @@ impl<H, D> ArrayPartsSized<H, D>
 // alter the offset of the pointer. This is allowed, as it does not
 // cause a pointer deref.
 #[repr(transparent)]
-pub struct LayoutRefBase<H: Handle, D>(ArrayPartsUnsized<H, D>);
+pub struct LayoutRefBase<B: Buffer, D>(ArrayPartsUnsized<B::Handle, D>);
 
 /// A [`LayoutRefBase`] over dense storage.
-pub type LayoutRef<A, D> = LayoutRefBase<NonNull<A>, D>;
+pub type LayoutRef<A, D> = LayoutRefBase<DenseBuf<A>, D>;
 
-impl<H: Handle, D> LayoutRefBase<H, D>
+impl<B: Buffer, D> LayoutRefBase<B, D>
 {
     /// Get a reference to the data pointer.
-    fn _ptr(&self) -> &H
+    pub(crate) fn _ptr(&self) -> &B::Handle
     {
         &self.0.handle
     }
@@ -1556,10 +1571,10 @@ impl<H: Handle, D> LayoutRefBase<H, D>
 /// into `ArrayRef`. In other words, having a `&mut ArrayRef` guarantees that the underlying
 /// data is un-shared and safe to write to.
 #[repr(transparent)]
-pub struct ArrayRefBase<H: Handle, D>(LayoutRefBase<H, D>);
+pub struct ArrayRefBase<B: Buffer, D>(LayoutRefBase<B, D>);
 
 /// An [`ArrayRefBase`] over dense storage.
-pub type ArrayRef<A, D> = ArrayRefBase<NonNull<A>, D>;
+pub type ArrayRef<A, D> = ArrayRefBase<DenseBuf<A>, D>;
 
 /// A reference to an *n*-dimensional array whose data is not safe to read or write.
 ///
@@ -1573,10 +1588,10 @@ pub type ArrayRef<A, D> = ArrayRefBase<NonNull<A>, D>;
 /// as [`LayoutRef`]; see [its documentation on writing functions](LayoutRef#writing-functions)
 /// for information on how to properly handle functionality on this type.
 #[repr(transparent)]
-pub struct RawRefBase<H: Handle, D>(LayoutRefBase<H, D>);
+pub struct RawRefBase<B: Buffer, D>(LayoutRefBase<B, D>);
 
 /// A [`RawRefBase`] over dense storage.
-pub type RawRef<A, D> = RawRefBase<NonNull<A>, D>;
+pub type RawRef<A, D> = RawRefBase<DenseBuf<A>, D>;
 
 /// An array where the data has shared ownership and is copy on write.
 ///
@@ -1600,7 +1615,7 @@ pub type RawRef<A, D> = RawRefBase<NonNull<A>, D>;
 ///
 /// + [Constructor Methods for Owned Arrays](ArrayBase#constructor-methods-for-owned-arrays)
 /// + [Methods For All Array Types](ArrayBase#methods-for-all-array-types)
-pub type ArcArray<A, D> = ArrayBase<OwnedArcRepr<A>, D>;
+pub type ArcArray<A, D> = ArrayBase<Shared<DenseBuf<A>>, D>;
 
 /// An array that owns its data uniquely.
 ///
@@ -1623,7 +1638,7 @@ pub type ArcArray<A, D> = ArrayBase<OwnedArcRepr<A>, D>;
 ///   [`Array3`], ...,
 ///   [`ArrayD`],
 ///   and so on.
-pub type Array<A, D> = ArrayBase<OwnedRepr<A>, D>;
+pub type Array<A, D> = ArrayBase<Owned<DenseBuf<A>>, D>;
 
 /// An array with copy-on-write behavior.
 ///
@@ -1641,7 +1656,7 @@ pub type Array<A, D> = ArrayBase<OwnedRepr<A>, D>;
 /// See also [`ArcArray`], which also provides
 /// copy-on-write behavior but has a reference-counted pointer to the data
 /// instead of either a view or a uniquely owned copy.
-pub type CowArray<'a, A, D> = ArrayBase<CowRepr<'a, A>, D>;
+pub type CowArray<'a, A, D> = ArrayBase<Cow<'a, DenseBuf<A>>, D>;
 
 /// A read-only array view.
 ///
@@ -1654,7 +1669,7 @@ pub type CowArray<'a, A, D> = ArrayBase<CowRepr<'a, A>, D>;
 /// Array views have all the methods of an array (see [`ArrayBase`]).
 ///
 /// See also [`ArrayViewMut`].
-pub type ArrayView<'a, A, D> = ArrayBase<ViewRepr<&'a NonNull<A>>, D>;
+pub type ArrayView<'a, A, D> = ArrayBase<View<'a, DenseBuf<A>>, D>;
 
 /// A read-write array view.
 ///
@@ -1667,7 +1682,7 @@ pub type ArrayView<'a, A, D> = ArrayBase<ViewRepr<&'a NonNull<A>>, D>;
 /// Array views have all the methods of an array (see [`ArrayBase`]).
 ///
 /// See also [`ArrayView`].
-pub type ArrayViewMut<'a, A, D> = ArrayBase<ViewRepr<&'a mut NonNull<A>>, D>;
+pub type ArrayViewMut<'a, A, D> = ArrayBase<ViewMut<'a, DenseBuf<A>>, D>;
 
 /// A read-only array view without a lifetime.
 ///
@@ -1690,7 +1705,7 @@ pub type ArrayViewMut<'a, A, D> = ArrayBase<ViewRepr<&'a mut NonNull<A>>, D>;
 ///
 /// You can't use this type with an arbitrary raw pointer; see
 /// [`from_shape_ptr`](#method.from_shape_ptr) for details.
-pub type RawArrayView<A, D> = ArrayBase<RawViewRepr<*const A>, D>;
+pub type RawArrayView<A, D> = ArrayBase<RawView<DenseBuf<A>>, D>;
 
 /// A mutable array view without a lifetime.
 ///
@@ -1713,109 +1728,17 @@ pub type RawArrayView<A, D> = ArrayBase<RawViewRepr<*const A>, D>;
 ///
 /// You can't use this type with an arbitrary raw pointer; see
 /// [`from_shape_ptr`](#method.from_shape_ptr) for details.
-pub type RawArrayViewMut<A, D> = ArrayBase<RawViewRepr<*mut A>, D>;
+pub type RawArrayViewMut<A, D> = ArrayBase<RawViewMut<DenseBuf<A>>, D>;
 
-pub use data_repr::OwnedRepr;
+pub use data_repr::DenseBuf;
 
-/// ArcArray's representation.
-///
-/// *Don’t use this type directly—use the type alias
-/// [`ArcArray`] for the array type!*
-#[derive(Debug)]
-pub struct OwnedArcRepr<A>(Arc<OwnedRepr<A>>);
+/// Owned dense storage: `Array`'s representation.
+pub type OwnedRepr<A> = Owned<DenseBuf<A>>;
+/// Shared dense storage: `ArcArray`'s representation.
+pub type OwnedArcRepr<A> = Shared<DenseBuf<A>>;
+/// Copy-on-write dense storage: `CowArray`'s representation.
+pub type CowRepr<'a, A> = Cow<'a, DenseBuf<A>>;
 
-impl<A> Clone for OwnedArcRepr<A>
-{
-    fn clone(&self) -> Self
-    {
-        OwnedArcRepr(self.0.clone())
-    }
-}
-
-/// Array pointer’s representation.
-///
-/// *Don’t use this type directly—use the type aliases
-/// [`RawArrayView`] / [`RawArrayViewMut`] for the array type!*
-#[derive(Copy, Clone)]
-// This is just a marker type, to carry the mutability and element type.
-pub struct RawViewRepr<A>
-{
-    ptr: PhantomData<A>,
-}
-
-impl<A> RawViewRepr<A>
-{
-    #[inline(always)]
-    const fn new() -> Self
-    {
-        RawViewRepr { ptr: PhantomData }
-    }
-}
-
-/// Array view’s representation.
-///
-/// *Don’t use this type directly—use the type aliases
-/// [`ArrayView`] / [`ArrayViewMut`] for the array type!*
-#[derive(Copy, Clone)]
-// This is just a marker type, to carry the lifetime parameter.
-pub struct ViewRepr<A>
-{
-    life: PhantomData<A>,
-}
-
-// A view's marker is `&'a H`/`&'a mut H` for a handle `H` (a raw pointer for
-// dense storage), so the auto traits would say "never". The right rule is the
-// one for `&'a Elem`/`&'a mut Elem`: what the view hands out.
-unsafe impl<H: Handle> Send for ViewRepr<&H> where H::Elem: Sync {}
-unsafe impl<H: Handle> Sync for ViewRepr<&H> where H::Elem: Sync {}
-unsafe impl<H: Handle> Send for ViewRepr<&mut H> where H::Elem: Send {}
-unsafe impl<H: Handle> Sync for ViewRepr<&mut H> where H::Elem: Sync {}
-
-impl<A> ViewRepr<A>
-{
-    #[inline(always)]
-    const fn new() -> Self
-    {
-        ViewRepr { life: PhantomData }
-    }
-}
-
-/// CowArray's representation.
-///
-/// *Don't use this type directly—use the type alias
-/// [`CowArray`] for the array type!*
-pub enum CowRepr<'a, A>
-{
-    /// Borrowed data.
-    View(ViewRepr<&'a NonNull<A>>),
-    /// Owned data.
-    Owned(OwnedRepr<A>),
-}
-
-impl<A> CowRepr<'_, A>
-{
-    /// Returns `true` iff the data is the `View` variant.
-    pub fn is_view(&self) -> bool
-    {
-        match self {
-            CowRepr::View(_) => true,
-            CowRepr::Owned(_) => false,
-        }
-    }
-
-    /// Returns `true` iff the data is the `Owned` variant.
-    pub fn is_owned(&self) -> bool
-    {
-        match self {
-            CowRepr::View(_) => false,
-            CowRepr::Owned(_) => true,
-        }
-    }
-}
-
-// NOTE: The order of modules decides in which order methods on the type ArrayBase
-// (mainly mentioning that as the most relevant type) show up in the documentation.
-// Consider the doc effect of ordering modules here.
 mod impl_clone;
 
 mod impl_internal_constructors;

@@ -14,7 +14,7 @@ use crate::dimension;
 use crate::error::{ErrorKind, ShapeError};
 use crate::iterators::Baseiter;
 use crate::low_level_util::AbortIfPanic;
-use crate::OwnedRepr;
+use crate::DenseBuf;
 use crate::Zip;
 
 /// Methods specific to `Array0`.
@@ -40,7 +40,7 @@ impl<A> Array<A, Ix0>
         let size = match NonZeroUsize::new(mem::size_of::<A>()) {
             Some(size) => size,
             // Any index in the `Vec` is fine since all elements are identical.
-            None => return self.data.into_vec().remove(0),
+            None => return self.data.0.into_vec().remove(0),
         };
         // Find the index in the `Vec` corresponding to `self.ptr`.
         // (This is necessary because the element in the array might not be
@@ -51,7 +51,7 @@ impl<A> Array<A, Ix0>
         let index = (first - base) / size;
         debug_assert_eq!((first - base) % size.get(), 0);
         // Remove the element at the index and return it.
-        self.data.into_vec().remove(index)
+        self.data.0.into_vec().remove(index)
     }
 }
 
@@ -145,7 +145,7 @@ where D: Dimension
     pub fn into_raw_vec_and_offset(self) -> (Vec<A>, Option<usize>)
     {
         let offset = self.offset_from_alloc_to_logical_ptr();
-        (self.data.into_vec(), offset)
+        (self.data.0.into_vec(), offset)
     }
 
     /// Return a vector of the elements in the array, in the way they are
@@ -412,7 +412,7 @@ where D: Dimension
     /// # Safety
     ///
     /// This is a panic critical section since `self` is already moved-from.
-    fn drop_unreachable_elements(mut self) -> OwnedRepr<A>
+    fn drop_unreachable_elements(mut self) -> DenseBuf<A>
     {
         let self_len = self.len();
 
@@ -425,7 +425,7 @@ where D: Dimension
             unsafe {
                 self.data.set_len(0);
             }
-            self.data
+            self.data.0
         } else {
             self.drop_unreachable_elements_slow()
         }
@@ -433,7 +433,7 @@ where D: Dimension
 
     #[inline(never)]
     #[cold]
-    fn drop_unreachable_elements_slow(mut self) -> OwnedRepr<A>
+    fn drop_unreachable_elements_slow(mut self) -> DenseBuf<A>
     {
         // "deconstruct" self; the owned repr releases ownership of all elements and we
         // carry on with raw view methods
@@ -449,7 +449,7 @@ where D: Dimension
             drop_unreachable_raw(self_, data_ptr, data_len);
         }
 
-        self.data
+        self.data.0
     }
 
     /// Create an empty array with an all-zeros shape
@@ -758,7 +758,7 @@ where D: Dimension
             struct SetLenOnDrop<'a, A: 'a>
             {
                 len: usize,
-                data: &'a mut OwnedRepr<A>,
+                data: &'a mut DenseBuf<A>,
             }
 
             impl<A> Drop for SetLenOnDrop<'_, A>

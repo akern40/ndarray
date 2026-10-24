@@ -2483,7 +2483,7 @@ mod as_standard_layout_tests
 
     fn test_as_standard_layout_for<S, D>(orig: ArrayBase<S, D>)
     where
-        S: Data<Handle = core::ptr::NonNull<<S as ndarray::RawData>::Elem>>,
+        S: Data<Buf = ndarray::DenseBuf<<S as ndarray::RawData>::Elem>>,
         S::Elem: Clone + Debug + PartialEq,
         D: Dimension,
     {

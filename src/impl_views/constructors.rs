@@ -13,7 +13,6 @@ use crate::dimension::{self, CanIndexCheckMode};
 use crate::error::ShapeError;
 use crate::extension::nonnull::nonnull_debug_checked_from_ptr;
 use crate::imp_prelude::*;
-use crate::Handle;
 use crate::{is_aligned, StrideShape};
 
 /// Methods for read-only array views.
@@ -229,9 +228,9 @@ where D: Dimension
 }
 
 /// Private array view methods
-impl<H, D> ArrayBase<ViewRepr<&'_ H>, D>
+impl<B, D> ArrayBase<View<'_, B>, D>
 where
-    H: Handle,
+    B: Buffer,
     D: Dimension,
 {
     /// Create a view of any handle family from a handle and a layout.
@@ -239,23 +238,23 @@ where
     /// Unsafe because the caller guarantees the layout's offsets are in bounds
     /// of the buffer behind `handle` for the view's lifetime.
     #[inline(always)]
-    pub(crate) unsafe fn from_handle(handle: H, layout: StridedLayout<D>) -> Self
+    pub(crate) unsafe fn from_handle(handle: B::Handle, layout: StridedLayout<D>) -> Self
     {
-        ArrayBase::from_data_ptr(ViewRepr::new(), handle).with_layout(layout)
+        ArrayBase::from_data_ptr(View::new(), handle).with_layout(layout)
     }
 }
 
-impl<H, D> ArrayBase<ViewRepr<&'_ mut H>, D>
+impl<B, D> ArrayBase<ViewMut<'_, B>, D>
 where
-    H: Handle,
+    B: Buffer,
     D: Dimension,
 {
     /// Mutable counterpart of [`from_handle`](ArrayBase::from_handle); the
     /// caller additionally guarantees unique access to the elements.
     #[inline(always)]
-    pub(crate) unsafe fn from_handle_mut(handle: H, layout: StridedLayout<D>) -> Self
+    pub(crate) unsafe fn from_handle_mut(handle: B::Handle, layout: StridedLayout<D>) -> Self
     {
-        ArrayBase::from_data_ptr(ViewRepr::new(), handle).with_layout(layout)
+        ArrayBase::from_data_ptr(ViewMut::new(), handle).with_layout(layout)
     }
 }
 
@@ -273,7 +272,7 @@ where D: Dimension
             assert!(is_aligned(ptr.as_ptr()), "The pointer must be aligned.");
             dimension::max_abs_offset_check_overflow::<A, _>(&dim, &strides).unwrap();
         }
-        ArrayView::from_data_ptr(ViewRepr::new(), ptr).with_strides_dim(strides, dim)
+        ArrayView::from_data_ptr(View::new(), ptr).with_strides_dim(strides, dim)
     }
 
     /// Unsafe because: `ptr` must be valid for the given dimension and strides.
@@ -298,7 +297,7 @@ where D: Dimension
             assert!(is_aligned(ptr.as_ptr()), "The pointer must be aligned.");
             dimension::max_abs_offset_check_overflow::<A, _>(&dim, &strides).unwrap();
         }
-        ArrayViewMut::from_data_ptr(ViewRepr::new(), ptr).with_strides_dim(strides, dim)
+        ArrayViewMut::from_data_ptr(ViewMut::new(), ptr).with_strides_dim(strides, dim)
     }
 
     /// Create a new `ArrayView`

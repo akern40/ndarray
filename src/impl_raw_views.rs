@@ -19,7 +19,7 @@ where D: Dimension
     pub(crate) unsafe fn new(ptr: NonNull<A>, layout: StridedLayout<D>) -> Self
     {
         let StridedLayout { dim, strides } = layout;
-        RawArrayView::from_data_ptr(RawViewRepr::new(), ptr).with_strides_dim(strides, dim)
+        RawArrayView::from_data_ptr(RawView::new(), ptr).with_strides_dim(strides, dim)
     }
 
     #[inline]
@@ -236,7 +236,7 @@ where D: Dimension
     pub(crate) unsafe fn new(ptr: NonNull<A>, layout: StridedLayout<D>) -> Self
     {
         let StridedLayout { dim, strides } = layout;
-        RawArrayViewMut::from_data_ptr(RawViewRepr::new(), ptr).with_strides_dim(strides, dim)
+        RawArrayViewMut::from_data_ptr(RawViewMut::new(), ptr).with_strides_dim(strides, dim)
     }
 
     #[inline]

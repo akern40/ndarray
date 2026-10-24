@@ -8,6 +8,10 @@ use std::mem;
 use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
 
+use crate::buffer::Buffer;
+use crate::storage::{Owned, View};
+use crate::{ArrayBase, Dimension, ShapeBuilder};
+
 #[allow(unused_imports)]
 use rawpointer::PointerExt;
 
@@ -17,18 +21,18 @@ use rawpointer::PointerExt;
 /// [`Array`](crate::Array) for the array type!*
 // Like a Vec, but with non-unique ownership semantics
 //
-// repr(C) to make it transmutable OwnedRepr<A> -> OwnedRepr<B> if
+// repr(C) to make it transmutable DenseBuf<A> -> DenseBuf<B> if
 // transmutable A -> B.
 #[derive(Debug)]
 #[repr(C)]
-pub struct OwnedRepr<A>
+pub struct DenseBuf<A>
 {
     ptr: NonNull<A>,
     len: usize,
     capacity: usize,
 }
 
-impl<A> OwnedRepr<A>
+impl<A> DenseBuf<A>
 {
     pub(crate) fn from(v: Vec<A>) -> Self
     {
@@ -110,12 +114,12 @@ impl<A> OwnedRepr<A>
     ///
     /// Caller must ensure the two types have the same representation.
     /// **Panics** if sizes don't match (which is not a sufficient check).
-    pub(crate) unsafe fn data_subst<B>(self) -> OwnedRepr<B>
+    pub(crate) unsafe fn data_subst<B>(self) -> DenseBuf<B>
     {
         // necessary but not sufficient check
         assert_eq!(mem::size_of::<A>(), mem::size_of::<B>());
         let self_ = ManuallyDrop::new(self);
-        OwnedRepr {
+        DenseBuf {
             ptr: self_.ptr.cast::<B>(),
             len: self_.len,
             capacity: self_.capacity,
@@ -138,7 +142,7 @@ impl<A> OwnedRepr<A>
     }
 }
 
-impl<A> Clone for OwnedRepr<A>
+impl<A> Clone for DenseBuf<A>
 where A: Clone
 {
     fn clone(&self) -> Self
@@ -161,7 +165,7 @@ where A: Clone
     }
 }
 
-impl<A> Drop for OwnedRepr<A>
+impl<A> Drop for DenseBuf<A>
 {
     fn drop(&mut self)
     {
@@ -184,5 +188,64 @@ impl<A> Drop for OwnedRepr<A>
     }
 }
 
-unsafe impl<A> Sync for OwnedRepr<A> where A: Sync {}
-unsafe impl<A> Send for OwnedRepr<A> where A: Send {}
+unsafe impl<A> Sync for DenseBuf<A> where A: Sync {}
+unsafe impl<A> Send for DenseBuf<A> where A: Send {}
+
+unsafe impl<A> Buffer for DenseBuf<A>
+{
+    type Elem = A;
+    type Handle = NonNull<A>;
+
+    #[inline(always)]
+    fn origin(&self) -> NonNull<A>
+    {
+        self.ptr
+    }
+
+    #[inline]
+    fn offset_of(&self, handle: NonNull<A>) -> isize
+    {
+        if mem::size_of::<A>() == 0 {
+            0
+        } else {
+            (handle.as_ptr() as isize - self.ptr.as_ptr() as isize) / mem::size_of::<A>() as isize
+        }
+    }
+
+    fn is_inbounds(&self, handle: NonNull<A>) -> bool
+    {
+        let ptr = self.ptr.as_ptr();
+        let end = unsafe { ptr.add(self.len) };
+        handle.as_ptr() >= ptr && handle.as_ptr() <= end
+    }
+
+    #[inline]
+    fn len(&self) -> usize
+    {
+        self.len
+    }
+
+    fn clone_buf(&self) -> Self
+    where A: Clone
+    {
+        self.clone()
+    }
+
+    fn clone_buf_from(&mut self, other: &Self)
+    where A: Clone
+    {
+        self.clone_from(other)
+    }
+
+    fn collect<D: Dimension>(view: ArrayBase<View<'_, Self>, D>) -> ArrayBase<Owned<Self>, D>
+    where A: Clone
+    {
+        if let Some(slc) = view.as_slice_memory_order() {
+            unsafe {
+                ArrayBase::from_shape_vec_unchecked(view._dim().clone().strides(view._strides().clone()), slc.to_vec())
+            }
+        } else {
+            view.map(A::clone)
+        }
+    }
+}
