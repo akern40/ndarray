@@ -114,7 +114,7 @@ pub unsafe trait Data: RawData
     /// Converts the array to a uniquely owned array, cloning elements if necessary.
     #[doc(hidden)]
     #[allow(clippy::wrong_self_convention)]
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
+    fn into_owned<D>(self_: ArrayBase<Self, D>) -> ArrayBase<<Self::Acc as Accessor>::Owned, D>
     where
         Self::Elem: Clone,
         D: Dimension;
@@ -122,7 +122,10 @@ pub unsafe trait Data: RawData
     /// Converts the array into `Array<A, D>` if this is possible without
     /// cloning the array elements. Otherwise, returns `self_` unchanged.
     #[doc(hidden)]
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
+    #[allow(clippy::type_complexity)]
+    fn try_into_owned_nocopy<D>(
+        self_: ArrayBase<Self, D>,
+    ) -> Result<ArrayBase<<Self::Acc as Accessor>::Owned, D>, ArrayBase<Self, D>>
     where D: Dimension;
 
     /// Return a shared ownership (copy on write) array based on the existing one,
@@ -425,60 +428,55 @@ where A: Clone
     }
 }
 
-unsafe impl<A> RawData for ViewRepr<&A>
+unsafe impl<Acc: Accessor> RawData for ViewRepr<&Acc>
 {
-    type Elem = A;
-    type Acc = Dense<A>;
-
+    type Elem = Acc::Elem;
+    type Acc = Acc;
     #[inline(always)]
-    fn _is_pointer_inbounds(&self, _ptr: NonNull<A>) -> bool
+    fn _is_pointer_inbounds(&self, _handle: Acc::Handle) -> bool
     {
         true
     }
-
     private_impl! {}
 }
 
-unsafe impl<A> Data for ViewRepr<&A>
+unsafe impl<Acc: Accessor> Data for ViewRepr<&Acc>
 {
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
+    fn into_owned<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Acc::Owned, D>
     where
         Self::Elem: Clone,
         D: Dimension,
     {
-        self_.to_owned()
+        Acc::into_owned(self_)
     }
-
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
+    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<ArrayBase<Acc::Owned, D>, ArrayBase<Self, D>>
     where D: Dimension
     {
         Err(self_)
     }
 }
 
-unsafe impl<A> RawDataClone for ViewRepr<&A>
+unsafe impl<Acc: Accessor> RawDataClone for ViewRepr<&Acc>
 {
-    unsafe fn clone_with_ptr(&self, ptr: <Self::Acc as Accessor>::Handle) -> (Self, <Self::Acc as Accessor>::Handle)
+    unsafe fn clone_with_ptr(&self, ptr: Acc::Handle) -> (Self, Acc::Handle)
     {
         (*self, ptr)
     }
 }
 
-unsafe impl<A> RawData for ViewRepr<&mut A>
+unsafe impl<Acc: Accessor> RawData for ViewRepr<&mut Acc>
 {
-    type Elem = A;
-    type Acc = Dense<A>;
-
+    type Elem = Acc::Elem;
+    type Acc = Acc;
     #[inline(always)]
-    fn _is_pointer_inbounds(&self, _ptr: NonNull<A>) -> bool
+    fn _is_pointer_inbounds(&self, _handle: Acc::Handle) -> bool
     {
         true
     }
-
     private_impl! {}
 }
 
-unsafe impl<A> RawDataMut for ViewRepr<&mut A>
+unsafe impl<Acc: Accessor> RawDataMut for ViewRepr<&mut Acc>
 {
     #[inline]
     fn try_ensure_unique<D>(_: &mut ArrayBase<Self, D>)
@@ -487,7 +485,6 @@ unsafe impl<A> RawDataMut for ViewRepr<&mut A>
         D: Dimension,
     {
     }
-
     #[inline]
     fn try_is_unique(&mut self) -> Option<bool>
     {
@@ -495,24 +492,25 @@ unsafe impl<A> RawDataMut for ViewRepr<&mut A>
     }
 }
 
-unsafe impl<A> Data for ViewRepr<&mut A>
+unsafe impl<Acc: Accessor> Data for ViewRepr<&mut Acc>
 {
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
+    fn into_owned<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Acc::Owned, D>
     where
         Self::Elem: Clone,
         D: Dimension,
     {
-        self_.to_owned()
+        let view =
+            unsafe { ArrayBase::from_data_ptr(ViewRepr::new(), self_.parts.handle).with_layout(self_.parts.layout) };
+        Acc::into_owned(view)
     }
-
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
+    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<ArrayBase<Acc::Owned, D>, ArrayBase<Self, D>>
     where D: Dimension
     {
         Err(self_)
     }
 }
 
-unsafe impl<A> DataMut for ViewRepr<&mut A> {}
+unsafe impl<Acc: Accessor> DataMut for ViewRepr<&mut Acc> {}
 
 /// Array representation trait.
 ///
@@ -553,7 +551,7 @@ pub unsafe trait DataOwned: Data<Acc = Dense<<Self as RawData>::Elem>>
 pub unsafe trait DataShared: Clone + Data + RawDataClone {}
 
 unsafe impl<A> DataShared for OwnedArcRepr<A> {}
-unsafe impl<A> DataShared for ViewRepr<&A> {}
+unsafe impl<Acc: Accessor> DataShared for ViewRepr<&Acc> {}
 
 unsafe impl<A> DataOwned for OwnedRepr<A>
 {
@@ -786,9 +784,9 @@ impl<A, B> RawDataSubst<B> for RawViewRepr<*mut A>
     }
 }
 
-impl<'a, A: 'a, B: 'a> RawDataSubst<B> for ViewRepr<&'a A>
+impl<'a, A: 'a, B: 'a> RawDataSubst<B> for ViewRepr<&'a Dense<A>>
 {
-    type Output = ViewRepr<&'a B>;
+    type Output = ViewRepr<&'a Dense<B>>;
 
     unsafe fn data_subst(self) -> Self::Output
     {
@@ -796,9 +794,9 @@ impl<'a, A: 'a, B: 'a> RawDataSubst<B> for ViewRepr<&'a A>
     }
 }
 
-impl<'a, A: 'a, B: 'a> RawDataSubst<B> for ViewRepr<&'a mut A>
+impl<'a, A: 'a, B: 'a> RawDataSubst<B> for ViewRepr<&'a mut Dense<A>>
 {
-    type Output = ViewRepr<&'a mut B>;
+    type Output = ViewRepr<&'a mut Dense<B>>;
 
     unsafe fn data_subst(self) -> Self::Output
     {

@@ -1653,7 +1653,7 @@ pub type CowArray<'a, A, D> = ArrayBase<CowRepr<'a, A>, D>;
 /// Array views have all the methods of an array (see [`ArrayBase`]).
 ///
 /// See also [`ArrayViewMut`].
-pub type ArrayView<'a, A, D> = ArrayBase<ViewRepr<&'a A>, D>;
+pub type ArrayView<'a, A, D> = ArrayBase<ViewRepr<&'a Dense<A>>, D>;
 
 /// A read-write array view.
 ///
@@ -1666,7 +1666,7 @@ pub type ArrayView<'a, A, D> = ArrayBase<ViewRepr<&'a A>, D>;
 /// Array views have all the methods of an array (see [`ArrayBase`]).
 ///
 /// See also [`ArrayView`].
-pub type ArrayViewMut<'a, A, D> = ArrayBase<ViewRepr<&'a mut A>, D>;
+pub type ArrayViewMut<'a, A, D> = ArrayBase<ViewRepr<&'a mut Dense<A>>, D>;
 
 /// A read-only array view without a lifetime.
 ///
@@ -1778,7 +1778,7 @@ impl<A> ViewRepr<A>
 pub enum CowRepr<'a, A>
 {
     /// Borrowed data.
-    View(ViewRepr<&'a A>),
+    View(ViewRepr<&'a Dense<A>>),
     /// Owned data.
     Owned(OwnedRepr<A>),
 }
