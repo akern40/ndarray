@@ -127,7 +127,7 @@ impl<T> Offset for *mut T
 
 /// An array reference is an n-dimensional producer of element references
 /// (like ArrayView).
-impl<'a, A: 'a, S, D> IntoNdProducer for &'a ArrayBase<S, D>
+impl<'a, A: 'a, S, D> IntoNdProducer for &'a ArrayBase<S, StridedLayout<D>>
 where
     D: Dimension,
     S: Data<Elem = A, Buf = DenseBuf<A>>,
@@ -143,7 +143,7 @@ where
 
 /// A mutable array reference is an n-dimensional producer of mutable element
 /// references (like ArrayViewMut).
-impl<'a, A: 'a, S, D> IntoNdProducer for &'a mut ArrayBase<S, D>
+impl<'a, A: 'a, S, D> IntoNdProducer for &'a mut ArrayBase<S, StridedLayout<D>>
 where
     D: Dimension,
     S: DataMut<Elem = A, Buf = DenseBuf<A>>,

@@ -942,7 +942,7 @@ pub(crate) unsafe fn drop_unreachable_raw<A, D>(
 /// Sort axes to standard order, i.e Axis(0) has biggest stride and Axis(n - 1) least stride
 ///
 /// The axes should have stride >= 0 before calling this method.
-fn sort_axes_in_default_order<S, D>(a: &mut ArrayBase<S, D>)
+fn sort_axes_in_default_order<S, D>(a: &mut ArrayBase<S, StridedLayout<D>>)
 where
     S: RawData,
     D: Dimension,
@@ -981,8 +981,9 @@ where D: Dimension
 ///
 /// Axes in a and b are sorted by the strides of `a`, and `a`'s axes should have stride >= 0 before
 /// calling this method.
-fn sort_axes_in_default_order_tandem<S, S2, D>(a: &mut ArrayBase<S, D>, b: &mut ArrayBase<S2, D>)
-where
+fn sort_axes_in_default_order_tandem<S, S2, D>(
+    a: &mut ArrayBase<S, StridedLayout<D>>, b: &mut ArrayBase<S2, StridedLayout<D>>,
+) where
     S: RawData,
     S2: RawData,
     D: Dimension,

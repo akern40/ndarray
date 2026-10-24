@@ -74,13 +74,13 @@ where Slice: AsRef<[A]>
     }
 }
 
-impl<'a, A, S, D> From<&'a ArrayBase<S, D>> for CowArray<'a, A, D>
+impl<'a, A, S, D> From<&'a ArrayBase<S, StridedLayout<D>>> for CowArray<'a, A, D>
 where
     S: Data<Elem = A, Buf = DenseBuf<A>>,
     D: Dimension,
 {
     /// Create a read-only clone-on-write view of the array.
-    fn from(array: &'a ArrayBase<S, D>) -> Self
+    fn from(array: &'a ArrayBase<S, StridedLayout<D>>) -> Self
     {
         Self::from(array.view())
     }

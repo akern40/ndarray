@@ -12,6 +12,7 @@
 //! Below, we illustrate how to write functions and traits for most variants of these types.
 
 use ndarray::RawData;
+use ndarray::StridedLayout;
 use ndarray::{ArrayBase, ArrayRef, Data, DataMut, Dimension, LayoutRef, RawRef};
 
 /// First, the newest pattern: this function accepts arrays whose data are safe to
@@ -65,7 +66,7 @@ fn takes_arrref_mut<A, D>(arr: &mut ArrayRef<A, D>)
 ///
 /// Let's see what we can do with this array:
 #[allow(dead_code)]
-fn takes_base<S: Data<Buf = ndarray::DenseBuf<<S as RawData>::Elem>>, D>(arr: &ArrayBase<S, D>)
+fn takes_base<S: Data<Buf = ndarray::DenseBuf<<S as RawData>::Elem>>, D>(arr: &ArrayBase<S, StridedLayout<D>>)
 {
     // First off: we can pass it to functions that accept `&ArrayRef`.
     //
@@ -84,7 +85,7 @@ fn takes_base<S: Data<Buf = ndarray::DenseBuf<<S as RawData>::Elem>>, D>(arr: &A
 
 /// Now, let's take a mutable reference to an `ArrayBase` - but let's keep `S: Data<Buf = ndarray::DenseBuf<<S as RawData>::Elem>>`, such
 /// that we are allowed to change the _layout_ of the array, but not its data.
-fn takes_base_mut<S: Data<Buf = ndarray::DenseBuf<<S as RawData>::Elem>>, D>(arr: &mut ArrayBase<S, D>)
+fn takes_base_mut<S: Data<Buf = ndarray::DenseBuf<<S as RawData>::Elem>>, D>(arr: &mut ArrayBase<S, StridedLayout<D>>)
 {
     // Of course we can call everything we did with a immutable reference:
     takes_base(arr);
@@ -93,7 +94,7 @@ fn takes_base_mut<S: Data<Buf = ndarray::DenseBuf<<S as RawData>::Elem>>, D>(arr
     // this would require mutable data access, which `S: Data<Buf = ndarray::DenseBuf<<S as RawData>::Elem>>` does not provide.
     //
     // takes_arrref_mut(arr);
-    // rustc: cannot borrow data in dereference of `ArrayBase<S, D>` as mutable
+    // rustc: cannot borrow data in dereference of `ArrayBase<S, StridedLayout<D>>` as mutable
     //
     // Nor can we call a function that takes `&mut RawRef`
     // takes_rawref_mut(arr);
@@ -110,7 +111,7 @@ fn takes_base_mut<S: Data<Buf = ndarray::DenseBuf<<S as RawData>::Elem>>, D>(arr
 /// Note that we require a constraint of `D: Dimension` to dereference to `&mut ArrayRef`.
 #[allow(dead_code)]
 fn takes_base_data_mut<S: DataMut<Buf = ndarray::DenseBuf<<S as RawData>::Elem>>, D: Dimension>(
-    arr: &mut ArrayBase<S, D>,
+    arr: &mut ArrayBase<S, StridedLayout<D>>,
 )
 {
     // Of course, everything we can do with just `S: Data<Buf = ndarray::DenseBuf<<S as RawData>::Elem>>`:

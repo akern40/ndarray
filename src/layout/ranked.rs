@@ -5,6 +5,7 @@
 //! array, whether known statically (via [`Rank`]) or only at runtime. Blanket
 //! implementations are provided for common pointer and container types.
 
+use crate::StridedLayout;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
@@ -137,7 +138,7 @@ impl<T, const N: usize> Ranked for [T; N]
     }
 }
 
-impl<H, D, T: ?Sized> Ranked for ArrayParts<H, D, T>
+impl<H, D, T: ?Sized> Ranked for ArrayParts<H, StridedLayout<D>, T>
 where D: Ranked
 {
     type NDim = D::NDim;
@@ -148,7 +149,7 @@ where D: Ranked
     }
 }
 
-impl<S, D> Ranked for ArrayBase<S, D>
+impl<S, D> Ranked for ArrayBase<S, StridedLayout<D>>
 where
     S: RawData,
     D: Ranked,

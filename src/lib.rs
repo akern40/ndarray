@@ -289,7 +289,7 @@ pub type Ixs = isize;
 /// 2-dimensional matrices, and higher dimensional arrays. If the array has *n*
 /// dimensions, then an element is accessed by using that many indices.
 ///
-/// The `ArrayBase<S, D>` is parameterized by `S` for the data container and
+/// The `ArrayBase<S, StridedLayout<D>>` is parameterized by `S` for the data container and
 /// `D` for the dimensionality.
 ///
 /// Type aliases [`Array`], [`ArcArray`], [`CowArray`], [`ArrayView`], and
@@ -629,7 +629,7 @@ pub type Ixs = isize;
 ///
 /// // Generic function which assigns the specified value to the elements which
 /// // have indices in the lower half along all axes.
-/// fn fill_lower<S, D>(arr: &mut ArrayBase<S, D>, x: S::Elem)
+/// fn fill_lower<S, D>(arr: &mut ArrayBase<S, ndarray::StridedLayout<D>>, x: S::Elem)
 /// where
 ///     S: DataMut<Buf = ndarray::DenseBuf<<S as ndarray::RawData>::Elem>>,
 ///     S::Elem: Clone,
@@ -1071,16 +1071,16 @@ pub type Ixs = isize;
 ///
 /// Input | Output | Methods
 /// ------|--------|--------
-/// `Vec<A>` | `ArrayBase<S: DataOwned, Ix1>` | [`::from_vec()`](Self::from_vec)
-/// `Vec<A>` | `ArrayBase<S: DataOwned, D>` | [`::from_shape_vec()`](Self::from_shape_vec)
+/// `Vec<A>` | `ArrayBase<S: DataOwned, StridedLayout<Ix1>>` | [`::from_vec()`](Self::from_vec)
+/// `Vec<A>` | `ArrayBase<S: DataOwned, StridedLayout<D>>` | [`::from_shape_vec()`](Self::from_shape_vec)
 /// `&[A]` | `ArrayView1<A>` | [`::from()`](ArrayView#method.from)
 /// `&[A]` | `ArrayView<A, D>` | [`::from_shape()`](ArrayView#method.from_shape)
 /// `&mut [A]` | `ArrayViewMut1<A>` | [`::from()`](ArrayViewMut#method.from)
 /// `&mut [A]` | `ArrayViewMut<A, D>` | [`::from_shape()`](ArrayViewMut#method.from_shape)
-/// `&ArrayBase<S, Ix1>` | `Vec<A>` | [`.to_vec()`](ArrayRef::to_vec)
+/// `&ArrayBase<S, StridedLayout<Ix1>>` | `Vec<A>` | [`.to_vec()`](ArrayRef::to_vec)
 /// `Array<A, D>` | `Vec<A>` | [`.into_raw_vec()`](Array#method.into_raw_vec)<sup>[1](#into_raw_vec)</sup>
-/// `&ArrayBase<S, D>` | `&[A]` | [`.as_slice()`](ArrayRef::as_slice)<sup>[2](#req_contig_std)</sup>, [`.as_slice_memory_order()`](ArrayRef::as_slice_memory_order)<sup>[3](#req_contig)</sup>
-/// `&mut ArrayBase<S: DataMut, D>` | `&mut [A]` | [`.as_slice_mut()`](Self::as_slice_mut)<sup>[2](#req_contig_std)</sup>, [`.as_slice_memory_order_mut()`](Self::as_slice_memory_order_mut)<sup>[3](#req_contig)</sup>
+/// `&ArrayBase<S, StridedLayout<D>>` | `&[A]` | [`.as_slice()`](ArrayRef::as_slice)<sup>[2](#req_contig_std)</sup>, [`.as_slice_memory_order()`](ArrayRef::as_slice_memory_order)<sup>[3](#req_contig)</sup>
+/// `&mut ArrayBase<S: DataMut, StridedLayout<D>>` | `&mut [A]` | [`.as_slice_mut()`](Self::as_slice_mut)<sup>[2](#req_contig_std)</sup>, [`.as_slice_memory_order_mut()`](Self::as_slice_memory_order_mut)<sup>[3](#req_contig)</sup>
 /// `ArrayView<A, D>` | `&[A]` | [`.to_slice()`](ArrayView#method.to_slice)<sup>[2](#req_contig_std)</sup>
 /// `ArrayViewMut<A, D>` | `&mut [A]` | [`.into_slice()`](ArrayViewMut#method.into_slice)<sup>[2](#req_contig_std)</sup>
 /// `Array0<A>` | `A` | [`.into_scalar()`](Array#method.into_scalar)
@@ -1314,7 +1314,7 @@ pub type Ixs = isize;
 // may change in the future.
 //
 // [`.offset()`]: https://doc.rust-lang.org/stable/std/primitive.pointer.html#method.offset-1
-pub struct ArrayBase<S, D, A = <S as RawData>::Elem, H = <<S as RawData>::Buf as Buffer>::Handle>
+pub struct ArrayBase<S, L, A = <S as RawData>::Elem, H = <<S as RawData>::Buf as Buffer>::Handle>
 where
     S: RawData<Elem = A>,
     S::Buf: Buffer<Handle = H>,
@@ -1323,7 +1323,7 @@ where
     /// buffer; if borrowed, contains the lifetime and mutability.)
     data: S,
     /// The dimension, strides, and pointer to inside of `data`
-    parts: ArrayPartsSized<H, D>,
+    parts: ArrayPartsSized<H, L>,
 }
 
 /// A possibly-unsized container for array parts.
@@ -1331,7 +1331,7 @@ where
 /// This type only exists to enable holding the array parts in a single
 /// type, which needs to be sized inside of `ArrayBase` and unsized inside
 /// of the reference types.
-struct ArrayParts<H, D, T: ?Sized>
+struct ArrayParts<H, L, T: ?Sized>
 {
     /// The storage's handle (`H = <S::Buf as Buffer>::Handle`) into the
     /// buffer held by `data`; for dense storage a non-null pointer that may
@@ -1341,7 +1341,7 @@ struct ArrayParts<H, D, T: ?Sized>
     /// lifetime).
     handle: H,
     /// The axis lengths and strides.
-    layout: StridedLayout<D>,
+    layout: L,
     _dst_control: T,
 }
 
@@ -1356,16 +1356,16 @@ impl<H: std::fmt::Debug, D: std::fmt::Debug, T: ?Sized> std::fmt::Debug for Arra
     }
 }
 
-type ArrayPartsSized<H, D> = ArrayParts<H, D, [usize; 0]>;
-type ArrayPartsUnsized<H, D> = ArrayParts<H, D, [usize]>;
+type ArrayPartsSized<H, L> = ArrayParts<H, L, [usize; 0]>;
+type ArrayPartsUnsized<H, L> = ArrayParts<H, L, [usize]>;
 
-impl<H, D> ArrayPartsSized<H, D>
+impl<H, L> ArrayPartsSized<H, L>
 {
-    const fn new(handle: H, dim: D, strides: D) -> ArrayPartsSized<H, D>
+    const fn new(handle: H, layout: L) -> ArrayPartsSized<H, L>
     {
         Self {
             handle,
-            layout: StridedLayout::new(dim, strides),
+            layout,
             _dst_control: [],
         }
     }
@@ -1471,12 +1471,12 @@ impl<H, D> ArrayPartsSized<H, D>
 // alter the offset of the pointer. This is allowed, as it does not
 // cause a pointer deref.
 #[repr(transparent)]
-pub struct LayoutRefBase<B: Buffer, D>(ArrayPartsUnsized<B::Handle, D>);
+pub struct LayoutRefBase<B: Buffer, L>(ArrayPartsUnsized<B::Handle, L>);
 
 /// A [`LayoutRefBase`] over dense storage.
-pub type LayoutRef<A, D> = LayoutRefBase<DenseBuf<A>, D>;
+pub type LayoutRef<A, D> = LayoutRefBase<DenseBuf<A>, StridedLayout<D>>;
 
-impl<B: Buffer, D> LayoutRefBase<B, D>
+impl<B: Buffer, D> LayoutRefBase<B, StridedLayout<D>>
 {
     /// Get a reference to the data pointer.
     pub(crate) fn _ptr(&self) -> &B::Handle
@@ -1571,10 +1571,10 @@ impl<B: Buffer, D> LayoutRefBase<B, D>
 /// into `ArrayRef`. In other words, having a `&mut ArrayRef` guarantees that the underlying
 /// data is un-shared and safe to write to.
 #[repr(transparent)]
-pub struct ArrayRefBase<B: Buffer, D>(LayoutRefBase<B, D>);
+pub struct ArrayRefBase<B: Buffer, L>(LayoutRefBase<B, L>);
 
 /// An [`ArrayRefBase`] over dense storage.
-pub type ArrayRef<A, D> = ArrayRefBase<DenseBuf<A>, D>;
+pub type ArrayRef<A, D> = ArrayRefBase<DenseBuf<A>, StridedLayout<D>>;
 
 /// A reference to an *n*-dimensional array whose data is not safe to read or write.
 ///
@@ -1588,10 +1588,10 @@ pub type ArrayRef<A, D> = ArrayRefBase<DenseBuf<A>, D>;
 /// as [`LayoutRef`]; see [its documentation on writing functions](LayoutRef#writing-functions)
 /// for information on how to properly handle functionality on this type.
 #[repr(transparent)]
-pub struct RawRefBase<B: Buffer, D>(LayoutRefBase<B, D>);
+pub struct RawRefBase<B: Buffer, L>(LayoutRefBase<B, L>);
 
 /// A [`RawRefBase`] over dense storage.
-pub type RawRef<A, D> = RawRefBase<DenseBuf<A>, D>;
+pub type RawRef<A, D> = RawRefBase<DenseBuf<A>, StridedLayout<D>>;
 
 /// An array where the data has shared ownership and is copy on write.
 ///
@@ -1615,7 +1615,7 @@ pub type RawRef<A, D> = RawRefBase<DenseBuf<A>, D>;
 ///
 /// + [Constructor Methods for Owned Arrays](ArrayBase#constructor-methods-for-owned-arrays)
 /// + [Methods For All Array Types](ArrayBase#methods-for-all-array-types)
-pub type ArcArray<A, D> = ArrayBase<Shared<DenseBuf<A>>, D>;
+pub type ArcArray<A, D> = ArrayBase<Shared<DenseBuf<A>>, StridedLayout<D>>;
 
 /// An array that owns its data uniquely.
 ///
@@ -1638,7 +1638,7 @@ pub type ArcArray<A, D> = ArrayBase<Shared<DenseBuf<A>>, D>;
 ///   [`Array3`], ...,
 ///   [`ArrayD`],
 ///   and so on.
-pub type Array<A, D> = ArrayBase<Owned<DenseBuf<A>>, D>;
+pub type Array<A, D> = ArrayBase<Owned<DenseBuf<A>>, StridedLayout<D>>;
 
 /// An array with copy-on-write behavior.
 ///
@@ -1656,7 +1656,7 @@ pub type Array<A, D> = ArrayBase<Owned<DenseBuf<A>>, D>;
 /// See also [`ArcArray`], which also provides
 /// copy-on-write behavior but has a reference-counted pointer to the data
 /// instead of either a view or a uniquely owned copy.
-pub type CowArray<'a, A, D> = ArrayBase<Cow<'a, DenseBuf<A>>, D>;
+pub type CowArray<'a, A, D> = ArrayBase<Cow<'a, DenseBuf<A>>, StridedLayout<D>>;
 
 /// A read-only array view.
 ///
@@ -1669,7 +1669,7 @@ pub type CowArray<'a, A, D> = ArrayBase<Cow<'a, DenseBuf<A>>, D>;
 /// Array views have all the methods of an array (see [`ArrayBase`]).
 ///
 /// See also [`ArrayViewMut`].
-pub type ArrayView<'a, A, D> = ArrayBase<View<'a, DenseBuf<A>>, D>;
+pub type ArrayView<'a, A, D> = ArrayBase<View<'a, DenseBuf<A>>, StridedLayout<D>>;
 
 /// A read-write array view.
 ///
@@ -1682,7 +1682,7 @@ pub type ArrayView<'a, A, D> = ArrayBase<View<'a, DenseBuf<A>>, D>;
 /// Array views have all the methods of an array (see [`ArrayBase`]).
 ///
 /// See also [`ArrayView`].
-pub type ArrayViewMut<'a, A, D> = ArrayBase<ViewMut<'a, DenseBuf<A>>, D>;
+pub type ArrayViewMut<'a, A, D> = ArrayBase<ViewMut<'a, DenseBuf<A>>, StridedLayout<D>>;
 
 /// A read-only array view without a lifetime.
 ///
@@ -1705,7 +1705,7 @@ pub type ArrayViewMut<'a, A, D> = ArrayBase<ViewMut<'a, DenseBuf<A>>, D>;
 ///
 /// You can't use this type with an arbitrary raw pointer; see
 /// [`from_shape_ptr`](#method.from_shape_ptr) for details.
-pub type RawArrayView<A, D> = ArrayBase<RawView<DenseBuf<A>>, D>;
+pub type RawArrayView<A, D> = ArrayBase<RawView<DenseBuf<A>>, StridedLayout<D>>;
 
 /// A mutable array view without a lifetime.
 ///
@@ -1728,7 +1728,7 @@ pub type RawArrayView<A, D> = ArrayBase<RawView<DenseBuf<A>>, D>;
 ///
 /// You can't use this type with an arbitrary raw pointer; see
 /// [`from_shape_ptr`](#method.from_shape_ptr) for details.
-pub type RawArrayViewMut<A, D> = ArrayBase<RawViewMut<DenseBuf<A>>, D>;
+pub type RawArrayViewMut<A, D> = ArrayBase<RawViewMut<DenseBuf<A>>, StridedLayout<D>>;
 
 pub use data_repr::DenseBuf;
 
@@ -1787,13 +1787,13 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where
     S: Data<Elem = A>,
     D: Dimension,
 {
     /// Remove array axis `axis` and return the result.
-    fn try_remove_axis(self, axis: Axis) -> ArrayBase<S, D::Smaller>
+    fn try_remove_axis(self, axis: Axis) -> ArrayBase<S, StridedLayout<D::Smaller>>
     {
         let d = self.parts.layout.dim.try_remove_axis(axis);
         let s = self.parts.layout.strides.try_remove_axis(axis);

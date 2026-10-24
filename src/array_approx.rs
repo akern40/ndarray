@@ -59,7 +59,7 @@ macro_rules! impl_approx_traits {
             }
 
             #[doc = $doc]
-            impl<A, B, S, S2, D> AbsDiffEq<ArrayBase<S2, D>> for ArrayBase<S, D>
+            impl<A, B, S, S2, D> AbsDiffEq<ArrayBase<S2, StridedLayout<D>>> for ArrayBase<S, StridedLayout<D>>
             where
                 A: AbsDiffEq<B>,
                 A::Epsilon: Clone,
@@ -73,7 +73,7 @@ macro_rules! impl_approx_traits {
                     A::default_epsilon()
                 }
 
-                fn abs_diff_eq(&self, other: &ArrayBase<S2, D>, epsilon: A::Epsilon) -> bool {
+                fn abs_diff_eq(&self, other: &ArrayBase<S2, StridedLayout<D>>, epsilon: A::Epsilon) -> bool {
                     (**self).abs_diff_eq(other, epsilon)
                 }
             }
@@ -106,7 +106,7 @@ macro_rules! impl_approx_traits {
             }
 
             #[doc = $doc]
-            impl<A, B, S, S2, D> RelativeEq<ArrayBase<S2, D>> for ArrayBase<S, D>
+            impl<A, B, S, S2, D> RelativeEq<ArrayBase<S2, StridedLayout<D>>> for ArrayBase<S, StridedLayout<D>>
             where
                 A: RelativeEq<B>,
                 A::Epsilon: Clone,
@@ -120,7 +120,7 @@ macro_rules! impl_approx_traits {
 
                 fn relative_eq(
                     &self,
-                    other: &ArrayBase<S2, D>,
+                    other: &ArrayBase<S2, StridedLayout<D>>,
                     epsilon: A::Epsilon,
                     max_relative: A::Epsilon,
                 ) -> bool {
@@ -156,7 +156,7 @@ macro_rules! impl_approx_traits {
             }
 
             #[doc = $doc]
-            impl<A, B, S, S2, D> UlpsEq<ArrayBase<S2, D>> for ArrayBase<S, D>
+            impl<A, B, S, S2, D> UlpsEq<ArrayBase<S2, StridedLayout<D>>> for ArrayBase<S, StridedLayout<D>>
             where
                 A: UlpsEq<B>,
                 A::Epsilon: Clone,
@@ -170,7 +170,7 @@ macro_rules! impl_approx_traits {
 
                 fn ulps_eq(
                     &self,
-                    other: &ArrayBase<S2, D>,
+                    other: &ArrayBase<S2, StridedLayout<D>>,
                     epsilon: A::Epsilon,
                     max_ulps: u32,
                 ) -> bool {

@@ -13,6 +13,7 @@ use crate::zip::Offset;
 use crate::Axis;
 use crate::LayoutBitset;
 use crate::NdProducer;
+use crate::StridedLayout;
 use crate::{ArrayBase, Data};
 
 /// An iterator over the indexes of an array shape.
@@ -43,7 +44,7 @@ where E: IntoDimension
 ///
 /// *Note:* prefer higher order methods, arithmetic operations and
 /// non-indexed iteration before using indices.
-pub fn indices_of<S, D>(array: &ArrayBase<S, D>) -> Indices<D>
+pub fn indices_of<S, D>(array: &ArrayBase<S, StridedLayout<D>>) -> Indices<D>
 where
     S: Data,
     D: Dimension,

@@ -35,6 +35,7 @@ use crate::rand::distr::{Distribution, Uniform};
 use crate::rand::rngs::SmallRng;
 use crate::rand::seq::index;
 use crate::rand::{rng, Rng, SeedableRng};
+use ndarray::StridedLayout;
 
 use ndarray::{Array, ArrayRef, Axis, RemoveAxis, ShapeBuilder};
 use ndarray::{ArrayBase, Data, DataOwned, Dimension, RawData};
@@ -85,7 +86,7 @@ where
     /// // [[  8.6900,   6.9824,   3.8922,   6.5861,   2.4890],
     /// //  [  0.0914,   5.5186,   5.8135,   5.2361,   3.1879]]
     /// # }
-    fn random<Sh, IdS>(shape: Sh, distribution: IdS) -> ArrayBase<S, D>
+    fn random<Sh, IdS>(shape: Sh, distribution: IdS) -> ArrayBase<S, StridedLayout<D>>
     where
         IdS: Distribution<S::Elem>,
         S: DataOwned<Elem = A>,
@@ -116,7 +117,7 @@ where
     /// // [[  8.6900,   6.9824,   3.8922,   6.5861,   2.4890],
     /// //  [  0.0914,   5.5186,   5.8135,   5.2361,   3.1879]]
     /// # }
-    fn random_using<Sh, IdS, R>(shape: Sh, distribution: IdS, rng: &mut R) -> ArrayBase<S, D>
+    fn random_using<Sh, IdS, R>(shape: Sh, distribution: IdS, rng: &mut R) -> ArrayBase<S, StridedLayout<D>>
     where
         IdS: Distribution<S::Elem>,
         R: Rng + ?Sized,
@@ -260,12 +261,12 @@ where D: Dimension
         D: RemoveAxis;
 }
 
-impl<S, A, D> RandomExt<S, A, D> for ArrayBase<S, D>
+impl<S, A, D> RandomExt<S, A, D> for ArrayBase<S, StridedLayout<D>>
 where
     S: RawData<Elem = A, Buf = ndarray::DenseBuf<A>>,
     D: Dimension,
 {
-    fn random<Sh, IdS>(shape: Sh, dist: IdS) -> ArrayBase<S, D>
+    fn random<Sh, IdS>(shape: Sh, dist: IdS) -> ArrayBase<S, StridedLayout<D>>
     where
         IdS: Distribution<S::Elem>,
         S: DataOwned<Elem = A>,
@@ -274,7 +275,7 @@ where
         Self::random_using(shape, dist, &mut get_rng())
     }
 
-    fn random_using<Sh, IdS, R>(shape: Sh, dist: IdS, rng: &mut R) -> ArrayBase<S, D>
+    fn random_using<Sh, IdS, R>(shape: Sh, dist: IdS, rng: &mut R) -> ArrayBase<S, StridedLayout<D>>
     where
         IdS: Distribution<S::Elem>,
         R: Rng + ?Sized,

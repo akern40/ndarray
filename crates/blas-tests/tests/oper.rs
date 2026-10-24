@@ -77,7 +77,9 @@ fn range_i32(m: Ix, n: Ix) -> Array2<i32>
 }
 
 // simple, slow, correct (hopefully) mat mul
-fn reference_mat_mul<A, S, S2>(lhs: &ArrayBase<S, Ix2>, rhs: &ArrayBase<S2, Ix2>) -> Array2<A>
+fn reference_mat_mul<A, S, S2>(
+    lhs: &ArrayBase<S, StridedLayout<Ix2>>, rhs: &ArrayBase<S2, StridedLayout<Ix2>>,
+) -> Array2<A>
 where
     A: LinalgScalar,
     S: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
@@ -107,7 +109,9 @@ where
 }
 
 // simple, slow, correct (hopefully) mat mul
-fn reference_mat_vec_mul<A, S, S2>(lhs: &ArrayBase<S, Ix2>, rhs: &ArrayBase<S2, Ix1>) -> Array1<A>
+fn reference_mat_vec_mul<A, S, S2>(
+    lhs: &ArrayBase<S, StridedLayout<Ix2>>, rhs: &ArrayBase<S2, StridedLayout<Ix1>>,
+) -> Array1<A>
 where
     A: LinalgScalar,
     S: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
@@ -125,7 +129,9 @@ where
 }
 
 // simple, slow, correct (hopefully) mat mul
-fn reference_vec_mat_mul<A, S, S2>(lhs: &ArrayBase<S, Ix1>, rhs: &ArrayBase<S2, Ix2>) -> Array1<A>
+fn reference_vec_mat_mul<A, S, S2>(
+    lhs: &ArrayBase<S, StridedLayout<Ix1>>, rhs: &ArrayBase<S2, StridedLayout<Ix2>>,
+) -> Array1<A>
 where
     A: LinalgScalar,
     S: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,

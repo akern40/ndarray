@@ -9,7 +9,7 @@
 use crate::{imp_prelude::*, ArrayPartsSized};
 
 // internal "builder-like" methods
-impl<A, S> ArrayBase<S, Ix1>
+impl<A, S> ArrayBase<S, StridedLayout<Ix1>>
 where S: RawData<Elem = A>
 {
     /// Create an (initially) empty one-dimensional array from the given data and array head
@@ -25,7 +25,7 @@ where S: RawData<Elem = A>
     {
         let array = ArrayBase {
             data,
-            parts: ArrayPartsSized::new(ptr, Ix1(0), Ix1(1)),
+            parts: ArrayPartsSized::new(ptr, StridedLayout::new(Ix1(0), Ix1(1))),
         };
         debug_assert!(array.pointer_is_inbounds());
         array
@@ -33,7 +33,7 @@ where S: RawData<Elem = A>
 }
 
 // internal "builder-like" methods
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where
     S: RawData<Elem = A>,
     D: Dimension,
@@ -48,13 +48,13 @@ where
     /// The caller needs to ensure that the new strides and dimensions are correct
     /// for the array data.
     #[inline]
-    pub(crate) unsafe fn with_strides_dim<E>(self, strides: E, dim: E) -> ArrayBase<S, E>
+    pub(crate) unsafe fn with_strides_dim<E>(self, strides: E, dim: E) -> ArrayBase<S, StridedLayout<E>>
     where E: Dimension
     {
         debug_assert_eq!(strides.ndim(), dim.ndim());
         ArrayBase {
             data: self.data,
-            parts: ArrayPartsSized::new(self.parts.handle, dim, strides),
+            parts: ArrayPartsSized::new(self.parts.handle, StridedLayout::new(dim, strides)),
         }
     }
 
@@ -65,7 +65,7 @@ where
     /// Every offset the new layout can produce must be in bounds of the
     /// array data, and the layout must be unique if the array is mutable.
     #[inline]
-    pub(crate) unsafe fn with_layout<E>(self, layout: StridedLayout<E>) -> ArrayBase<S, E>
+    pub(crate) unsafe fn with_layout<E>(self, layout: StridedLayout<E>) -> ArrayBase<S, StridedLayout<E>>
     where E: Dimension
     {
         self.with_strides_dim(layout.strides, layout.dim)

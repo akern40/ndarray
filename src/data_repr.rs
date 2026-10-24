@@ -1,4 +1,5 @@
 use crate::extension::nonnull;
+use crate::StridedLayout;
 #[cfg(not(feature = "std"))]
 use alloc::borrow::ToOwned;
 use alloc::slice;
@@ -237,7 +238,9 @@ unsafe impl<A> Buffer for DenseBuf<A>
         self.clone_from(other)
     }
 
-    fn collect<D: Dimension>(view: ArrayBase<View<'_, Self>, D>) -> ArrayBase<Owned<Self>, D>
+    fn collect<D: Dimension>(
+        view: ArrayBase<View<'_, Self>, StridedLayout<D>>,
+    ) -> ArrayBase<Owned<Self>, StridedLayout<D>>
     where A: Clone
     {
         if let Some(slc) = view.as_slice_memory_order() {

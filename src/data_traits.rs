@@ -9,7 +9,7 @@
 //! The data (inner representation) traits for ndarray
 
 #[allow(unused_imports)]
-use rawpointer::PointerExt;
+use crate::StridedLayout;
 
 #[cfg(target_has_atomic = "ptr")]
 use alloc::sync::Arc;
@@ -67,7 +67,7 @@ pub unsafe trait RawDataMut: RawData
     /// Additionally, if `Self` provides safe mutable access to array elements,
     /// then this method **must** panic or ensure that the data is unique.
     #[doc(hidden)]
-    fn try_ensure_unique<D>(_: &mut ArrayBase<Self, D>)
+    fn try_ensure_unique<D>(_: &mut ArrayBase<Self, StridedLayout<D>>)
     where
         Self: Sized,
         D: Dimension;
@@ -129,7 +129,7 @@ pub unsafe trait DataMut: Data + RawDataMut
     /// Ensures that the array has unique access to its data.
     #[doc(hidden)]
     #[inline]
-    fn ensure_unique<D>(self_: &mut ArrayBase<Self, D>)
+    fn ensure_unique<D>(self_: &mut ArrayBase<Self, StridedLayout<D>>)
     where
         Self: Sized,
         D: Dimension,
@@ -161,13 +161,16 @@ pub unsafe trait IntoOwned: RawData
 
     #[doc(hidden)]
     #[allow(clippy::wrong_self_convention)]
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Self::Owned, D>
+    fn into_owned<D>(self_: ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Self::Owned, StridedLayout<D>>
     where
         Self::Elem: Clone,
         D: Dimension;
 
     #[doc(hidden)]
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<ArrayBase<Self::Owned, D>, ArrayBase<Self, D>>
+    #[allow(clippy::type_complexity)]
+    fn try_into_owned_nocopy<D>(
+        self_: ArrayBase<Self, StridedLayout<D>>,
+    ) -> Result<ArrayBase<Self::Owned, StridedLayout<D>>, ArrayBase<Self, StridedLayout<D>>>
     where D: Dimension;
 }
 
@@ -184,14 +187,14 @@ pub unsafe trait IntoShared: Data
 
     #[doc(hidden)]
     #[allow(clippy::wrong_self_convention)]
-    fn into_shared<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Self::Shared, D>
+    fn into_shared<D>(self_: ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Self::Shared, StridedLayout<D>>
     where
         Self::Elem: Clone,
         D: Dimension;
 
     #[doc(hidden)]
     #[allow(clippy::wrong_self_convention)]
-    fn to_shared<D>(self_: &ArrayBase<Self, D>) -> ArrayBase<Self::Shared, D>
+    fn to_shared<D>(self_: &ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Self::Shared, StridedLayout<D>>
     where
         Self::Elem: Clone,
         D: Dimension;

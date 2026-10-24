@@ -1,7 +1,8 @@
 use ndarray::prelude::*;
 use ndarray::Data;
+use ndarray::StridedLayout;
 
-pub fn roll_axis<A, S, D>(mut a: ArrayBase<S, D>, to: Axis, from: Axis) -> ArrayBase<S, D>
+pub fn roll_axis<A, S, D>(mut a: ArrayBase<S, StridedLayout<D>>, to: Axis, from: Axis) -> ArrayBase<S, StridedLayout<D>>
 where
     S: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
     D: Dimension,

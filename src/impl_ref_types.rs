@@ -8,8 +8,8 @@
 //!         but does not allow data reading of any kind
 //!
 //! These types are connected through a number of `Deref` and `AsRef` implementations.
-//!     1. `ArrayBase<S, D>` dereferences to `ArrayRef` when `S: Data`
-//!     2. `ArrayBase<S, D>` mutably dereferences to `ArrayRef` when `S: DataMut`, and ensures uniqueness
+//!     1. `ArrayBase<S, StridedLayout<D>>` dereferences to `ArrayRef` when `S: Data`
+//!     2. `ArrayBase<S, StridedLayout<D>>` mutably dereferences to `ArrayRef` when `S: DataMut`, and ensures uniqueness
 //!     3. `ArrayRef` mutably dereferences to `RawRef`
 //!     4. `RawRef` mutably dereferences to `LayoutRef`
 //! This chain works very well for arrays whose data is safe to read and is uniquely held.
@@ -29,6 +29,7 @@
 //! This allows users to write a single method or trait implementation that takes `T: AsRef<RawRef<A, D>>`
 //! or `T: AsRef<LayoutRef<A, D>>` and have that functionality work on any of the relevant array types.
 
+use crate::StridedLayout;
 use crate::{ArrayRefBase, Buffer, LayoutRefBase, RawRefBase};
 use alloc::borrow::ToOwned;
 use core::{
@@ -50,10 +51,10 @@ use crate::{
 };
 
 // D1: &ArrayBase -> &ArrayRef when data is safe to read
-impl<S, D> Deref for ArrayBase<S, D>
+impl<S, L> Deref for ArrayBase<S, L>
 where S: Data
 {
-    type Target = ArrayRefBase<S::Buf, D>;
+    type Target = ArrayRefBase<S::Buf, L>;
 
     fn deref(&self) -> &Self::Target
     {
@@ -62,14 +63,14 @@ where S: Data
         // - It is "dereferencable" because it comes from a reference
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
-        let parts: &ArrayPartsUnsized<<S::Buf as Buffer>::Handle, D> = &self.parts;
-        let ptr = (parts as *const ArrayPartsUnsized<<S::Buf as Buffer>::Handle, D>) as *const ArrayRefBase<S::Buf, D>;
+        let parts: &ArrayPartsUnsized<<S::Buf as Buffer>::Handle, L> = &self.parts;
+        let ptr = (parts as *const ArrayPartsUnsized<<S::Buf as Buffer>::Handle, L>) as *const ArrayRefBase<S::Buf, L>;
         unsafe { &*ptr }
     }
 }
 
 // D2: &mut ArrayBase -> &mut ArrayRef when data is safe to read; ensure uniqueness
-impl<S, D> DerefMut for ArrayBase<S, D>
+impl<S, D> DerefMut for ArrayBase<S, StridedLayout<D>>
 where
     S: DataMut,
     D: Dimension,
@@ -82,16 +83,17 @@ where
         // - It is "dereferencable" because it comes from a reference
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
-        let parts: &mut ArrayPartsUnsized<<S::Buf as Buffer>::Handle, D> = &mut self.parts;
-        let ptr = (parts as *mut ArrayPartsUnsized<<S::Buf as Buffer>::Handle, D>) as *mut ArrayRefBase<S::Buf, D>;
+        let parts: &mut ArrayPartsUnsized<<S::Buf as Buffer>::Handle, StridedLayout<D>> = &mut self.parts;
+        let ptr = (parts as *mut ArrayPartsUnsized<<S::Buf as Buffer>::Handle, StridedLayout<D>>)
+            as *mut ArrayRefBase<S::Buf, StridedLayout<D>>;
         unsafe { &mut *ptr }
     }
 }
 
 // D3: &ArrayRef -> &RawRef
-impl<B: Buffer, D> Deref for ArrayRefBase<B, D>
+impl<B: Buffer, L> Deref for ArrayRefBase<B, L>
 {
-    type Target = RawRefBase<B, D>;
+    type Target = RawRefBase<B, L>;
 
     fn deref(&self) -> &Self::Target
     {
@@ -100,12 +102,12 @@ impl<B: Buffer, D> Deref for ArrayRefBase<B, D>
         // - It is "dereferencable" because it comes from a reference
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
-        unsafe { &*((self as *const ArrayRefBase<B, D>) as *const RawRefBase<B, D>) }
+        unsafe { &*((self as *const ArrayRefBase<B, L>) as *const RawRefBase<B, L>) }
     }
 }
 
 // D4: &mut ArrayRef -> &mut RawRef
-impl<B: Buffer, D> DerefMut for ArrayRefBase<B, D>
+impl<B: Buffer, L> DerefMut for ArrayRefBase<B, L>
 {
     fn deref_mut(&mut self) -> &mut Self::Target
     {
@@ -114,14 +116,14 @@ impl<B: Buffer, D> DerefMut for ArrayRefBase<B, D>
         // - It is "dereferencable" because it comes from a reference
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
-        unsafe { &mut *((self as *mut ArrayRefBase<B, D>) as *mut RawRefBase<B, D>) }
+        unsafe { &mut *((self as *mut ArrayRefBase<B, L>) as *mut RawRefBase<B, L>) }
     }
 }
 
 // D5: &RawRef -> &LayoutRef
-impl<B: Buffer, D> Deref for RawRefBase<B, D>
+impl<B: Buffer, L> Deref for RawRefBase<B, L>
 {
-    type Target = LayoutRefBase<B, D>;
+    type Target = LayoutRefBase<B, L>;
 
     fn deref(&self) -> &Self::Target
     {
@@ -130,7 +132,7 @@ impl<B: Buffer, D> Deref for RawRefBase<B, D>
 }
 
 // D5: &mut RawRef -> &mut LayoutRef
-impl<B: Buffer, D> DerefMut for RawRefBase<B, D>
+impl<B: Buffer, L> DerefMut for RawRefBase<B, L>
 {
     fn deref_mut(&mut self) -> &mut Self::Target
     {
@@ -139,148 +141,148 @@ impl<B: Buffer, D> DerefMut for RawRefBase<B, D>
 }
 
 // A1: &ArrayBase -AR-> &RawRef
-impl<S, D> AsRef<RawRefBase<S::Buf, D>> for ArrayBase<S, D>
+impl<S, L> AsRef<RawRefBase<S::Buf, L>> for ArrayBase<S, L>
 where S: RawData
 {
-    fn as_ref(&self) -> &RawRefBase<S::Buf, D>
+    fn as_ref(&self) -> &RawRefBase<S::Buf, L>
     {
         // SAFETY:
         // - The pointer is aligned because neither type uses repr(align)
         // - It is "dereferencable" because it comes from a reference
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
-        let parts: &ArrayPartsUnsized<<S::Buf as Buffer>::Handle, D> = &self.parts;
-        let ptr = (parts as *const ArrayPartsUnsized<<S::Buf as Buffer>::Handle, D>) as *const RawRefBase<S::Buf, D>;
+        let parts: &ArrayPartsUnsized<<S::Buf as Buffer>::Handle, L> = &self.parts;
+        let ptr = (parts as *const ArrayPartsUnsized<<S::Buf as Buffer>::Handle, L>) as *const RawRefBase<S::Buf, L>;
         unsafe { &*ptr }
     }
 }
 
 // A2: &mut ArrayBase -AM-> &mut RawRef
-impl<S, D> AsMut<RawRefBase<S::Buf, D>> for ArrayBase<S, D>
+impl<S, L> AsMut<RawRefBase<S::Buf, L>> for ArrayBase<S, L>
 where S: RawDataMut
 {
-    fn as_mut(&mut self) -> &mut RawRefBase<S::Buf, D>
+    fn as_mut(&mut self) -> &mut RawRefBase<S::Buf, L>
     {
         // SAFETY:
         // - The pointer is aligned because neither type uses repr(align)
         // - It is "dereferencable" because it comes from a reference
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
-        let parts: &mut ArrayPartsUnsized<<S::Buf as Buffer>::Handle, D> = &mut self.parts;
-        let ptr = (parts as *mut ArrayPartsUnsized<<S::Buf as Buffer>::Handle, D>) as *mut RawRefBase<S::Buf, D>;
+        let parts: &mut ArrayPartsUnsized<<S::Buf as Buffer>::Handle, L> = &mut self.parts;
+        let ptr = (parts as *mut ArrayPartsUnsized<<S::Buf as Buffer>::Handle, L>) as *mut RawRefBase<S::Buf, L>;
         unsafe { &mut *ptr }
     }
 }
 
 // A3: &ArrayBase -AR-> &LayoutRef
-impl<S, D> AsRef<LayoutRefBase<S::Buf, D>> for ArrayBase<S, D>
+impl<S, L> AsRef<LayoutRefBase<S::Buf, L>> for ArrayBase<S, L>
 where S: RawData
 {
-    fn as_ref(&self) -> &LayoutRefBase<S::Buf, D>
+    fn as_ref(&self) -> &LayoutRefBase<S::Buf, L>
     {
-        let parts: &ArrayPartsUnsized<<S::Buf as Buffer>::Handle, D> = &self.parts;
-        let ptr = (parts as *const ArrayPartsUnsized<<S::Buf as Buffer>::Handle, D>) as *const LayoutRefBase<S::Buf, D>;
+        let parts: &ArrayPartsUnsized<<S::Buf as Buffer>::Handle, L> = &self.parts;
+        let ptr = (parts as *const ArrayPartsUnsized<<S::Buf as Buffer>::Handle, L>) as *const LayoutRefBase<S::Buf, L>;
         unsafe { &*ptr }
     }
 }
 
 // A3: &mut ArrayBase -AM-> &mut LayoutRef
-impl<S, D> AsMut<LayoutRefBase<S::Buf, D>> for ArrayBase<S, D>
+impl<S, L> AsMut<LayoutRefBase<S::Buf, L>> for ArrayBase<S, L>
 where S: RawData
 {
-    fn as_mut(&mut self) -> &mut LayoutRefBase<S::Buf, D>
+    fn as_mut(&mut self) -> &mut LayoutRefBase<S::Buf, L>
     {
-        let parts: &mut ArrayPartsUnsized<<S::Buf as Buffer>::Handle, D> = &mut self.parts;
-        let ptr = (parts as *mut ArrayPartsUnsized<<S::Buf as Buffer>::Handle, D>) as *mut LayoutRefBase<S::Buf, D>;
+        let parts: &mut ArrayPartsUnsized<<S::Buf as Buffer>::Handle, L> = &mut self.parts;
+        let ptr = (parts as *mut ArrayPartsUnsized<<S::Buf as Buffer>::Handle, L>) as *mut LayoutRefBase<S::Buf, L>;
         unsafe { &mut *ptr }
     }
 }
 
 // A4: &ArrayRef -AR-> &RawRef
-impl<B: Buffer, D> AsRef<RawRefBase<B, D>> for ArrayRefBase<B, D>
+impl<B: Buffer, D> AsRef<RawRefBase<B, StridedLayout<D>>> for ArrayRefBase<B, StridedLayout<D>>
 {
-    fn as_ref(&self) -> &RawRefBase<B, D>
+    fn as_ref(&self) -> &RawRefBase<B, StridedLayout<D>>
     {
         self
     }
 }
 
 // A4: &mut ArrayRef -AM-> &mut RawRef
-impl<B: Buffer, D> AsMut<RawRefBase<B, D>> for ArrayRefBase<B, D>
+impl<B: Buffer, D> AsMut<RawRefBase<B, StridedLayout<D>>> for ArrayRefBase<B, StridedLayout<D>>
 {
-    fn as_mut(&mut self) -> &mut RawRefBase<B, D>
+    fn as_mut(&mut self) -> &mut RawRefBase<B, StridedLayout<D>>
     {
         self
     }
 }
 
 // A4: &ArrayRef -AR-> &LayoutRef
-impl<B: Buffer, D> AsRef<LayoutRefBase<B, D>> for ArrayRefBase<B, D>
+impl<B: Buffer, D> AsRef<LayoutRefBase<B, StridedLayout<D>>> for ArrayRefBase<B, StridedLayout<D>>
 {
-    fn as_ref(&self) -> &LayoutRefBase<B, D>
+    fn as_ref(&self) -> &LayoutRefBase<B, StridedLayout<D>>
     {
         self
     }
 }
 
 // A4: &mut ArrayRef -AM-> &mut LayoutRef
-impl<B: Buffer, D> AsMut<LayoutRefBase<B, D>> for ArrayRefBase<B, D>
+impl<B: Buffer, D> AsMut<LayoutRefBase<B, StridedLayout<D>>> for ArrayRefBase<B, StridedLayout<D>>
 {
-    fn as_mut(&mut self) -> &mut LayoutRefBase<B, D>
+    fn as_mut(&mut self) -> &mut LayoutRefBase<B, StridedLayout<D>>
     {
         self
     }
 }
 
 // A5: &RawRef -AR-> &LayoutRef
-impl<B: Buffer, D> AsRef<LayoutRefBase<B, D>> for RawRefBase<B, D>
+impl<B: Buffer, D> AsRef<LayoutRefBase<B, StridedLayout<D>>> for RawRefBase<B, StridedLayout<D>>
 {
-    fn as_ref(&self) -> &LayoutRefBase<B, D>
+    fn as_ref(&self) -> &LayoutRefBase<B, StridedLayout<D>>
     {
         self
     }
 }
 
 // A5: &mut RawRef -AM-> &mut LayoutRef
-impl<B: Buffer, D> AsMut<LayoutRefBase<B, D>> for RawRefBase<B, D>
+impl<B: Buffer, D> AsMut<LayoutRefBase<B, StridedLayout<D>>> for RawRefBase<B, StridedLayout<D>>
 {
-    fn as_mut(&mut self) -> &mut LayoutRefBase<B, D>
+    fn as_mut(&mut self) -> &mut LayoutRefBase<B, StridedLayout<D>>
     {
         self
     }
 }
 
 // A6: &RawRef -AR-> &RawRef
-impl<B: Buffer, D> AsRef<RawRefBase<B, D>> for RawRefBase<B, D>
+impl<B: Buffer, D> AsRef<RawRefBase<B, StridedLayout<D>>> for RawRefBase<B, StridedLayout<D>>
 {
-    fn as_ref(&self) -> &RawRefBase<B, D>
+    fn as_ref(&self) -> &RawRefBase<B, StridedLayout<D>>
     {
         self
     }
 }
 
 // A6: &mut RawRef -AM-> &mut RawRef
-impl<B: Buffer, D> AsMut<RawRefBase<B, D>> for RawRefBase<B, D>
+impl<B: Buffer, D> AsMut<RawRefBase<B, StridedLayout<D>>> for RawRefBase<B, StridedLayout<D>>
 {
-    fn as_mut(&mut self) -> &mut RawRefBase<B, D>
+    fn as_mut(&mut self) -> &mut RawRefBase<B, StridedLayout<D>>
     {
         self
     }
 }
 
 // A6: &LayoutRef -AR-> &LayoutRef
-impl<B: Buffer, D> AsRef<LayoutRefBase<B, D>> for LayoutRefBase<B, D>
+impl<B: Buffer, D> AsRef<LayoutRefBase<B, StridedLayout<D>>> for LayoutRefBase<B, StridedLayout<D>>
 {
-    fn as_ref(&self) -> &LayoutRefBase<B, D>
+    fn as_ref(&self) -> &LayoutRefBase<B, StridedLayout<D>>
     {
         self
     }
 }
 
 // A6: &mut LayoutRef -AR-> &mut LayoutRef
-impl<B: Buffer, D> AsMut<LayoutRefBase<B, D>> for LayoutRefBase<B, D>
+impl<B: Buffer, D> AsMut<LayoutRefBase<B, StridedLayout<D>>> for LayoutRefBase<B, StridedLayout<D>>
 {
-    fn as_mut(&mut self) -> &mut LayoutRefBase<B, D>
+    fn as_mut(&mut self) -> &mut LayoutRefBase<B, StridedLayout<D>>
     {
         self
     }
@@ -293,7 +295,7 @@ impl<B: Buffer, D> AsMut<LayoutRefBase<B, D>> for LayoutRefBase<B, D>
 /// impossible to read the data behind the pointer from a LayoutRef (this
 /// is a safety invariant that *must* be maintained), and therefore we can
 /// Clone and Copy as desired.
-impl<H: Copy, D: Clone> Clone for ArrayPartsSized<H, D>
+impl<H: Copy, D: Clone> Clone for ArrayPartsSized<H, StridedLayout<D>>
 {
     fn clone(&self) -> Self
     {
@@ -305,41 +307,41 @@ impl<H: Copy, D: Clone> Clone for ArrayPartsSized<H, D>
     }
 }
 
-impl<H: Copy, D: Clone + Copy> Copy for ArrayPartsSized<H, D> {}
+impl<H: Copy, D: Clone + Copy> Copy for ArrayPartsSized<H, StridedLayout<D>> {}
 
-impl<S, D> Borrow<RawRefBase<S::Buf, D>> for ArrayBase<S, D>
+impl<S, D> Borrow<RawRefBase<S::Buf, StridedLayout<D>>> for ArrayBase<S, StridedLayout<D>>
 where S: RawData
 {
-    fn borrow(&self) -> &RawRefBase<S::Buf, D>
+    fn borrow(&self) -> &RawRefBase<S::Buf, StridedLayout<D>>
     {
         self.as_ref()
     }
 }
 
-impl<S, D> BorrowMut<RawRefBase<S::Buf, D>> for ArrayBase<S, D>
+impl<S, D> BorrowMut<RawRefBase<S::Buf, StridedLayout<D>>> for ArrayBase<S, StridedLayout<D>>
 where S: RawDataMut
 {
-    fn borrow_mut(&mut self) -> &mut RawRefBase<S::Buf, D>
+    fn borrow_mut(&mut self) -> &mut RawRefBase<S::Buf, StridedLayout<D>>
     {
         self.as_mut()
     }
 }
 
-impl<S, D> Borrow<ArrayRefBase<S::Buf, D>> for ArrayBase<S, D>
+impl<S, D> Borrow<ArrayRefBase<S::Buf, StridedLayout<D>>> for ArrayBase<S, StridedLayout<D>>
 where S: Data
 {
-    fn borrow(&self) -> &ArrayRefBase<S::Buf, D>
+    fn borrow(&self) -> &ArrayRefBase<S::Buf, StridedLayout<D>>
     {
         self
     }
 }
 
-impl<S, D> BorrowMut<ArrayRefBase<S::Buf, D>> for ArrayBase<S, D>
+impl<S, D> BorrowMut<ArrayRefBase<S::Buf, StridedLayout<D>>> for ArrayBase<S, StridedLayout<D>>
 where
     S: DataMut,
     D: Dimension,
 {
-    fn borrow_mut(&mut self) -> &mut ArrayRefBase<S::Buf, D>
+    fn borrow_mut(&mut self) -> &mut ArrayRefBase<S::Buf, StridedLayout<D>>
     {
         self
     }
@@ -364,29 +366,29 @@ where
 }
 
 /// Shortcuts for the various as_ref calls
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where S: RawData<Elem = A>
 {
     /// Cheaply convert a reference to the array to an &LayoutRef
-    pub fn as_layout_ref(&self) -> &LayoutRefBase<S::Buf, D>
+    pub fn as_layout_ref(&self) -> &LayoutRefBase<S::Buf, StridedLayout<D>>
     {
         self.as_ref()
     }
 
     /// Cheaply and mutably convert a reference to the array to an &LayoutRef
-    pub fn as_layout_ref_mut(&mut self) -> &mut LayoutRefBase<S::Buf, D>
+    pub fn as_layout_ref_mut(&mut self) -> &mut LayoutRefBase<S::Buf, StridedLayout<D>>
     {
         self.as_mut()
     }
 
     /// Cheaply convert a reference to the array to an &RawRef
-    pub fn as_raw_ref(&self) -> &RawRefBase<S::Buf, D>
+    pub fn as_raw_ref(&self) -> &RawRefBase<S::Buf, StridedLayout<D>>
     {
         self.as_ref()
     }
 
     /// Cheaply and mutably convert a reference to the array to an &RawRef
-    pub fn as_raw_ref_mut(&mut self) -> &mut RawRefBase<S::Buf, D>
+    pub fn as_raw_ref_mut(&mut self) -> &mut RawRefBase<S::Buf, StridedLayout<D>>
     where S: RawDataMut<Elem = A>
     {
         self.as_mut()

@@ -41,7 +41,7 @@ where
     B: Buffer,
     D: Dimension,
     I: NdIndex<D>,
-    T: AsRef<LayoutRefBase<B, D>> + ?Sized,
+    T: AsRef<LayoutRefBase<B, StridedLayout<D>>> + ?Sized,
 {
     let _layout_ref = _a.as_ref();
     debug_bounds_check_ref!(_layout_ref, *_index);
@@ -50,7 +50,7 @@ where
 /// Access the element at **index**.
 ///
 /// **Panics** if index is out of bounds.
-impl<B, D, I> Index<I> for ArrayRefBase<B, D>
+impl<B, D, I> Index<I> for ArrayRefBase<B, StridedLayout<D>>
 where
     B: Buffer,
     D: Dimension,
@@ -72,7 +72,7 @@ where
 /// Access the element at **index** mutably.
 ///
 /// **Panics** if index is out of bounds.
-impl<B, D, I> IndexMut<I> for ArrayRefBase<B, D>
+impl<B, D, I> IndexMut<I> for ArrayRefBase<B, StridedLayout<D>>
 where
     B: Buffer,
     D: Dimension,
@@ -93,7 +93,7 @@ where
 /// Access the element at **index**.
 ///
 /// **Panics** if index is out of bounds.
-impl<S, D, I> Index<I> for ArrayBase<S, D>
+impl<S, D, I> Index<I> for ArrayBase<S, StridedLayout<D>>
 where
     D: Dimension,
     I: NdIndex<D>,
@@ -111,7 +111,7 @@ where
 /// Access the element at **index** mutably.
 ///
 /// **Panics** if index is out of bounds.
-impl<S, D, I> IndexMut<I> for ArrayBase<S, D>
+impl<S, D, I> IndexMut<I> for ArrayBase<S, StridedLayout<D>>
 where
     D: Dimension,
     I: NdIndex<D>,
@@ -189,14 +189,14 @@ where
 
 /// Return `true` if the array shapes and all elements of `self` and
 /// `rhs` are equal. Return `false` otherwise.
-impl<A, B, S, S2, D> PartialEq<ArrayBase<S2, D>> for ArrayBase<S, D>
+impl<A, B, S, S2, D> PartialEq<ArrayBase<S2, StridedLayout<D>>> for ArrayBase<S, StridedLayout<D>>
 where
     A: PartialEq<B>,
     S: Data<Elem = A, Buf = DenseBuf<A>>,
     S2: Data<Elem = B, Buf = DenseBuf<B>>,
     D: Dimension,
 {
-    fn eq(&self, rhs: &ArrayBase<S2, D>) -> bool
+    fn eq(&self, rhs: &ArrayBase<S2, StridedLayout<D>>) -> bool
     {
         PartialEq::eq(&**self, &**rhs)
     }
@@ -204,14 +204,14 @@ where
 
 /// Return `true` if the array shapes and all elements of `self` and
 /// `rhs` are equal. Return `false` otherwise.
-impl<A, B, S, S2, D> PartialEq<&ArrayBase<S2, D>> for ArrayBase<S, D>
+impl<A, B, S, S2, D> PartialEq<&ArrayBase<S2, StridedLayout<D>>> for ArrayBase<S, StridedLayout<D>>
 where
     A: PartialEq<B>,
     S: Data<Elem = A, Buf = DenseBuf<A>>,
     S2: Data<Elem = B, Buf = DenseBuf<B>>,
     D: Dimension,
 {
-    fn eq(&self, rhs: &&ArrayBase<S2, D>) -> bool
+    fn eq(&self, rhs: &&ArrayBase<S2, StridedLayout<D>>) -> bool
     {
         *self == **rhs
     }
@@ -219,19 +219,19 @@ where
 
 /// Return `true` if the array shapes and all elements of `self` and
 /// `rhs` are equal. Return `false` otherwise.
-impl<A, B, S, S2, D> PartialEq<ArrayBase<S2, D>> for &ArrayBase<S, D>
+impl<A, B, S, S2, D> PartialEq<ArrayBase<S2, StridedLayout<D>>> for &ArrayBase<S, StridedLayout<D>>
 where
     A: PartialEq<B>,
     S: Data<Elem = A, Buf = DenseBuf<A>>,
     S2: Data<Elem = B, Buf = DenseBuf<B>>,
     D: Dimension,
 {
-    fn eq(&self, rhs: &ArrayBase<S2, D>) -> bool
+    fn eq(&self, rhs: &ArrayBase<S2, StridedLayout<D>>) -> bool
     {
         **self == *rhs
     }
 }
-impl<S, D> Eq for ArrayBase<S, D>
+impl<S, D> Eq for ArrayBase<S, StridedLayout<D>>
 where
     D: Dimension,
     S: Data<Buf = DenseBuf<<S as RawData>::Elem>>,
@@ -239,7 +239,7 @@ where
 {
 }
 
-impl<A, B, S, D> PartialEq<ArrayRef<B, D>> for ArrayBase<S, D>
+impl<A, B, S, D> PartialEq<ArrayRef<B, D>> for ArrayBase<S, StridedLayout<D>>
 where
     S: Data<Elem = A, Buf = DenseBuf<A>>,
     A: PartialEq<B>,
@@ -251,7 +251,7 @@ where
     }
 }
 
-impl<A, B, S, D> PartialEq<&ArrayRef<B, D>> for ArrayBase<S, D>
+impl<A, B, S, D> PartialEq<&ArrayRef<B, D>> for ArrayBase<S, StridedLayout<D>>
 where
     S: Data<Elem = A, Buf = DenseBuf<A>>,
     A: PartialEq<B>,
@@ -263,7 +263,7 @@ where
     }
 }
 
-impl<A, B, S, D> PartialEq<ArrayRef<B, D>> for &ArrayBase<S, D>
+impl<A, B, S, D> PartialEq<ArrayRef<B, D>> for &ArrayBase<S, StridedLayout<D>>
 where
     S: Data<Elem = A, Buf = DenseBuf<A>>,
     A: PartialEq<B>,
@@ -275,43 +275,43 @@ where
     }
 }
 
-impl<A, B, S, D> PartialEq<ArrayBase<S, D>> for ArrayRef<A, D>
+impl<A, B, S, D> PartialEq<ArrayBase<S, StridedLayout<D>>> for ArrayRef<A, D>
 where
     S: Data<Elem = B, Buf = DenseBuf<B>>,
     A: PartialEq<B>,
     D: Dimension,
 {
-    fn eq(&self, other: &ArrayBase<S, D>) -> bool
+    fn eq(&self, other: &ArrayBase<S, StridedLayout<D>>) -> bool
     {
         self == **other
     }
 }
 
-impl<A, B, S, D> PartialEq<&ArrayBase<S, D>> for ArrayRef<A, D>
+impl<A, B, S, D> PartialEq<&ArrayBase<S, StridedLayout<D>>> for ArrayRef<A, D>
 where
     S: Data<Elem = B, Buf = DenseBuf<B>>,
     A: PartialEq<B>,
     D: Dimension,
 {
-    fn eq(&self, other: &&ArrayBase<S, D>) -> bool
+    fn eq(&self, other: &&ArrayBase<S, StridedLayout<D>>) -> bool
     {
         self == ***other
     }
 }
 
-impl<A, B, S, D> PartialEq<ArrayBase<S, D>> for &ArrayRef<A, D>
+impl<A, B, S, D> PartialEq<ArrayBase<S, StridedLayout<D>>> for &ArrayRef<A, D>
 where
     S: Data<Elem = B, Buf = DenseBuf<B>>,
     A: PartialEq<B>,
     D: Dimension,
 {
-    fn eq(&self, other: &ArrayBase<S, D>) -> bool
+    fn eq(&self, other: &ArrayBase<S, StridedLayout<D>>) -> bool
     {
         *self == **other
     }
 }
 
-impl<A, S> From<Box<[A]>> for ArrayBase<S, Ix1>
+impl<A, S> From<Box<[A]>> for ArrayBase<S, StridedLayout<Ix1>>
 where S: DataOwned<Elem = A>
 {
     /// Create a one-dimensional array from a boxed slice (no copying needed).
@@ -323,7 +323,7 @@ where S: DataOwned<Elem = A>
     }
 }
 
-impl<A, S> From<Vec<A>> for ArrayBase<S, Ix1>
+impl<A, S> From<Vec<A>> for ArrayBase<S, StridedLayout<Ix1>>
 where S: DataOwned<Elem = A>
 {
     /// Create a one-dimensional array from a vector (no copying needed).
@@ -341,7 +341,7 @@ where S: DataOwned<Elem = A>
     }
 }
 
-impl<A, S> FromIterator<A> for ArrayBase<S, Ix1>
+impl<A, S> FromIterator<A> for ArrayBase<S, StridedLayout<Ix1>>
 where S: DataOwned<Elem = A>
 {
     /// Create a one-dimensional array from an iterable.
@@ -355,7 +355,7 @@ where S: DataOwned<Elem = A>
     /// let array = Array::from_iter((0..5).map(|x| x * x));
     /// assert!(array == arr1(&[0, 1, 4, 9, 16]))
     /// ```
-    fn from_iter<I>(iterable: I) -> ArrayBase<S, Ix1>
+    fn from_iter<I>(iterable: I) -> ArrayBase<S, StridedLayout<Ix1>>
     where I: IntoIterator<Item = A>
     {
         Self::from_iter(iterable)
@@ -388,7 +388,7 @@ where D: Dimension
     }
 }
 
-impl<'a, S, D> IntoIterator for &'a ArrayBase<S, D>
+impl<'a, S, D> IntoIterator for &'a ArrayBase<S, StridedLayout<D>>
 where
     D: Dimension,
     S: Data<Buf = DenseBuf<<S as RawData>::Elem>>,
@@ -402,7 +402,7 @@ where
     }
 }
 
-impl<'a, S, D> IntoIterator for &'a mut ArrayBase<S, D>
+impl<'a, S, D> IntoIterator for &'a mut ArrayBase<S, StridedLayout<D>>
 where
     D: Dimension,
     S: DataMut<Buf = DenseBuf<<S as RawData>::Elem>>,
@@ -465,7 +465,7 @@ where
     }
 }
 
-impl<S, D> hash::Hash for ArrayBase<S, D>
+impl<S, D> hash::Hash for ArrayBase<S, StridedLayout<D>>
 where
     D: Dimension,
     S: Data<Buf = DenseBuf<<S as RawData>::Elem>>,
@@ -484,7 +484,7 @@ where
 // Vec, &[] and &mut []
 
 /// `ArrayBase` is `Sync` when the storage type is.
-unsafe impl<S, D> Sync for ArrayBase<S, D>
+unsafe impl<S, D> Sync for ArrayBase<S, StridedLayout<D>>
 where
     S: Sync + Data,
     D: Sync,
@@ -492,7 +492,7 @@ where
 }
 
 /// `ArrayBase` is `Send` when the storage type is.
-unsafe impl<S, D> Send for ArrayBase<S, D>
+unsafe impl<S, D> Send for ArrayBase<S, StridedLayout<D>>
 where
     S: Send + Data,
     D: Send,
@@ -554,13 +554,13 @@ impl<'a, A, const N: usize> From<&'a [[A; N]]> for ArrayView<'a, A, Ix2>
 }
 
 /// Implementation of `ArrayView::from(&A)` where `A` is an array.
-impl<'a, A, S, D> From<&'a ArrayBase<S, D>> for ArrayView<'a, A, D>
+impl<'a, A, S, D> From<&'a ArrayBase<S, StridedLayout<D>>> for ArrayView<'a, A, D>
 where
     S: Data<Elem = A, Buf = DenseBuf<A>>,
     D: Dimension,
 {
     /// Create a read-only array view of the array.
-    fn from(array: &'a ArrayBase<S, D>) -> Self
+    fn from(array: &'a ArrayBase<S, StridedLayout<D>>) -> Self
     {
         array.view()
     }
@@ -632,13 +632,13 @@ impl<'a, A, const N: usize> From<&'a mut [[A; N]]> for ArrayViewMut<'a, A, Ix2>
 }
 
 /// Implementation of `ArrayViewMut::from(&mut A)` where `A` is an array.
-impl<'a, A, S, D> From<&'a mut ArrayBase<S, D>> for ArrayViewMut<'a, A, D>
+impl<'a, A, S, D> From<&'a mut ArrayBase<S, StridedLayout<D>>> for ArrayViewMut<'a, A, D>
 where
     S: DataMut<Elem = A, Buf = DenseBuf<A>>,
     D: Dimension,
 {
     /// Create a read-write array view of the array.
-    fn from(array: &'a mut ArrayBase<S, D>) -> Self
+    fn from(array: &'a mut ArrayBase<S, StridedLayout<D>>) -> Self
     {
         array.view_mut()
     }
@@ -702,7 +702,7 @@ where
 ///
 /// Since arrays cannot grow, the intention is to use the default value as
 /// placeholder.
-impl<A, S, D> Default for ArrayBase<S, D>
+impl<A, S, D> Default for ArrayBase<S, StridedLayout<D>>
 where
     S: DataOwned<Elem = A>,
     D: Dimension,

@@ -6,6 +6,7 @@ extern crate rand_distr;
 
 extern crate numeric_tests;
 
+use ndarray::StridedLayout;
 use std::fmt;
 
 use ndarray_rand::RandomExt;
@@ -39,7 +40,9 @@ where A: LinalgScalar
 }
 
 // simple, slow, correct (hopefully) mat mul
-fn reference_mat_mul<A, S, S2>(lhs: &ArrayBase<S, Ix2>, rhs: &ArrayBase<S2, Ix2>) -> Array<A, Ix2>
+fn reference_mat_mul<A, S, S2>(
+    lhs: &ArrayBase<S, StridedLayout<Ix2>>, rhs: &ArrayBase<S2, StridedLayout<Ix2>>,
+) -> Array<A, Ix2>
 where
     A: LinalgScalar,
     S: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,

@@ -10,16 +10,19 @@ use crate::imp_prelude::*;
 use crate::ArrayPartsSized;
 use crate::RawDataClone;
 
-impl<S: RawDataClone, D: Clone> Clone for ArrayBase<S, D>
+impl<S: RawDataClone, D: Clone> Clone for ArrayBase<S, StridedLayout<D>>
 {
-    fn clone(&self) -> ArrayBase<S, D>
+    fn clone(&self) -> ArrayBase<S, StridedLayout<D>>
     {
         // safe because `clone_with_ptr` promises to provide equivalent data and ptr
         unsafe {
             let (data, ptr) = self.data.clone_with_ptr(self.parts.handle);
             ArrayBase {
                 data,
-                parts: ArrayPartsSized::new(ptr, self.parts.layout.dim.clone(), self.parts.layout.strides.clone()),
+                parts: ArrayPartsSized::new(
+                    ptr,
+                    StridedLayout::new(self.parts.layout.dim.clone(), self.parts.layout.strides.clone()),
+                ),
             }
         }
     }
@@ -42,4 +45,4 @@ impl<S: RawDataClone, D: Clone> Clone for ArrayBase<S, D>
     }
 }
 
-impl<S: RawDataClone + Copy, D: Copy> Copy for ArrayBase<S, D> {}
+impl<S: RawDataClone + Copy, D: Copy> Copy for ArrayBase<S, StridedLayout<D>> {}

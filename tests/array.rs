@@ -11,6 +11,7 @@ use itertools::{zip, Itertools};
 use ndarray::indices;
 use ndarray::prelude::*;
 use ndarray::ErrorKind;
+use ndarray::StridedLayout;
 use ndarray::{arr3, rcarr2};
 use ndarray::{Slice, SliceInfo, SliceInfoElem};
 use num_complex::Complex;
@@ -2481,7 +2482,7 @@ mod as_standard_layout_tests
     use ndarray::Data;
     use std::fmt::Debug;
 
-    fn test_as_standard_layout_for<S, D>(orig: ArrayBase<S, D>)
+    fn test_as_standard_layout_for<S, D>(orig: ArrayBase<S, StridedLayout<D>>)
     where
         S: Data<Buf = ndarray::DenseBuf<<S as ndarray::RawData>::Elem>>,
         S::Elem: Clone + Debug + PartialEq,

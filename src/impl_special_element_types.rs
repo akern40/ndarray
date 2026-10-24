@@ -15,7 +15,7 @@ use crate::RawDataSubst;
 /// Methods specific to arrays with `MaybeUninit` elements.
 ///
 /// ***See also all methods for [`ArrayBase`]***
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where
     S: RawDataSubst<A, Elem = MaybeUninit<A>>,
     D: Dimension,
@@ -32,7 +32,7 @@ where
     /// Note that for owned and shared ownership arrays, the promise must include all of the
     /// array's storage; it is for example possible to slice these in place, but that must
     /// only be done after all elements have been initialized.
-    pub unsafe fn assume_init(self) -> ArrayBase<<S as RawDataSubst<A>>::Output, D>
+    pub unsafe fn assume_init(self) -> ArrayBase<<S as RawDataSubst<A>>::Output, StridedLayout<D>>
     {
         let ArrayBase {
             data,

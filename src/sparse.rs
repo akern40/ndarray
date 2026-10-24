@@ -1,6 +1,7 @@
 //! Spike: a second handle family. Coordinate-sparse storage with a fill value,
 //! sharing `StridedLayout<D>` (and every layout operation) with the dense family.
 
+use crate::StridedLayout;
 use std::fmt;
 use std::ptr::NonNull;
 
@@ -130,7 +131,9 @@ unsafe impl<A: Clone> Buffer for SparseBuf<A>
         self.clone()
     }
 
-    fn collect<D: Dimension>(view: ArrayBase<View<'_, Self>, D>) -> ArrayBase<Owned<Self>, D>
+    fn collect<D: Dimension>(
+        view: ArrayBase<View<'_, Self>, StridedLayout<D>>,
+    ) -> ArrayBase<Owned<Self>, StridedLayout<D>>
     {
         // Standard layout; keep only the slots that have an explicit entry.
         let fill = unsafe { &*view.parts.handle.buf.as_ptr() }.fill.clone();
@@ -153,7 +156,7 @@ unsafe impl<A: Clone> Buffer for SparseBuf<A>
 }
 
 /// An array in the sparse format, uniquely owned.
-pub type SparseArray<A, D> = ArrayBase<Owned<SparseBuf<A>>, D>;
+pub type SparseArray<A, D> = ArrayBase<Owned<SparseBuf<A>>, StridedLayout<D>>;
 
 impl<A: Clone, D: Dimension> SparseArray<A, D>
 {
@@ -177,7 +180,7 @@ impl<A: Clone, D: Dimension> SparseArray<A, D>
 }
 
 /// Any storage of the sparse format (owned, shared, view, ...).
-impl<A: Clone, S: RawData<Buf = SparseBuf<A>>, D: Dimension> ArrayBase<S, D>
+impl<A: Clone, S: RawData<Buf = SparseBuf<A>>, D: Dimension> ArrayBase<S, StridedLayout<D>>
 {
     fn inner(&self) -> &SparseInner<A>
     {

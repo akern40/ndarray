@@ -1,6 +1,7 @@
 #![allow(clippy::deref_addrof, clippy::unreadable_literal)]
 
 use ndarray::prelude::*;
+use ndarray::StridedLayout;
 use ndarray::{arr3, indices, s, Slice, Zip};
 
 use itertools::assert_equal;
@@ -103,7 +104,7 @@ fn as_slice()
 {
     use ndarray::Data;
 
-    fn assert_slice_correct<A, S, D>(v: &ArrayBase<S, D>)
+    fn assert_slice_correct<A, S, D>(v: &ArrayBase<S, StridedLayout<D>>)
     where
         S: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
         D: Dimension,

@@ -3,6 +3,7 @@
 //! could be a "feature preview" before sorting is added to the main crate.
 //!
 use ndarray::prelude::*;
+use ndarray::StridedLayout;
 use ndarray::{Data, RemoveAxis, Zip};
 
 use rawpointer::PointerExt;
@@ -67,7 +68,7 @@ pub trait PermuteArray
         Self::Dim: RemoveAxis;
 }
 
-impl<A, S, D> SortArray for ArrayBase<S, D>
+impl<A, S, D> SortArray for ArrayBase<S, StridedLayout<D>>
 where
     S: Data<Elem = A, Buf = ndarray::DenseBuf<A>>,
     D: Dimension,

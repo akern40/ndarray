@@ -6,6 +6,7 @@
 //! * [`RawView<B>`] / [`RawViewMut<B>`]: borrowed without a lifetime; not readable.
 //! * [`Cow<'a, B>`]: a view until written to, then owned.
 
+use crate::StridedLayout;
 use core::marker::PhantomData;
 
 #[cfg(target_has_atomic = "ptr")]
@@ -75,7 +76,9 @@ pub enum Cow<'a, B>
 
 /// A read-only view of any storage's buffer, without going through `Deref`
 /// (whose target is an unnormalised projection inside generic impls).
-fn view_of<B: Buffer, S: RawData<Buf = B>, D: Dimension>(a: &ArrayBase<S, D>) -> ArrayBase<View<'_, B>, D>
+fn view_of<B: Buffer, S: RawData<Buf = B>, D: Dimension>(
+    a: &ArrayBase<S, StridedLayout<D>>,
+) -> ArrayBase<View<'_, B>, StridedLayout<D>>
 {
     unsafe { ArrayBase::from_data_ptr(View::new(), a.parts.handle).with_layout(a.parts.layout.clone()) }
 }
@@ -187,7 +190,7 @@ unsafe impl<B: Buffer> RawData for Owned<B>
 unsafe impl<B: Buffer> RawDataMut for Owned<B>
 {
     #[inline]
-    fn try_ensure_unique<D>(_: &mut ArrayBase<Self, D>)
+    fn try_ensure_unique<D>(_: &mut ArrayBase<Self, StridedLayout<D>>)
     where
         Self: Sized,
         D: Dimension,
@@ -228,7 +231,7 @@ unsafe impl<B: Buffer> IntoOwned for Owned<B>
     type Owned = Self;
 
     #[inline]
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Self, D>
+    fn into_owned<D>(self_: ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Self, StridedLayout<D>>
     where
         B::Elem: Clone,
         D: Dimension,
@@ -237,7 +240,9 @@ unsafe impl<B: Buffer> IntoOwned for Owned<B>
     }
 
     #[inline]
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<ArrayBase<Self, D>, ArrayBase<Self, D>>
+    fn try_into_owned_nocopy<D>(
+        self_: ArrayBase<Self, StridedLayout<D>>,
+    ) -> Result<ArrayBase<Self, StridedLayout<D>>, ArrayBase<Self, StridedLayout<D>>>
     where D: Dimension
     {
         Ok(self_)
@@ -248,7 +253,7 @@ unsafe impl<B: Buffer> IntoShared for Owned<B>
 {
     type Shared = Shared<B>;
 
-    fn into_shared<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Shared<B>, D>
+    fn into_shared<D>(self_: ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Shared<B>, StridedLayout<D>>
     where
         B::Elem: Clone,
         D: Dimension,
@@ -258,7 +263,7 @@ unsafe impl<B: Buffer> IntoShared for Owned<B>
         unsafe { ArrayBase::from_data_ptr(Shared(Arc::new(self_.data.0)), parts.handle).with_layout(parts.layout) }
     }
 
-    fn to_shared<D>(self_: &ArrayBase<Self, D>) -> ArrayBase<Shared<B>, D>
+    fn to_shared<D>(self_: &ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Shared<B>, StridedLayout<D>>
     where
         B::Elem: Clone,
         D: Dimension,
@@ -286,7 +291,7 @@ unsafe impl<B: Buffer> RawData for Shared<B>
 unsafe impl<B: Buffer> RawDataMut for Shared<B>
 where B::Elem: Clone
 {
-    fn try_ensure_unique<D>(self_: &mut ArrayBase<Self, D>)
+    fn try_ensure_unique<D>(self_: &mut ArrayBase<Self, StridedLayout<D>>)
     where
         Self: Sized,
         D: Dimension,
@@ -333,7 +338,7 @@ unsafe impl<B: Buffer> IntoOwned for Shared<B>
 {
     type Owned = Owned<B>;
 
-    fn into_owned<D>(mut self_: ArrayBase<Self, D>) -> ArrayBase<Owned<B>, D>
+    fn into_owned<D>(mut self_: ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Owned<B>, StridedLayout<D>>
     where
         B::Elem: Clone,
         D: Dimension,
@@ -344,7 +349,9 @@ unsafe impl<B: Buffer> IntoOwned for Shared<B>
         unsafe { ArrayBase::from_data_ptr(Owned(buf), parts.handle).with_layout(parts.layout) }
     }
 
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<ArrayBase<Owned<B>, D>, ArrayBase<Self, D>>
+    fn try_into_owned_nocopy<D>(
+        self_: ArrayBase<Self, StridedLayout<D>>,
+    ) -> Result<ArrayBase<Owned<B>, StridedLayout<D>>, ArrayBase<Self, StridedLayout<D>>>
     where D: Dimension
     {
         let parts = self_.parts;
@@ -360,7 +367,7 @@ unsafe impl<B: Buffer> IntoShared for Shared<B>
     type Shared = Self;
 
     #[inline]
-    fn into_shared<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Self, D>
+    fn into_shared<D>(self_: ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Self, StridedLayout<D>>
     where
         B::Elem: Clone,
         D: Dimension,
@@ -368,7 +375,7 @@ unsafe impl<B: Buffer> IntoShared for Shared<B>
         self_
     }
 
-    fn to_shared<D>(self_: &ArrayBase<Self, D>) -> ArrayBase<Self, D>
+    fn to_shared<D>(self_: &ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Self, StridedLayout<D>>
     where
         B::Elem: Clone,
         D: Dimension,
@@ -410,7 +417,7 @@ unsafe impl<B: Buffer> IntoOwned for View<'_, B>
 {
     type Owned = Owned<B>;
 
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Owned<B>, D>
+    fn into_owned<D>(self_: ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Owned<B>, StridedLayout<D>>
     where
         B::Elem: Clone,
         D: Dimension,
@@ -418,7 +425,9 @@ unsafe impl<B: Buffer> IntoOwned for View<'_, B>
         B::collect(view_of(&self_))
     }
 
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<ArrayBase<Owned<B>, D>, ArrayBase<Self, D>>
+    fn try_into_owned_nocopy<D>(
+        self_: ArrayBase<Self, StridedLayout<D>>,
+    ) -> Result<ArrayBase<Owned<B>, StridedLayout<D>>, ArrayBase<Self, StridedLayout<D>>>
     where D: Dimension
     {
         Err(self_)
@@ -429,7 +438,7 @@ unsafe impl<B: Buffer> IntoShared for View<'_, B>
 {
     type Shared = Shared<B>;
 
-    fn into_shared<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Shared<B>, D>
+    fn into_shared<D>(self_: ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Shared<B>, StridedLayout<D>>
     where
         B::Elem: Clone,
         D: Dimension,
@@ -437,7 +446,7 @@ unsafe impl<B: Buffer> IntoShared for View<'_, B>
         <Owned<B> as IntoShared>::into_shared(B::collect(view_of(&self_)))
     }
 
-    fn to_shared<D>(self_: &ArrayBase<Self, D>) -> ArrayBase<Shared<B>, D>
+    fn to_shared<D>(self_: &ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Shared<B>, StridedLayout<D>>
     where
         B::Elem: Clone,
         D: Dimension,
@@ -465,7 +474,7 @@ unsafe impl<B: Buffer> RawData for ViewMut<'_, B>
 unsafe impl<B: Buffer> RawDataMut for ViewMut<'_, B>
 {
     #[inline]
-    fn try_ensure_unique<D>(_: &mut ArrayBase<Self, D>)
+    fn try_ensure_unique<D>(_: &mut ArrayBase<Self, StridedLayout<D>>)
     where
         Self: Sized,
         D: Dimension,
@@ -486,7 +495,7 @@ unsafe impl<B: Buffer> IntoOwned for ViewMut<'_, B>
 {
     type Owned = Owned<B>;
 
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Owned<B>, D>
+    fn into_owned<D>(self_: ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Owned<B>, StridedLayout<D>>
     where
         B::Elem: Clone,
         D: Dimension,
@@ -494,7 +503,9 @@ unsafe impl<B: Buffer> IntoOwned for ViewMut<'_, B>
         B::collect(view_of(&self_))
     }
 
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<ArrayBase<Owned<B>, D>, ArrayBase<Self, D>>
+    fn try_into_owned_nocopy<D>(
+        self_: ArrayBase<Self, StridedLayout<D>>,
+    ) -> Result<ArrayBase<Owned<B>, StridedLayout<D>>, ArrayBase<Self, StridedLayout<D>>>
     where D: Dimension
     {
         Err(self_)
@@ -505,7 +516,7 @@ unsafe impl<B: Buffer> IntoShared for ViewMut<'_, B>
 {
     type Shared = Shared<B>;
 
-    fn into_shared<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Shared<B>, D>
+    fn into_shared<D>(self_: ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Shared<B>, StridedLayout<D>>
     where
         B::Elem: Clone,
         D: Dimension,
@@ -513,7 +524,7 @@ unsafe impl<B: Buffer> IntoShared for ViewMut<'_, B>
         <Owned<B> as IntoShared>::into_shared(B::collect(view_of(&self_)))
     }
 
-    fn to_shared<D>(self_: &ArrayBase<Self, D>) -> ArrayBase<Shared<B>, D>
+    fn to_shared<D>(self_: &ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Shared<B>, StridedLayout<D>>
     where
         B::Elem: Clone,
         D: Dimension,
@@ -563,7 +574,7 @@ unsafe impl<B: Buffer> RawData for RawViewMut<B>
 unsafe impl<B: Buffer> RawDataMut for RawViewMut<B>
 {
     #[inline]
-    fn try_ensure_unique<D>(_: &mut ArrayBase<Self, D>)
+    fn try_ensure_unique<D>(_: &mut ArrayBase<Self, StridedLayout<D>>)
     where
         Self: Sized,
         D: Dimension,
@@ -608,7 +619,7 @@ unsafe impl<B: Buffer> RawDataMut for Cow<'_, B>
 where B::Elem: Clone
 {
     #[inline]
-    fn try_ensure_unique<D>(array: &mut ArrayBase<Self, D>)
+    fn try_ensure_unique<D>(array: &mut ArrayBase<Self, StridedLayout<D>>)
     where
         Self: Sized,
         D: Dimension,
@@ -672,7 +683,7 @@ unsafe impl<B: Buffer> IntoOwned for Cow<'_, B>
     type Owned = Owned<B>;
 
     #[inline]
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Owned<B>, D>
+    fn into_owned<D>(self_: ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Owned<B>, StridedLayout<D>>
     where
         B::Elem: Clone,
         D: Dimension,
@@ -685,7 +696,9 @@ unsafe impl<B: Buffer> IntoOwned for Cow<'_, B>
         }
     }
 
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<ArrayBase<Owned<B>, D>, ArrayBase<Self, D>>
+    fn try_into_owned_nocopy<D>(
+        self_: ArrayBase<Self, StridedLayout<D>>,
+    ) -> Result<ArrayBase<Owned<B>, StridedLayout<D>>, ArrayBase<Self, StridedLayout<D>>>
     where D: Dimension
     {
         match self_.data {
@@ -702,7 +715,7 @@ unsafe impl<B: Buffer> IntoShared for Cow<'_, B>
 {
     type Shared = Shared<B>;
 
-    fn into_shared<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Shared<B>, D>
+    fn into_shared<D>(self_: ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Shared<B>, StridedLayout<D>>
     where
         B::Elem: Clone,
         D: Dimension,
@@ -710,7 +723,7 @@ unsafe impl<B: Buffer> IntoShared for Cow<'_, B>
         <Owned<B> as IntoShared>::into_shared(<Self as IntoOwned>::into_owned(self_))
     }
 
-    fn to_shared<D>(self_: &ArrayBase<Self, D>) -> ArrayBase<Shared<B>, D>
+    fn to_shared<D>(self_: &ArrayBase<Self, StridedLayout<D>>) -> ArrayBase<Shared<B>, StridedLayout<D>>
     where
         B::Elem: Clone,
         D: Dimension,

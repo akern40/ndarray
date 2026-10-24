@@ -43,7 +43,7 @@ use rawpointer::PointerExt;
 /// the two array types that have owned storage.
 ///
 /// ## Constructor methods for one-dimensional arrays.
-impl<S, A> ArrayBase<S, Ix1>
+impl<S, A> ArrayBase<S, StridedLayout<Ix1>>
 where S: DataOwned<Elem = A>
 {
     /// Create a one-dimensional array from a vector (no copying needed).
@@ -187,7 +187,7 @@ where S: DataOwned<Elem = A>
 }
 
 /// ## Constructor methods for two-dimensional arrays.
-impl<S, A> ArrayBase<S, Ix2>
+impl<S, A> ArrayBase<S, StridedLayout<Ix2>>
 where S: DataOwned<Elem = A>
 {
     /// Create an identity matrix of size `n` (square 2D array).
@@ -216,7 +216,7 @@ where S: DataOwned<Elem = A>
     /// let array = Array2::from_diag(&diag);
     /// assert_eq!(array, arr2(&[[1, 0], [0, 2]]));
     /// ```
-    pub fn from_diag<S2>(diag: &ArrayBase<S2, Ix1>) -> Self
+    pub fn from_diag<S2>(diag: &ArrayBase<S2, StridedLayout<Ix1>>) -> Self
     where
         A: Clone + Zero,
         S: DataMut,
@@ -295,7 +295,7 @@ macro_rules! size_of_shape_checked_unwrap {
 /// Finally, the few constructors that take a completely general
 /// `Into<StrideShape>` argument *optionally* support custom strides, for
 /// example a shape given like `(10, 2, 2).strides((1, 10, 20))` is valid.
-impl<S, A, D> ArrayBase<S, D>
+impl<S, A, D> ArrayBase<S, StridedLayout<D>>
 where
     S: DataOwned<Elem = A>,
     D: Dimension,
@@ -594,7 +594,7 @@ where
     ///
     /// # let _ = shift_by_two;
     /// ```
-    pub fn uninit<Sh>(shape: Sh) -> ArrayBase<S::MaybeUninit, D>
+    pub fn uninit<Sh>(shape: Sh) -> ArrayBase<S::MaybeUninit, StridedLayout<D>>
     where Sh: ShapeBuilder<Dim = D>
     {
         unsafe {
@@ -627,7 +627,7 @@ where
     /// using [`.assume_init()`] or otherwise traversed/read with the element type `A`.
     ///
     /// [`.assume_init()`]: ArrayBase::assume_init
-    pub fn build_uninit<Sh, F>(shape: Sh, builder: F) -> ArrayBase<S::MaybeUninit, D>
+    pub fn build_uninit<Sh, F>(shape: Sh, builder: F) -> ArrayBase<S::MaybeUninit, StridedLayout<D>>
     where
         Sh: ShapeBuilder<Dim = D>,
         F: FnOnce(ArrayViewMut<MaybeUninit<A>, D>),

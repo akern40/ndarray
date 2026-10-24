@@ -22,7 +22,7 @@ use crate::math_cell::MathCell;
 use crate::IndexLonger;
 
 /// Methods for read-only array views.
-impl<B, D> ArrayBase<View<'_, B>, D>
+impl<B, D> ArrayBase<View<'_, B>, StridedLayout<D>>
 where
     B: Buffer,
     D: Dimension,
@@ -34,7 +34,7 @@ where
     }
 }
 
-impl<B, D> ArrayBase<ViewMut<'_, B>, D>
+impl<B, D> ArrayBase<ViewMut<'_, B>, StridedLayout<D>>
 where
     B: Buffer,
     D: Dimension,

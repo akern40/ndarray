@@ -78,7 +78,7 @@ impl<'de> Deserialize<'de> for IxDyn
 }
 
 /// **Requires crate feature `"serde"`**
-impl<A, D, S> Serialize for ArrayBase<S, D>
+impl<A, D, S> Serialize for ArrayBase<S, StridedLayout<D>>
 where
     A: Serialize,
     D: Dimension + Serialize,
@@ -142,13 +142,13 @@ impl<S, Di> ArrayVisitor<S, Di>
 static ARRAY_FIELDS: &[&str] = &["v", "dim", "data"];
 
 /// **Requires crate feature `"serde"`**
-impl<'de, A, Di, S> Deserialize<'de> for ArrayBase<S, Di>
+impl<'de, A, Di, S> Deserialize<'de> for ArrayBase<S, StridedLayout<Di>>
 where
     A: Deserialize<'de>,
     Di: Deserialize<'de> + Dimension,
     S: DataOwned<Elem = A>,
 {
-    fn deserialize<D>(deserializer: D) -> Result<ArrayBase<S, Di>, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<ArrayBase<S, StridedLayout<Di>>, D::Error>
     where D: Deserializer<'de>
     {
         deserializer.deserialize_struct("Array", ARRAY_FIELDS, ArrayVisitor::new())
@@ -204,14 +204,14 @@ where
     Di: Deserialize<'de> + Dimension,
     S: DataOwned<Elem = A>,
 {
-    type Value = ArrayBase<S, Di>;
+    type Value = ArrayBase<S, StridedLayout<Di>>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result
     {
         formatter.write_str("ndarray representation")
     }
 
-    fn visit_seq<V>(self, mut visitor: V) -> Result<ArrayBase<S, Di>, V::Error>
+    fn visit_seq<V>(self, mut visitor: V) -> Result<ArrayBase<S, StridedLayout<Di>>, V::Error>
     where V: SeqAccess<'de>
     {
         let v: u8 = match visitor.next_element()? {
@@ -244,7 +244,7 @@ where
         }
     }
 
-    fn visit_map<V>(self, mut visitor: V) -> Result<ArrayBase<S, Di>, V::Error>
+    fn visit_map<V>(self, mut visitor: V) -> Result<ArrayBase<S, StridedLayout<Di>>, V::Error>
     where V: MapAccess<'de>
     {
         let mut v: Option<u8> = None;

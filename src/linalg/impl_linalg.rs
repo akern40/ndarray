@@ -175,7 +175,7 @@ macro_rules! impl_dots {
         $shape1:ty,
         $shape2:ty
     ) => {
-        impl<A, S, S2> Dot<ArrayBase<S2, $shape2>> for ArrayBase<S, $shape1>
+        impl<A, S, S2> Dot<ArrayBase<S2, StridedLayout<$shape2>>> for ArrayBase<S, StridedLayout<$shape1>>
         where
             S: Data<Elem = A, Buf = DenseBuf<A>>,
             S2: Data<Elem = A, Buf = DenseBuf<A>>,
@@ -183,13 +183,13 @@ macro_rules! impl_dots {
         {
             type Output = <ArrayRef<A, $shape1> as Dot<ArrayRef<A, $shape2>>>::Output;
 
-            fn dot(&self, rhs: &ArrayBase<S2, $shape2>) -> Self::Output
+            fn dot(&self, rhs: &ArrayBase<S2, StridedLayout<$shape2>>) -> Self::Output
             {
                 Dot::dot(&**self, &**rhs)
             }
         }
 
-        impl<A, S> Dot<ArrayRef<A, $shape2>> for ArrayBase<S, $shape1>
+        impl<A, S> Dot<ArrayRef<A, $shape2>> for ArrayBase<S, StridedLayout<$shape1>>
         where
             S: Data<Elem = A, Buf = DenseBuf<A>>,
             A: LinalgScalar,
@@ -202,14 +202,14 @@ macro_rules! impl_dots {
             }
         }
 
-        impl<A, S> Dot<ArrayBase<S, $shape2>> for ArrayRef<A, $shape1>
+        impl<A, S> Dot<ArrayBase<S, StridedLayout<$shape2>>> for ArrayRef<A, $shape1>
         where
             S: Data<Elem = A, Buf = DenseBuf<A>>,
             A: LinalgScalar,
         {
             type Output = <ArrayRef<A, $shape1> as Dot<ArrayRef<A, $shape2>>>::Output;
 
-            fn dot(&self, rhs: &ArrayBase<S, $shape2>) -> Self::Output
+            fn dot(&self, rhs: &ArrayBase<S, StridedLayout<$shape2>>) -> Self::Output
             {
                 self.dot(&**rhs)
             }

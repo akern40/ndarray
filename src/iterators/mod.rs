@@ -212,7 +212,7 @@ clone_bounds!(
 
 impl<'a, H: Handle, D: Dimension> ElementsBase<'a, H, D>
 {
-    pub fn new<B: Buffer<Handle = H>>(v: ArrayBase<View<'a, B>, D>) -> Self
+    pub fn new<B: Buffer<Handle = H>>(v: ArrayBase<View<'a, B>, StridedLayout<D>>) -> Self
     {
         ElementsBase {
             inner: v.into_base_iter(),
@@ -371,7 +371,7 @@ pub struct ElementsBaseMut<'a, H: Handle, D>
 
 impl<'a, H: Handle, D: Dimension> ElementsBaseMut<'a, H, D>
 {
-    pub fn new<B: Buffer<Handle = H>>(v: ArrayBase<ViewMut<'a, B>, D>) -> Self
+    pub fn new<B: Buffer<Handle = H>>(v: ArrayBase<ViewMut<'a, B>, StridedLayout<D>>) -> Self
     {
         ElementsBaseMut {
             inner: v.into_base_iter(),
@@ -865,7 +865,7 @@ clone_bounds!(
 impl<A, D: Dimension> AxisIterCore<A, D>
 {
     /// Constructs a new iterator over the specified axis.
-    fn new<S, Di>(v: ArrayBase<S, Di>, axis: Axis) -> Self
+    fn new<S, Di>(v: ArrayBase<S, StridedLayout<Di>>, axis: Axis) -> Self
     where
         Di: RemoveAxis<Smaller = D>,
         S: Data<Elem = A, Buf = DenseBuf<A>>,

@@ -228,7 +228,7 @@ where D: Dimension
 }
 
 /// Private array view methods
-impl<B, D> ArrayBase<View<'_, B>, D>
+impl<B, D> ArrayBase<View<'_, B>, StridedLayout<D>>
 where
     B: Buffer,
     D: Dimension,
@@ -244,7 +244,7 @@ where
     }
 }
 
-impl<B, D> ArrayBase<ViewMut<'_, B>, D>
+impl<B, D> ArrayBase<ViewMut<'_, B>, StridedLayout<D>>
 where
     B: Buffer,
     D: Dimension,

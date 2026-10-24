@@ -76,7 +76,7 @@ fn array_layout<D: Dimension>(dim: &D, strides: &D) -> LayoutBitset
     }
 }
 
-impl<B: Buffer, D> LayoutRefBase<B, D>
+impl<B: Buffer, D> LayoutRefBase<B, StridedLayout<D>>
 where D: Dimension
 {
     pub(crate) fn layout_impl(&self) -> LayoutBitset
@@ -759,14 +759,14 @@ macro_rules! map_impl {
             }
 
             pub(crate) fn map_collect_owned<S, R>(self, f: impl FnMut($($p::Item,)* ) -> R)
-                -> ArrayBase<S, D>
+                -> ArrayBase<S, StridedLayout<D>>
                 where
                     S: DataOwned<Elem = R>,
             {
                 // safe because: all elements are written before the array is completed
 
                 let shape = self.dimension.clone().set_f(self.prefer_f());
-                let output = <ArrayBase<S, D>>::build_uninit(shape, |output| {
+                let output = <ArrayBase<S, StridedLayout<D>>>::build_uninit(shape, |output| {
                     // Use partial to count the number of filled elements, and can drop the right
                     // number of elements on unwinding (if it happens during apply/collect).
                     unsafe {

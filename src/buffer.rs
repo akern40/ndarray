@@ -6,6 +6,7 @@
 //! (`Owned<B>`, `Shared<B>`, `View<'a, B>`, ...). Dependencies run one way:
 //! storage → buffer → handle.
 
+use crate::StridedLayout;
 use crate::{ArrayBase, Dimension, Handle, Owned, View};
 
 /// A buffer of elements in some format, addressed through a [`Handle`].
@@ -55,6 +56,8 @@ pub unsafe trait Buffer: Sized
 
     /// Copy the elements visible through `view` into a fresh buffer of the
     /// same format, in standard layout.
-    fn collect<D: Dimension>(view: ArrayBase<View<'_, Self>, D>) -> ArrayBase<Owned<Self>, D>
+    fn collect<D: Dimension>(
+        view: ArrayBase<View<'_, Self>, StridedLayout<D>>,
+    ) -> ArrayBase<Owned<Self>, StridedLayout<D>>
     where Self::Elem: Clone;
 }

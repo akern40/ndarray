@@ -53,7 +53,7 @@ use crate::stacking::concatenate;
 use crate::{NdIndex, Slice, SliceInfoElem};
 
 /// # Methods For All Array Types
-impl<B: Buffer, D: Dimension> LayoutRefBase<B, D>
+impl<B: Buffer, D: Dimension> LayoutRefBase<B, StridedLayout<D>>
 {
     /// Return the total number of elements in the array.
     pub fn len(&self) -> usize
@@ -160,22 +160,22 @@ impl<B: Buffer, D: Dimension> LayoutRefBase<B, D>
     }
 }
 
-impl<B: Buffer, D: Dimension> ArrayRefBase<B, D>
+impl<B: Buffer, D: Dimension> ArrayRefBase<B, StridedLayout<D>>
 {
     /// Return a read-only view of the array
-    pub fn view(&self) -> ArrayBase<View<'_, B>, D>
+    pub fn view(&self) -> ArrayBase<View<'_, B>, StridedLayout<D>>
     {
         unsafe { ArrayBase::from_handle(*self._ptr(), self._layout().clone()) }
     }
 
     /// Return a read-write view of the array
-    pub fn view_mut(&mut self) -> ArrayBase<ViewMut<'_, B>, D>
+    pub fn view_mut(&mut self) -> ArrayBase<ViewMut<'_, B>, StridedLayout<D>>
     {
         unsafe { ArrayBase::from_handle_mut(*self._ptr(), self._layout().clone()) }
     }
 }
 
-impl<B: Buffer, D: Dimension> ArrayRefBase<B, D>
+impl<B: Buffer, D: Dimension> ArrayRefBase<B, StridedLayout<D>>
 {
     /// Return a sliced view of the array.
     ///
@@ -185,7 +185,7 @@ impl<B: Buffer, D: Dimension> ArrayRefBase<B, D>
     /// **Panics** if an index is out of bounds or step size is zero.<br>
     /// (**Panics** if `D` is `IxDyn` and `info` does not match the number of array axes.)
     #[track_caller]
-    pub fn slice<I>(&self, info: I) -> ArrayBase<View<'_, B>, I::OutDim>
+    pub fn slice<I>(&self, info: I) -> ArrayBase<View<'_, B>, StridedLayout<I::OutDim>>
     where I: SliceArg<D>
     {
         self.view().slice_move(info)
@@ -199,7 +199,7 @@ impl<B: Buffer, D: Dimension> ArrayRefBase<B, D>
     /// **Panics** if an index is out of bounds or step size is zero.<br>
     /// (**Panics** if `D` is `IxDyn` and `info` does not match the number of array axes.)
     #[track_caller]
-    pub fn slice_mut<I>(&mut self, info: I) -> ArrayBase<ViewMut<'_, B>, I::OutDim>
+    pub fn slice_mut<I>(&mut self, info: I) -> ArrayBase<ViewMut<'_, B>, StridedLayout<I::OutDim>>
     where I: SliceArg<D>
     {
         self.view_mut().slice_move(info)
@@ -211,7 +211,7 @@ impl<B: Buffer, D: Dimension> ArrayRefBase<B, D>
     /// **Panics** if `axis` is out of bounds.
     #[track_caller]
     #[must_use = "slice_axis returns an array view with the sliced result"]
-    pub fn slice_axis(&self, axis: Axis, indices: Slice) -> ArrayBase<View<'_, B>, D>
+    pub fn slice_axis(&self, axis: Axis, indices: Slice) -> ArrayBase<View<'_, B>, StridedLayout<D>>
     {
         let mut view = self.view();
         view.slice_axis_inplace(axis, indices);
@@ -224,7 +224,7 @@ impl<B: Buffer, D: Dimension> ArrayRefBase<B, D>
     /// **Panics** if `axis` is out of bounds.
     #[track_caller]
     #[must_use = "slice_axis_mut returns an array view with the sliced result"]
-    pub fn slice_axis_mut(&mut self, axis: Axis, indices: Slice) -> ArrayBase<ViewMut<'_, B>, D>
+    pub fn slice_axis_mut(&mut self, axis: Axis, indices: Slice) -> ArrayBase<ViewMut<'_, B>, StridedLayout<D>>
     {
         let mut view_mut = self.view_mut();
         view_mut.slice_axis_inplace(axis, indices);
@@ -239,7 +239,7 @@ impl<B: Buffer, D: Dimension> ArrayRefBase<B, D>
     ///
     /// **Panics** if an index is out of bounds or step size is zero.
     #[track_caller]
-    pub fn slice_each_axis<F>(&self, f: F) -> ArrayBase<View<'_, B>, D>
+    pub fn slice_each_axis<F>(&self, f: F) -> ArrayBase<View<'_, B>, StridedLayout<D>>
     where F: FnMut(AxisDescription) -> Slice
     {
         let mut view = self.view();
@@ -255,7 +255,7 @@ impl<B: Buffer, D: Dimension> ArrayRefBase<B, D>
     ///
     /// **Panics** if an index is out of bounds or step size is zero.
     #[track_caller]
-    pub fn slice_each_axis_mut<F>(&mut self, f: F) -> ArrayBase<ViewMut<'_, B>, D>
+    pub fn slice_each_axis_mut<F>(&mut self, f: F) -> ArrayBase<ViewMut<'_, B>, StridedLayout<D>>
     where F: FnMut(AxisDescription) -> Slice
     {
         let mut view = self.view_mut();
@@ -285,7 +285,7 @@ impl<B: Buffer, D: Dimension> ArrayRefBase<B, D>
     /// );
     /// ```
     #[track_caller]
-    pub fn index_axis(&self, axis: Axis, index: usize) -> ArrayBase<View<'_, B>, D::Smaller>
+    pub fn index_axis(&self, axis: Axis, index: usize) -> ArrayBase<View<'_, B>, StridedLayout<D::Smaller>>
     where D: RemoveAxis
     {
         self.view().index_axis_move(axis, index)
@@ -316,7 +316,7 @@ impl<B: Buffer, D: Dimension> ArrayRefBase<B, D>
     /// );
     /// ```
     #[track_caller]
-    pub fn index_axis_mut(&mut self, axis: Axis, index: usize) -> ArrayBase<ViewMut<'_, B>, D::Smaller>
+    pub fn index_axis_mut(&mut self, axis: Axis, index: usize) -> ArrayBase<ViewMut<'_, B>, StridedLayout<D::Smaller>>
     where D: RemoveAxis
     {
         self.view_mut().index_axis_move(axis, index)
@@ -327,7 +327,7 @@ impl<B: Buffer, D: Dimension> ArrayRefBase<B, D>
     /// This is a shorthand for `self.view().reversed_axes()`.
     ///
     /// See also the more general methods `.reversed_axes()` and `.swap_axes()`.
-    pub fn t(&self) -> ArrayBase<View<'_, B>, D>
+    pub fn t(&self) -> ArrayBase<View<'_, B>, StridedLayout<D>>
     {
         self.view().reversed_axes()
     }
@@ -348,7 +348,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<B: Buffer, D: Dimension> ArrayRefBase<B, D>
+impl<B: Buffer, D: Dimension> ArrayRefBase<B, StridedLayout<D>>
 {
     /// Return an uniquely owned copy of the array.
     ///
@@ -380,7 +380,7 @@ impl<B: Buffer, D: Dimension> ArrayRefBase<B, D>
     /// # assert!(owned.t().is_standard_layout());
     /// # assert_eq!(arr, owned);
     /// ```
-    pub fn to_owned(&self) -> ArrayBase<Owned<B>, D>
+    pub fn to_owned(&self) -> ArrayBase<Owned<B>, StridedLayout<D>>
     where B::Elem: Clone
     {
         B::collect(self.view())
@@ -403,7 +403,7 @@ impl<B: Buffer, D: Dimension> ArrayRefBase<B, D>
     }
 }
 
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where
     S: RawData<Elem = A>,
     D: Dimension,
@@ -438,7 +438,7 @@ where
     /// # assert!(owned.t().is_standard_layout());
     /// # assert_eq!(arr, owned);
     /// ```
-    pub fn to_owned(&self) -> ArrayBase<Owned<S::Buf>, D>
+    pub fn to_owned(&self) -> ArrayBase<Owned<S::Buf>, StridedLayout<D>>
     where
         A: Clone,
         S: Data,
@@ -448,7 +448,7 @@ where
 
     /// Return a shared ownership (copy on write) array, cloning the array
     /// elements if necessary.
-    pub fn to_shared(&self) -> ArrayBase<S::Shared, D>
+    pub fn to_shared(&self) -> ArrayBase<S::Shared, StridedLayout<D>>
     where
         A: Clone,
         S: Data + IntoShared,
@@ -458,7 +458,7 @@ where
 
     /// Turn the array into a uniquely owned array, cloning the array elements
     /// if necessary.
-    pub fn into_owned(self) -> ArrayBase<S::Owned, D>
+    pub fn into_owned(self) -> ArrayBase<S::Owned, StridedLayout<D>>
     where
         A: Clone,
         S: IntoOwned,
@@ -487,7 +487,7 @@ where
     /// let unique: Array2<_> = a.try_into_owned_nocopy().unwrap();
     /// assert_eq!(unique, array![[1., 2.], [3., 4.]]);
     /// ```
-    pub fn try_into_owned_nocopy(self) -> Result<ArrayBase<S::Owned, D>, Self>
+    pub fn try_into_owned_nocopy(self) -> Result<ArrayBase<S::Owned, StridedLayout<D>>, Self>
     where S: IntoOwned
     {
         S::try_into_owned_nocopy(self)
@@ -499,7 +499,7 @@ where
     /// If you want to generalize over `Array` and `ArcArray` inputs but avoid
     /// an `A: Clone` bound, use `Into::<ArcArray<A, D>>::into` instead of this
     /// method.
-    pub fn into_shared(self) -> ArrayBase<S::Shared, D>
+    pub fn into_shared(self) -> ArrayBase<S::Shared, StridedLayout<D>>
     where
         A: Clone,
         S: IntoShared,
@@ -692,7 +692,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where
     S: RawData<Elem = A>,
     D: Dimension,
@@ -705,7 +705,7 @@ where
     /// **Panics** if an index is out of bounds or step size is zero.<br>
     /// (**Panics** if `D` is `IxDyn` and `info` does not match the number of array axes.)
     #[track_caller]
-    pub fn slice_move<I>(mut self, info: I) -> ArrayBase<S, I::OutDim>
+    pub fn slice_move<I>(mut self, info: I) -> ArrayBase<S, StridedLayout<I::OutDim>>
     where I: SliceArg<D>
     {
         assert_eq!(info.in_ndim(), self.ndim(), "The input dimension of `info` must match the array to be sliced.",);
@@ -750,7 +750,7 @@ where
     }
 }
 
-impl<B: Buffer, D: Dimension> LayoutRefBase<B, D>
+impl<B: Buffer, D: Dimension> LayoutRefBase<B, StridedLayout<D>>
 {
     /// Slice the array in place without changing the number of dimensions.
     ///
@@ -796,7 +796,7 @@ impl<B: Buffer, D: Dimension> LayoutRefBase<B, D>
 
 impl<A, D: Dimension> ArrayRef<A, D> {}
 
-impl<B: Buffer, D: Dimension> LayoutRefBase<B, D>
+impl<B: Buffer, D: Dimension> LayoutRefBase<B, StridedLayout<D>>
 {
     /// Slice the array in place along the specified axis.
     ///
@@ -813,7 +813,7 @@ impl<B: Buffer, D: Dimension> LayoutRefBase<B, D>
     }
 }
 
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where
     S: RawData<Elem = A>,
     D: Dimension,
@@ -832,7 +832,7 @@ where
 
 impl<A, D: Dimension> ArrayRef<A, D> {}
 
-impl<B: Buffer, D: Dimension> LayoutRefBase<B, D>
+impl<B: Buffer, D: Dimension> LayoutRefBase<B, StridedLayout<D>>
 {
     /// Slice the array in place, with a closure specifying the slice for each
     /// axis.
@@ -859,7 +859,7 @@ impl<B: Buffer, D: Dimension> LayoutRefBase<B, D>
 }
 
 /// Element access through the handle: valid for any storage family.
-impl<B: Buffer, D: Dimension> ArrayRefBase<B, D>
+impl<B: Buffer, D: Dimension> ArrayRefBase<B, StridedLayout<D>>
 {
     /// Return a reference to the element at `index`, or return `None`
     /// if the index is out of bounds.
@@ -1055,7 +1055,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where
     S: RawData<Elem = A>,
     D: Dimension,
@@ -1066,7 +1066,7 @@ where
     ///
     /// **Panics** if `axis` or `index` is out of bounds.
     #[track_caller]
-    pub fn index_axis_move(mut self, axis: Axis, index: usize) -> ArrayBase<S, D::Smaller>
+    pub fn index_axis_move(mut self, axis: Axis, index: usize) -> ArrayBase<S, StridedLayout<D::Smaller>>
     where D: RemoveAxis
     {
         self.collapse_axis(axis, index);
@@ -1076,7 +1076,7 @@ where
     }
 }
 
-impl<B: Buffer, D: Dimension> LayoutRefBase<B, D>
+impl<B: Buffer, D: Dimension> LayoutRefBase<B, StridedLayout<D>>
 {
     /// Selects `index` along the axis, collapsing the axis into length one.
     ///
@@ -1575,7 +1575,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where
     S: RawData<Elem = A>,
     D: Dimension,
@@ -1598,7 +1598,7 @@ where
     }
 
     /// Return the diagonal as a one-dimensional array.
-    pub fn into_diag(self) -> ArrayBase<S, Ix1>
+    pub fn into_diag(self) -> ArrayBase<S, StridedLayout<Ix1>>
     {
         let (len, stride) = self.diag_params();
         // safe because new len stride allows access to a subset of the current elements
@@ -1630,7 +1630,7 @@ where
     }
 }
 
-impl<B: Buffer, D: Dimension> LayoutRefBase<B, D>
+impl<B: Buffer, D: Dimension> LayoutRefBase<B, StridedLayout<D>>
 {
     /// Return `true` if the array data is laid out in contiguous “C order” in
     /// memory (where the last index is the most rapidly varying).
@@ -1717,7 +1717,7 @@ impl<A, D: Dimension> RawRef<A, D>
     }
 }
 
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where
     S: RawData<Elem = A>,
     D: Dimension,
@@ -1737,7 +1737,9 @@ where
     where S: RawDataMut<Buf = DenseBuf<A>>
     {
         self.try_ensure_unique(); // for ArcArray
-        AsRef::<RawRefBase<S::Buf, D>>::as_ref(self)._ptr().as_ptr()
+        AsRef::<RawRefBase<S::Buf, StridedLayout<D>>>::as_ref(self)
+            ._ptr()
+            .as_ptr()
     }
 }
 
@@ -1758,7 +1760,7 @@ impl<A, D: Dimension> RawRef<A, D>
     }
 }
 
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where
     S: RawData<Elem = A>,
     D: Dimension,
@@ -1774,7 +1776,7 @@ where
         self.try_ensure_unique(); // for ArcArray
         unsafe {
             RawArrayViewMut::new(
-                *AsRef::<RawRefBase<S::Buf, D>>::as_ref(self)._ptr(),
+                *AsRef::<RawRefBase<S::Buf, StridedLayout<D>>>::as_ref(self)._ptr(),
                 StridedLayout::new(self.parts.layout.dim.clone(), self.parts.layout.strides.clone()),
             )
         }
@@ -1998,7 +2000,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where
     S: RawData<Elem = A>,
     D: Dimension,
@@ -2048,7 +2050,7 @@ where
     ///                 [2., 4.]])
     /// );
     /// ```
-    pub fn into_shape_with_order<E>(self, shape: E) -> Result<ArrayBase<S, E::Dim>, ShapeError>
+    pub fn into_shape_with_order<E>(self, shape: E) -> Result<ArrayBase<S, StridedLayout<E::Dim>>, ShapeError>
     where
         E: ShapeArg,
         S: RawData<Buf = DenseBuf<A>>,
@@ -2057,7 +2059,7 @@ where
         self.into_shape_with_order_impl(shape, order.unwrap_or(Order::RowMajor))
     }
 
-    fn into_shape_with_order_impl<E>(self, shape: E, order: Order) -> Result<ArrayBase<S, E>, ShapeError>
+    fn into_shape_with_order_impl<E>(self, shape: E, order: Order) -> Result<ArrayBase<S, StridedLayout<E>>, ShapeError>
     where
         E: Dimension,
         S: RawData<Buf = DenseBuf<A>>,
@@ -2104,7 +2106,7 @@ where
     /// );
     /// ```
     #[deprecated(note = "Use `.into_shape_with_order()` or `.to_shape()`", since = "0.16.0")]
-    pub fn into_shape<E>(self, shape: E) -> Result<ArrayBase<S, E::Dim>, ShapeError>
+    pub fn into_shape<E>(self, shape: E) -> Result<ArrayBase<S, StridedLayout<E::Dim>>, ShapeError>
     where
         E: IntoDimension,
         S: RawData<Buf = DenseBuf<A>>,
@@ -2139,7 +2141,7 @@ where
     /// - `into_shape_clone` preserves array type (Array vs ArcArray), but does not support views.
     ///
     /// **Errors** if the shapes don't have the same number of elements.<br>
-    pub fn into_shape_clone<E>(self, shape: E) -> Result<ArrayBase<S, E::Dim>, ShapeError>
+    pub fn into_shape_clone<E>(self, shape: E) -> Result<ArrayBase<S, StridedLayout<E::Dim>>, ShapeError>
     where
         S: DataOwned,
         A: Clone,
@@ -2150,7 +2152,7 @@ where
         self.into_shape_clone_order(shape, order)
     }
 
-    fn into_shape_clone_order<E>(self, shape: E, order: Order) -> Result<ArrayBase<S, E>, ShapeError>
+    fn into_shape_clone_order<E>(self, shape: E, order: Order) -> Result<ArrayBase<S, StridedLayout<E>>, ShapeError>
     where
         S: DataOwned,
         A: Clone,
@@ -2215,7 +2217,7 @@ where
     /// ```
     #[track_caller]
     #[deprecated(note = "Use `.into_shape_with_order()` or `.to_shape()`", since = "0.16.0")]
-    pub fn reshape<E>(&self, shape: E) -> ArrayBase<S, E::Dim>
+    pub fn reshape<E>(&self, shape: E) -> ArrayBase<S, StridedLayout<E::Dim>>
     where
         S: DataShared + DataOwned,
         A: Clone,
@@ -2282,7 +2284,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where
     S: RawData<Elem = A>,
     D: Dimension,
@@ -2299,7 +2301,7 @@ where
     /// let flattened = array.into_flat();
     /// assert_eq!(flattened, arr1(&[1, 2, 3, 4, 5, 6, 7, 8]));
     /// ```
-    pub fn into_flat(self) -> ArrayBase<S, Ix1>
+    pub fn into_flat(self) -> ArrayBase<S, StridedLayout<Ix1>>
     where
         A: Clone,
         S: DataOwned,
@@ -2317,7 +2319,7 @@ where
     /// let array: ArrayD<i32> = arr2(&[[1, 2],
     ///                                 [3, 4]]).into_dyn();
     /// ```
-    pub fn into_dyn(self) -> ArrayBase<S, IxDyn>
+    pub fn into_dyn(self) -> ArrayBase<S, StridedLayout<IxDyn>>
     {
         // safe because new dims equivalent
         unsafe { ArrayBase::from_data_ptr(self.data, self.parts.handle).with_layout(self.parts.layout.into_dyn()) }
@@ -2339,7 +2341,7 @@ where
     ///
     /// assert!(array.into_dimensionality::<Ix2>().is_ok());
     /// ```
-    pub fn into_dimensionality<D2>(self) -> Result<ArrayBase<S, D2>, ShapeError>
+    pub fn into_dimensionality<D2>(self) -> Result<ArrayBase<S, StridedLayout<D2>>, ShapeError>
     where D2: Dimension
     {
         unsafe {
@@ -2490,7 +2492,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<B: Buffer, D: Dimension> LayoutRefBase<B, D>
+impl<B: Buffer, D: Dimension> LayoutRefBase<B, StridedLayout<D>>
 {
     /// Swap axes `ax` and `bx`.
     ///
@@ -2515,7 +2517,7 @@ impl<B: Buffer, D: Dimension> LayoutRefBase<B, D>
     }
 }
 
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where
     S: RawData<Elem = A>,
     D: Dimension,
@@ -2543,7 +2545,7 @@ where
     /// assert_eq!(b.permuted_axes([1, 0, 2]).shape(), &[2, 1, 3]);
     /// ```
     #[track_caller]
-    pub fn permuted_axes<T>(self, axes: T) -> ArrayBase<S, D>
+    pub fn permuted_axes<T>(self, axes: T) -> ArrayBase<S, StridedLayout<D>>
     where T: IntoDimension<Dim = D>
     {
         let axes = axes.into_dimension();
@@ -2622,7 +2624,7 @@ where
     ///
     /// Transposition reverses the order of the axes (dimensions and strides)
     /// while retaining the same data.
-    pub fn reversed_axes(mut self) -> ArrayBase<S, D>
+    pub fn reversed_axes(mut self) -> ArrayBase<S, StridedLayout<D>>
     {
         self.parts.layout.reverse_axes();
         self
@@ -2641,7 +2643,7 @@ where
 
 impl<A, D: Dimension> ArrayRef<A, D> {}
 
-impl<B: Buffer, D: Dimension> LayoutRefBase<B, D>
+impl<B: Buffer, D: Dimension> LayoutRefBase<B, StridedLayout<D>>
 {
     /// Return an iterator over the length and stride of each axis.
     pub fn axes(&self) -> Axes<'_, D>
@@ -2715,7 +2717,7 @@ impl<B: Buffer, D: Dimension> LayoutRefBase<B, D>
     }
 }
 
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where
     S: RawData<Elem = A>,
     D: Dimension,
@@ -2742,7 +2744,7 @@ where
     ///
     /// ***Panics*** if the axis is out of bounds.
     #[track_caller]
-    pub fn insert_axis(self, axis: Axis) -> ArrayBase<S, D::Larger>
+    pub fn insert_axis(self, axis: Axis) -> ArrayBase<S, StridedLayout<D::Larger>>
     {
         // safe because a new axis of length one does not affect memory layout
         let layout = self.parts.layout.insert_axis(axis);
@@ -2756,7 +2758,7 @@ where
     ///
     /// **Panics** if the axis is out of bounds or its length is zero.
     #[track_caller]
-    pub fn remove_axis(self, axis: Axis) -> ArrayBase<S, D::Smaller>
+    pub fn remove_axis(self, axis: Axis) -> ArrayBase<S, StridedLayout<D::Smaller>>
     where D: RemoveAxis
     {
         self.index_axis_move(axis, 0)
@@ -2979,7 +2981,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, S, D> ArrayBase<S, D>
+impl<A, S, D> ArrayBase<S, StridedLayout<D>>
 where
     S: RawData<Elem = A>,
     D: Dimension,

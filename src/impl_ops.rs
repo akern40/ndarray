@@ -62,7 +62,7 @@ macro_rules! impl_binary_op(
 /// If their shapes disagree, `self` is broadcast to their broadcast shape.
 ///
 /// **Panics** if broadcasting isn’t possible.
-impl<A, B, S, S2, D, E> $trt<ArrayBase<S2, E>> for ArrayBase<S, D>
+impl<A, B, S, S2, D, E> $trt<ArrayBase<S2, StridedLayout<E>>> for ArrayBase<S, StridedLayout<D>>
 where
     A: Clone + $trt<B, Output=A>,
     B: Clone,
@@ -71,10 +71,10 @@ where
     D: Dimension + DimMax<E>,
     E: Dimension,
 {
-    type Output = ArrayBase<S, <D as DimMax<E>>::Output>;
+    type Output = ArrayBase<S, StridedLayout<<D as DimMax<E>>::Output>>;
 
     #[track_caller]
-    fn $mth(self, rhs: ArrayBase<S2, E>) -> Self::Output
+    fn $mth(self, rhs: ArrayBase<S2, StridedLayout<E>>) -> Self::Output
     {
         self.$mth(&rhs)
     }
@@ -91,7 +91,7 @@ where
 /// cloning the data if needed.
 ///
 /// **Panics** if broadcasting isn’t possible.
-impl<'a, A, B, S, S2, D, E> $trt<&'a ArrayBase<S2, E>> for ArrayBase<S, D>
+impl<'a, A, B, S, S2, D, E> $trt<&'a ArrayBase<S2, StridedLayout<E>>> for ArrayBase<S, StridedLayout<D>>
 where
     A: Clone + $trt<B, Output=A>,
     B: Clone,
@@ -100,10 +100,10 @@ where
     D: Dimension + DimMax<E>,
     E: Dimension,
 {
-    type Output = ArrayBase<S, <D as DimMax<E>>::Output>;
+    type Output = ArrayBase<S, StridedLayout<<D as DimMax<E>>::Output>>;
 
     #[track_caller]
-    fn $mth(self, rhs: &ArrayBase<S2, E>) -> Self::Output
+    fn $mth(self, rhs: &ArrayBase<S2, StridedLayout<E>>) -> Self::Output
     {
         self.$mth(&**rhs)
     }
@@ -120,7 +120,7 @@ where
 /// cloning the data if needed.
 ///
 /// **Panics** if broadcasting isn’t possible.
-impl<'a, A, B, S, D, E> $trt<&'a ArrayRef<B, E>> for ArrayBase<S, D>
+impl<'a, A, B, S, D, E> $trt<&'a ArrayRef<B, E>> for ArrayBase<S, StridedLayout<D>>
 where
     A: Clone + $trt<B, Output=A>,
     B: Clone,
@@ -128,7 +128,7 @@ where
     D: Dimension + DimMax<E>,
     E: Dimension,
 {
-    type Output = ArrayBase<S, <D as DimMax<E>>::Output>;
+    type Output = ArrayBase<S, StridedLayout<<D as DimMax<E>>::Output>>;
 
     #[track_caller]
     fn $mth(self, rhs: &ArrayRef<B, E>) -> Self::Output
@@ -161,7 +161,7 @@ where
 /// cloning the data if needed.
 ///
 /// **Panics** if broadcasting isn’t possible.
-impl<'a, A, B, S, S2, D, E> $trt<ArrayBase<S2, E>> for &'a ArrayBase<S, D>
+impl<'a, A, B, S, S2, D, E> $trt<ArrayBase<S2, StridedLayout<E>>> for &'a ArrayBase<S, StridedLayout<D>>
 where
     A: Clone + $trt<B, Output=B>,
     B: Clone,
@@ -170,10 +170,10 @@ where
     D: Dimension,
     E: Dimension + DimMax<D>,
 {
-    type Output = ArrayBase<S2, <E as DimMax<D>>::Output>;
+    type Output = ArrayBase<S2, StridedLayout<<E as DimMax<D>>::Output>>;
 
     #[track_caller]
-    fn $mth(self, rhs: ArrayBase<S2, E>) -> Self::Output
+    fn $mth(self, rhs: ArrayBase<S2, StridedLayout<E>>) -> Self::Output
     where
     {
         (&**self).$mth(rhs)
@@ -191,7 +191,7 @@ where
 /// cloning the data if needed.
 ///
 /// **Panics** if broadcasting isn’t possible.
-impl<'a, A, B, S2, D, E> $trt<ArrayBase<S2, E>> for &'a ArrayRef<A, D>
+impl<'a, A, B, S2, D, E> $trt<ArrayBase<S2, StridedLayout<E>>> for &'a ArrayRef<A, D>
 where
     A: Clone + $trt<B, Output=B>,
     B: Clone,
@@ -199,10 +199,10 @@ where
     D: Dimension,
     E: Dimension + DimMax<D>,
 {
-    type Output = ArrayBase<S2, <E as DimMax<D>>::Output>;
+    type Output = ArrayBase<S2, StridedLayout<<E as DimMax<D>>::Output>>;
 
     #[track_caller]
-    fn $mth(self, rhs: ArrayBase<S2, E>) -> Self::Output
+    fn $mth(self, rhs: ArrayBase<S2, StridedLayout<E>>) -> Self::Output
     where
     {
         if self.ndim() == rhs.ndim() && self.shape() == rhs.shape() {
@@ -231,7 +231,7 @@ where
 /// cloning the data if needed.
 ///
 /// **Panics** if broadcasting isn’t possible.
-impl<'a, A, B, S, S2, D, E> $trt<&'a ArrayBase<S2, E>> for &'a ArrayBase<S, D>
+impl<'a, A, B, S, S2, D, E> $trt<&'a ArrayBase<S2, StridedLayout<E>>> for &'a ArrayBase<S, StridedLayout<D>>
 where
     A: Clone + $trt<B, Output=A>,
     B: Clone,
@@ -243,7 +243,7 @@ where
     type Output = Array<A, <D as DimMax<E>>::Output>;
 
     #[track_caller]
-    fn $mth(self, rhs: &'a ArrayBase<S2, E>) -> Self::Output {
+    fn $mth(self, rhs: &'a ArrayBase<S2, StridedLayout<E>>) -> Self::Output {
         (&**self).$mth(&**rhs)
     }
 }
@@ -285,14 +285,14 @@ where
 /// and return the result (based on `self`).
 ///
 /// `self` must be an `Array` or `ArcArray`.
-impl<A, S, D, B> $trt<B> for ArrayBase<S, D>
+impl<A, S, D, B> $trt<B> for ArrayBase<S, StridedLayout<D>>
     where A: Clone + $trt<B, Output=A>,
           S: DataOwned<Elem=A> + DataMut,
           D: Dimension,
           B: ScalarOperand,
 {
-    type Output = ArrayBase<S, D>;
-    fn $mth(mut self, x: B) -> ArrayBase<S, D> {
+    type Output = ArrayBase<S, StridedLayout<D>>;
+    fn $mth(mut self, x: B) -> ArrayBase<S, StridedLayout<D>> {
         self.map_inplace(move |elt| {
             *elt = elt.clone() $operator x.clone();
         });
@@ -304,7 +304,7 @@ impl<A, S, D, B> $trt<B> for ArrayBase<S, D>
 #[doc=$doc]
 /// between the reference `self` and the scalar `x`,
 /// and return the result as a new `Array`.
-impl<'a, A, S, D, B> $trt<B> for &'a ArrayBase<S, D>
+impl<'a, A, S, D, B> $trt<B> for &'a ArrayBase<S, StridedLayout<D>>
     where A: Clone + $trt<B, Output=A>,
           S: Data<Elem=A, Buf = DenseBuf<A>>,
           D: Dimension,
@@ -353,12 +353,12 @@ macro_rules! impl_scalar_lhs_op {
 // Perform elementwise
 // between the scalar `self` and array `rhs`,
 // and return the result (based on `self`).
-impl<S, D> $trt<ArrayBase<S, D>> for $scalar
+impl<S, D> $trt<ArrayBase<S, StridedLayout<D>>> for $scalar
     where S: DataOwned<Elem=$scalar> + DataMut,
           D: Dimension,
 {
-    type Output = ArrayBase<S, D>;
-    fn $mth(self, rhs: ArrayBase<S, D>) -> ArrayBase<S, D> {
+    type Output = ArrayBase<S, StridedLayout<D>>;
+    fn $mth(self, rhs: ArrayBase<S, StridedLayout<D>>) -> ArrayBase<S, StridedLayout<D>> {
         if_commutative!($commutative {
             rhs.$mth(self)
         } or {{
@@ -374,13 +374,13 @@ impl<S, D> $trt<ArrayBase<S, D>> for $scalar
 // Perform elementwise
 // between the scalar `self` and array `rhs`,
 // and return the result as a new `Array`.
-impl<'a, S, D> $trt<&'a ArrayBase<S, D>> for $scalar
+impl<'a, S, D> $trt<&'a ArrayBase<S, StridedLayout<D>>> for $scalar
     where S: Data<Elem=$scalar, Buf = DenseBuf<$scalar>>,
           D: Dimension,
 {
     type Output = Array<$scalar, D>;
 
-    fn $mth(self, rhs: &ArrayBase<S, D>) -> Self::Output {
+    fn $mth(self, rhs: &ArrayBase<S, StridedLayout<D>>) -> Self::Output {
         self.$mth(&**rhs)
     }
 }
@@ -490,7 +490,7 @@ mod arithmetic_ops
     impl_scalar_lhs_op!(Complex<f64>, Commute, *, Mul, mul, "multiplication");
     impl_scalar_lhs_op!(Complex<f64>, Ordered, /, Div, div, "division");
 
-    impl<A, S, D> Neg for ArrayBase<S, D>
+    impl<A, S, D> Neg for ArrayBase<S, StridedLayout<D>>
     where
         A: Clone + Neg<Output = A>,
         S: DataOwned<Elem = A> + DataMut,
@@ -508,7 +508,7 @@ mod arithmetic_ops
         }
     }
 
-    impl<'a, A, S, D> Neg for &'a ArrayBase<S, D>
+    impl<'a, A, S, D> Neg for &'a ArrayBase<S, StridedLayout<D>>
     where
         &'a A: 'a + Neg<Output = A>,
         S: Data<Elem = A, Buf = DenseBuf<A>>,
@@ -539,7 +539,7 @@ mod arithmetic_ops
         }
     }
 
-    impl<A, S, D> Not for ArrayBase<S, D>
+    impl<A, S, D> Not for ArrayBase<S, StridedLayout<D>>
     where
         A: Clone + Not<Output = A>,
         S: DataOwned<Elem = A> + DataMut,
@@ -557,7 +557,7 @@ mod arithmetic_ops
         }
     }
 
-    impl<'a, A, S, D> Not for &'a ArrayBase<S, D>
+    impl<'a, A, S, D> Not for &'a ArrayBase<S, StridedLayout<D>>
     where
         &'a A: 'a + Not<Output = A>,
         S: Data<Elem = A, Buf = DenseBuf<A>>,
@@ -602,7 +602,7 @@ mod assign_ops
             /// If their shapes disagree, `rhs` is broadcast to the shape of `self`.
             ///
             /// **Panics** if broadcasting isn’t possible.
-            impl<'a, A, S, S2, D, E> $trt<&'a ArrayBase<S2, E>> for ArrayBase<S, D>
+            impl<'a, A, S, S2, D, E> $trt<&'a ArrayBase<S2, StridedLayout<E>>> for ArrayBase<S, StridedLayout<D>>
             where
                 A: Clone + $trt<A>,
                 S: DataMut<Elem = A, Buf = DenseBuf<A>>,
@@ -611,7 +611,7 @@ mod assign_ops
                 E: Dimension,
             {
                 #[track_caller]
-                fn $method(&mut self, rhs: &ArrayBase<S2, E>) {
+                fn $method(&mut self, rhs: &ArrayBase<S2, StridedLayout<E>>) {
                     (**self).$method(&**rhs)
                 }
             }
@@ -635,7 +635,7 @@ mod assign_ops
             }
 
             #[doc=$doc]
-            impl<A, S, D> $trt<A> for ArrayBase<S, D>
+            impl<A, S, D> $trt<A> for ArrayBase<S, StridedLayout<D>>
             where
                 A: ScalarOperand + $trt<A>,
                 S: DataMut<Elem = A, Buf = DenseBuf<A>>,
