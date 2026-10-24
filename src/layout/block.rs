@@ -79,9 +79,9 @@ impl<D: Dimension> BlockLayout<D>
     {
         let mut block = 0usize;
         let mut within = 0usize;
-        for p in 0..c.len() {
-            block = block * self.blocks_along(p) + c[p] / self.tile[p];
-            within = within * self.tile[p] + c[p] % self.tile[p];
+        for (p, &cp) in c.iter().enumerate() {
+            block = block * self.blocks_along(p) + cp / self.tile[p];
+            within = within * self.tile[p] + cp % self.tile[p];
         }
         (block * self.tile.size() + within) as isize
     }
