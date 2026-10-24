@@ -7,7 +7,6 @@
 //! `ArrayBase` keeps a [`Accessor::Handle`] next to the layout; the storage
 //! owns or borrows the buffer the handle points into.
 
-use crate::{ArrayBase, Dimension, OwnedRepr, RawData, ViewRepr};
 use core::fmt;
 use core::marker::PhantomData;
 use core::ptr::NonNull;
@@ -48,15 +47,6 @@ pub unsafe trait Accessor: Sized
     /// As [`get`](Self::get), and the caller must have unique access to the
     /// element (the layout must be unique and the storage uniquely owned).
     unsafe fn get_mut<'a>(handle: Self::Handle, offset: isize) -> &'a mut Self::Elem;
-
-    /// The owning storage of this accessor family.
-    type Owned: RawData<Elem = Self::Elem, Acc = Self>;
-
-    /// Materialize a view of this family into its owning storage.
-    fn into_owned<D>(view: ArrayBase<ViewRepr<&'_ Self>, D>) -> ArrayBase<Self::Owned, D>
-    where
-        Self::Elem: Clone,
-        D: Dimension;
 }
 
 /// The dense family: elements in one contiguous allocation, addressed by a
@@ -92,15 +82,5 @@ unsafe impl<A> Accessor for Dense<A>
     unsafe fn get_mut<'a>(handle: NonNull<A>, offset: isize) -> &'a mut A
     {
         &mut *handle.as_ptr().offset(offset)
-    }
-
-    type Owned = OwnedRepr<A>;
-
-    fn into_owned<D>(view: ArrayBase<ViewRepr<&'_ Self>, D>) -> ArrayBase<OwnedRepr<A>, D>
-    where
-        A: Clone,
-        D: Dimension,
-    {
-        view.to_owned()
     }
 }

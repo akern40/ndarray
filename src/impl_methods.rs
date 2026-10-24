@@ -287,7 +287,7 @@ where
 
     /// Turn the array into a uniquely owned array, cloning the array elements
     /// if necessary.
-    pub fn into_owned(self) -> ArrayBase<<S::Acc as Accessor>::Owned, D>
+    pub fn into_owned(self) -> Array<A, D>
     where
         A: Clone,
         S: Data,
@@ -316,7 +316,7 @@ where
     /// let unique: Array2<_> = a.try_into_owned_nocopy().unwrap();
     /// assert_eq!(unique, array![[1., 2.], [3., 4.]]);
     /// ```
-    pub fn try_into_owned_nocopy(self) -> Result<ArrayBase<<S::Acc as Accessor>::Owned, D>, Self>
+    pub fn try_into_owned_nocopy(self) -> Result<Array<A, D>, Self>
     where S: Data
     {
         S::try_into_owned_nocopy(self)

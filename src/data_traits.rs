@@ -114,7 +114,7 @@ pub unsafe trait Data: RawData
     /// Converts the array to a uniquely owned array, cloning elements if necessary.
     #[doc(hidden)]
     #[allow(clippy::wrong_self_convention)]
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> ArrayBase<<Self::Acc as Accessor>::Owned, D>
+    fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
     where
         Self::Elem: Clone,
         D: Dimension;
@@ -122,10 +122,7 @@ pub unsafe trait Data: RawData
     /// Converts the array into `Array<A, D>` if this is possible without
     /// cloning the array elements. Otherwise, returns `self_` unchanged.
     #[doc(hidden)]
-    #[allow(clippy::type_complexity)]
-    fn try_into_owned_nocopy<D>(
-        self_: ArrayBase<Self, D>,
-    ) -> Result<ArrayBase<<Self::Acc as Accessor>::Owned, D>, ArrayBase<Self, D>>
+    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
     where D: Dimension;
 
     /// Return a shared ownership (copy on write) array based on the existing one,
@@ -442,14 +439,20 @@ unsafe impl<Acc: Accessor> RawData for ViewRepr<&Acc>
 
 unsafe impl<Acc: Accessor> Data for ViewRepr<&Acc>
 {
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Acc::Owned, D>
+    fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
     where
         Self::Elem: Clone,
         D: Dimension,
     {
-        Acc::into_owned(self_)
+        // Densify: visit every logical index in row-major order and copy the element out.
+        let dim = self_.parts.layout.dim.clone();
+        let elems: Vec<Acc::Elem> = self_
+            .into_base_iter()
+            .map(|handle| unsafe { Acc::get(handle, 0) }.clone())
+            .collect();
+        unsafe { Array::from_shape_vec_unchecked(dim, elems) }
     }
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<ArrayBase<Acc::Owned, D>, ArrayBase<Self, D>>
+    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
     where D: Dimension
     {
         Err(self_)
@@ -494,16 +497,20 @@ unsafe impl<Acc: Accessor> RawDataMut for ViewRepr<&mut Acc>
 
 unsafe impl<Acc: Accessor> Data for ViewRepr<&mut Acc>
 {
-    fn into_owned<D>(self_: ArrayBase<Self, D>) -> ArrayBase<Acc::Owned, D>
+    fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
     where
         Self::Elem: Clone,
         D: Dimension,
     {
-        let view =
-            unsafe { ArrayBase::from_data_ptr(ViewRepr::new(), self_.parts.handle).with_layout(self_.parts.layout) };
-        Acc::into_owned(view)
+        // Densify: visit every logical index in row-major order and copy the element out.
+        let dim = self_.parts.layout.dim.clone();
+        let elems: Vec<Acc::Elem> = self_
+            .into_base_iter()
+            .map(|handle| unsafe { Acc::get(handle, 0) }.clone())
+            .collect();
+        unsafe { Array::from_shape_vec_unchecked(dim, elems) }
     }
-    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<ArrayBase<Acc::Owned, D>, ArrayBase<Self, D>>
+    fn try_into_owned_nocopy<D>(self_: ArrayBase<Self, D>) -> Result<Array<Self::Elem, D>, ArrayBase<Self, D>>
     where D: Dimension
     {
         Err(self_)
