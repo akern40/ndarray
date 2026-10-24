@@ -1,13 +1,12 @@
-//! Spike: a second accessor family. Coordinate-sparse storage with a fill value,
+//! Spike: a second handle family. Coordinate-sparse storage with a fill value,
 //! sharing `StridedLayout<D>` (and every layout operation) with the dense family.
 
 use std::fmt;
-use std::marker::PhantomData;
 use std::ptr::NonNull;
 
-use crate::accessor::Accessor;
 use crate::data_traits::{Data, DataMut, RawData, RawDataClone, RawDataMut};
 use crate::dimension::IntoDimension;
+use crate::handle::Handle;
 use crate::{ArrayBase, Dimension};
 
 /// The buffer behind a sparse array: a fill value plus `(offset, value)` entries sorted by offset.
@@ -45,37 +44,34 @@ impl<A> fmt::Debug for SparseHandle<A>
     }
 }
 
-/// Accessor for the sparse family: `get` is a binary search, falling back to the fill value;
+/// Handle for the sparse family: `get` is a binary search, falling back to the fill value;
 /// `get_mut` inserts the fill value if the slot is absent and returns a reference to the entry.
-pub struct Sparse<A>(PhantomData<A>);
-
-unsafe impl<A: Clone> Accessor for Sparse<A>
+unsafe impl<A: Clone> Handle for SparseHandle<A>
 {
     type Elem = A;
-    type Handle = SparseHandle<A>;
 
-    unsafe fn offset(handle: SparseHandle<A>, by: isize) -> SparseHandle<A>
+    unsafe fn offset(self, by: isize) -> SparseHandle<A>
     {
         SparseHandle {
-            buf: handle.buf,
-            base: handle.base + by,
+            buf: self.buf,
+            base: self.base + by,
         }
     }
 
-    unsafe fn get<'a>(handle: SparseHandle<A>, offset: isize) -> &'a A
+    unsafe fn get<'a>(self, offset: isize) -> &'a A
     {
-        let buf = &*handle.buf.as_ptr();
-        let o = (handle.base + offset) as usize;
+        let buf = &*self.buf.as_ptr();
+        let o = (self.base + offset) as usize;
         match buf.entries.binary_search_by_key(&o, |e| e.0) {
             Ok(i) => &buf.entries[i].1,
             Err(_) => &buf.fill,
         }
     }
 
-    unsafe fn get_mut<'a>(handle: SparseHandle<A>, offset: isize) -> &'a mut A
+    unsafe fn get_mut<'a>(self, offset: isize) -> &'a mut A
     {
-        let buf = &mut *handle.buf.as_ptr();
-        let o = (handle.base + offset) as usize;
+        let buf = &mut *self.buf.as_ptr();
+        let o = (self.base + offset) as usize;
         let i = match buf.entries.binary_search_by_key(&o, |e| e.0) {
             Ok(i) => i,
             Err(i) => {
@@ -118,7 +114,7 @@ unsafe impl<A: Sync> Sync for OwnedSparse<A> {}
 unsafe impl<A: Clone> RawData for OwnedSparse<A>
 {
     type Elem = A;
-    type Acc = Sparse<A>;
+    type Handle = SparseHandle<A>;
 
     fn _is_pointer_inbounds(&self, handle: SparseHandle<A>) -> bool
     {

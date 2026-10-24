@@ -7,13 +7,14 @@
 // except according to those terms.
 
 use alloc::slice;
+use core::ptr::NonNull;
 #[allow(unused_imports)]
 use rawpointer::PointerExt;
 use std::mem::MaybeUninit;
 
 use crate::imp_prelude::*;
 
-use crate::accessor::Accessor;
+use crate::handle::Handle;
 use crate::{Baseiter, ElementsBase, ElementsBaseMut};
 
 use crate::dimension::offset_from_low_addr_ptr_to_logical_ptr;
@@ -22,25 +23,25 @@ use crate::math_cell::MathCell;
 use crate::IndexLonger;
 
 /// Methods for read-only array views.
-impl<Acc, D> ArrayBase<ViewRepr<&Acc>, D>
+impl<H, D> ArrayBase<ViewRepr<&H>, D>
 where
-    Acc: Accessor,
+    H: Handle,
     D: Dimension,
 {
     #[inline]
-    pub(crate) fn into_base_iter(self) -> Baseiter<Acc, D>
+    pub(crate) fn into_base_iter(self) -> Baseiter<H, D>
     {
         unsafe { Baseiter::new(self.parts.handle, self.parts.layout) }
     }
 }
 
-impl<Acc, D> ArrayBase<ViewRepr<&mut Acc>, D>
+impl<H, D> ArrayBase<ViewRepr<&mut H>, D>
 where
-    Acc: Accessor,
+    H: Handle,
     D: Dimension,
 {
     #[inline]
-    pub(crate) fn into_base_iter(self) -> Baseiter<Acc, D>
+    pub(crate) fn into_base_iter(self) -> Baseiter<H, D>
     {
         unsafe { Baseiter::new(self.parts.handle, self.parts.layout) }
     }
@@ -222,7 +223,7 @@ impl<A, D> RawArrayView<A, D>
 where D: Dimension
 {
     #[inline]
-    pub(crate) fn into_base_iter(self) -> Baseiter<Dense<A>, D>
+    pub(crate) fn into_base_iter(self) -> Baseiter<NonNull<A>, D>
     {
         unsafe { Baseiter::new(self.parts.handle, self.parts.layout) }
     }
@@ -232,7 +233,7 @@ impl<A, D> RawArrayViewMut<A, D>
 where D: Dimension
 {
     #[inline]
-    pub(crate) fn into_base_iter(self) -> Baseiter<Dense<A>, D>
+    pub(crate) fn into_base_iter(self) -> Baseiter<NonNull<A>, D>
     {
         unsafe { Baseiter::new(self.parts.handle, self.parts.layout) }
     }
@@ -243,7 +244,7 @@ impl<'a, A, D> ArrayView<'a, A, D>
 where D: Dimension
 {
     #[inline]
-    pub(crate) fn into_elements_base(self) -> ElementsBase<'a, Dense<A>, D>
+    pub(crate) fn into_elements_base(self) -> ElementsBase<'a, NonNull<A>, D>
     {
         ElementsBase::new(self)
     }
@@ -305,7 +306,7 @@ where D: Dimension
     }
 
     #[inline]
-    pub(crate) fn into_elements_base(self) -> ElementsBaseMut<'a, Dense<A>, D>
+    pub(crate) fn into_elements_base(self) -> ElementsBaseMut<'a, NonNull<A>, D>
     {
         ElementsBaseMut::new(self)
     }

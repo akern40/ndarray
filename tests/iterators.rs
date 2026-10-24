@@ -1,8 +1,8 @@
 #![allow(clippy::deref_addrof, clippy::unreadable_literal)]
 
 use ndarray::prelude::*;
-use ndarray::Dense;
 use ndarray::{arr3, indices, s, Slice, Zip};
+use std::ptr::NonNull;
 
 use itertools::assert_equal;
 use itertools::enumerate;
@@ -106,7 +106,7 @@ fn as_slice()
 
     fn assert_slice_correct<A, S, D>(v: &ArrayBase<S, D>)
     where
-        S: Data<Elem = A, Acc = Dense<A>>,
+        S: Data<Elem = A, Handle = NonNull<A>>,
         D: Dimension,
         A: PartialEq + std::fmt::Debug,
     {

@@ -5,6 +5,7 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+use core::ptr::NonNull;
 use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::ser::{SerializeSeq, SerializeStruct};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -82,7 +83,7 @@ impl<A, D, S> Serialize for ArrayBase<S, D>
 where
     A: Serialize,
     D: Dimension + Serialize,
-    S: Data<Elem = A, Acc = Dense<A>>,
+    S: Data<Elem = A, Handle = NonNull<A>>,
 {
     fn serialize<Se>(&self, serializer: Se) -> Result<Se::Ok, Se::Error>
     where Se: Serializer

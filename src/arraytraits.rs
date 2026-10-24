@@ -6,7 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
@@ -14,11 +13,12 @@ use std::hash;
 use std::mem;
 use std::mem::size_of;
 use std::ops::{Index, IndexMut};
+use std::ptr::NonNull;
 use std::{iter::FromIterator, slice};
 
 use crate::imp_prelude::*;
 use crate::Arc;
-use crate::{Accessor, ArrayRefBase};
+use crate::{ArrayRefBase, Handle};
 
 use crate::{
     dimension,
@@ -38,12 +38,12 @@ pub(crate) fn array_out_of_bounds() -> !
 }
 
 #[inline(always)]
-pub fn debug_bounds_check<Acc, D, I, T>(_a: &T, _index: &I)
+pub fn debug_bounds_check<H, D, I, T>(_a: &T, _index: &I)
 where
-    Acc: Accessor,
+    H: Handle,
     D: Dimension,
     I: NdIndex<D>,
-    T: AsRef<LayoutRefBase<Acc, D>> + ?Sized,
+    T: AsRef<LayoutRefBase<H, D>> + ?Sized,
 {
     let _layout_ref = _a.as_ref();
     debug_bounds_check_ref!(_layout_ref, *_index);
@@ -52,13 +52,13 @@ where
 /// Access the element at **index**.
 ///
 /// **Panics** if index is out of bounds.
-impl<Acc, D, I> Index<I> for ArrayRefBase<Acc, D>
+impl<H, D, I> Index<I> for ArrayRefBase<H, D>
 where
-    Acc: Accessor,
+    H: Handle,
     D: Dimension,
     I: NdIndex<D>,
 {
-    type Output = Acc::Elem;
+    type Output = H::Elem;
     #[inline]
     fn index(&self, index: I) -> &Self::Output
     {
@@ -67,28 +67,28 @@ where
             ._layout()
             .index_offset_checked(&index)
             .unwrap_or_else(|| array_out_of_bounds());
-        unsafe { Acc::get(*self._ptr(), offset) }
+        unsafe { self._ptr().get(offset) }
     }
 }
 
 /// Access the element at **index** mutably.
 ///
 /// **Panics** if index is out of bounds.
-impl<Acc, D, I> IndexMut<I> for ArrayRefBase<Acc, D>
+impl<H, D, I> IndexMut<I> for ArrayRefBase<H, D>
 where
-    Acc: Accessor,
+    H: Handle,
     D: Dimension,
     I: NdIndex<D>,
 {
     #[inline]
-    fn index_mut(&mut self, index: I) -> &mut Acc::Elem
+    fn index_mut(&mut self, index: I) -> &mut H::Elem
     {
         debug_bounds_check_ref!(self, index);
         let offset = self
             ._layout()
             .index_offset_checked(&index)
             .unwrap_or_else(|| array_out_of_bounds());
-        unsafe { Acc::get_mut(*self._ptr(), offset) }
+        unsafe { self._ptr().get_mut(offset) }
     }
 }
 
@@ -194,8 +194,8 @@ where
 impl<A, B, S, S2, D> PartialEq<ArrayBase<S2, D>> for ArrayBase<S, D>
 where
     A: PartialEq<B>,
-    S: Data<Elem = A, Acc = Dense<A>>,
-    S2: Data<Elem = B, Acc = Dense<B>>,
+    S: Data<Elem = A, Handle = NonNull<A>>,
+    S2: Data<Elem = B, Handle = NonNull<B>>,
     D: Dimension,
 {
     fn eq(&self, rhs: &ArrayBase<S2, D>) -> bool
@@ -209,8 +209,8 @@ where
 impl<A, B, S, S2, D> PartialEq<&ArrayBase<S2, D>> for ArrayBase<S, D>
 where
     A: PartialEq<B>,
-    S: Data<Elem = A, Acc = Dense<A>>,
-    S2: Data<Elem = B, Acc = Dense<B>>,
+    S: Data<Elem = A, Handle = NonNull<A>>,
+    S2: Data<Elem = B, Handle = NonNull<B>>,
     D: Dimension,
 {
     fn eq(&self, rhs: &&ArrayBase<S2, D>) -> bool
@@ -224,8 +224,8 @@ where
 impl<A, B, S, S2, D> PartialEq<ArrayBase<S2, D>> for &ArrayBase<S, D>
 where
     A: PartialEq<B>,
-    S: Data<Elem = A, Acc = Dense<A>>,
-    S2: Data<Elem = B, Acc = Dense<B>>,
+    S: Data<Elem = A, Handle = NonNull<A>>,
+    S2: Data<Elem = B, Handle = NonNull<B>>,
     D: Dimension,
 {
     fn eq(&self, rhs: &ArrayBase<S2, D>) -> bool
@@ -236,14 +236,14 @@ where
 impl<S, D> Eq for ArrayBase<S, D>
 where
     D: Dimension,
-    S: Data<Acc = Dense<<S as RawData>::Elem>>,
+    S: Data<Handle = NonNull<<S as RawData>::Elem>>,
     S::Elem: Eq,
 {
 }
 
 impl<A, B, S, D> PartialEq<ArrayRef<B, D>> for ArrayBase<S, D>
 where
-    S: Data<Elem = A, Acc = Dense<A>>,
+    S: Data<Elem = A, Handle = NonNull<A>>,
     A: PartialEq<B>,
     D: Dimension,
 {
@@ -255,7 +255,7 @@ where
 
 impl<A, B, S, D> PartialEq<&ArrayRef<B, D>> for ArrayBase<S, D>
 where
-    S: Data<Elem = A, Acc = Dense<A>>,
+    S: Data<Elem = A, Handle = NonNull<A>>,
     A: PartialEq<B>,
     D: Dimension,
 {
@@ -267,7 +267,7 @@ where
 
 impl<A, B, S, D> PartialEq<ArrayRef<B, D>> for &ArrayBase<S, D>
 where
-    S: Data<Elem = A, Acc = Dense<A>>,
+    S: Data<Elem = A, Handle = NonNull<A>>,
     A: PartialEq<B>,
     D: Dimension,
 {
@@ -279,7 +279,7 @@ where
 
 impl<A, B, S, D> PartialEq<ArrayBase<S, D>> for ArrayRef<A, D>
 where
-    S: Data<Elem = B, Acc = Dense<B>>,
+    S: Data<Elem = B, Handle = NonNull<B>>,
     A: PartialEq<B>,
     D: Dimension,
 {
@@ -291,7 +291,7 @@ where
 
 impl<A, B, S, D> PartialEq<&ArrayBase<S, D>> for ArrayRef<A, D>
 where
-    S: Data<Elem = B, Acc = Dense<B>>,
+    S: Data<Elem = B, Handle = NonNull<B>>,
     A: PartialEq<B>,
     D: Dimension,
 {
@@ -303,7 +303,7 @@ where
 
 impl<A, B, S, D> PartialEq<ArrayBase<S, D>> for &ArrayRef<A, D>
 where
-    S: Data<Elem = B, Acc = Dense<B>>,
+    S: Data<Elem = B, Handle = NonNull<B>>,
     A: PartialEq<B>,
     D: Dimension,
 {
@@ -393,7 +393,7 @@ where D: Dimension
 impl<'a, S, D> IntoIterator for &'a ArrayBase<S, D>
 where
     D: Dimension,
-    S: Data<Acc = Dense<<S as RawData>::Elem>>,
+    S: Data<Handle = NonNull<<S as RawData>::Elem>>,
 {
     type Item = &'a S::Elem;
     type IntoIter = Iter<'a, S::Elem, D>;
@@ -407,7 +407,7 @@ where
 impl<'a, S, D> IntoIterator for &'a mut ArrayBase<S, D>
 where
     D: Dimension,
-    S: DataMut<Acc = Dense<<S as RawData>::Elem>>,
+    S: DataMut<Handle = NonNull<<S as RawData>::Elem>>,
 {
     type Item = &'a mut S::Elem;
     type IntoIter = IterMut<'a, S::Elem, D>;
@@ -470,7 +470,7 @@ where
 impl<S, D> hash::Hash for ArrayBase<S, D>
 where
     D: Dimension,
-    S: Data<Acc = Dense<<S as RawData>::Elem>>,
+    S: Data<Handle = NonNull<<S as RawData>::Elem>>,
     S::Elem: hash::Hash,
 {
     // Note: elements are hashed in the logical order
@@ -558,7 +558,7 @@ impl<'a, A, const N: usize> From<&'a [[A; N]]> for ArrayView<'a, A, Ix2>
 /// Implementation of `ArrayView::from(&A)` where `A` is an array.
 impl<'a, A, S, D> From<&'a ArrayBase<S, D>> for ArrayView<'a, A, D>
 where
-    S: Data<Elem = A, Acc = Dense<A>>,
+    S: Data<Elem = A, Handle = NonNull<A>>,
     D: Dimension,
 {
     /// Create a read-only array view of the array.
@@ -636,7 +636,7 @@ impl<'a, A, const N: usize> From<&'a mut [[A; N]]> for ArrayViewMut<'a, A, Ix2>
 /// Implementation of `ArrayViewMut::from(&mut A)` where `A` is an array.
 impl<'a, A, S, D> From<&'a mut ArrayBase<S, D>> for ArrayViewMut<'a, A, D>
 where
-    S: DataMut<Elem = A, Acc = Dense<A>>,
+    S: DataMut<Elem = A, Handle = NonNull<A>>,
     D: Dimension,
 {
     /// Create a read-write array view of the array.

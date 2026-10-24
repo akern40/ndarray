@@ -3,6 +3,7 @@ use crate::ArrayRef;
 use crate::LayoutBitset;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+use core::ptr::NonNull;
 
 /// Argument conversion into a producer.
 ///
@@ -130,7 +131,7 @@ impl<T> Offset for *mut T
 impl<'a, A: 'a, S, D> IntoNdProducer for &'a ArrayBase<S, D>
 where
     D: Dimension,
-    S: Data<Elem = A, Acc = Dense<A>>,
+    S: Data<Elem = A, Handle = NonNull<A>>,
 {
     type Item = &'a A;
     type Dim = D;
@@ -146,7 +147,7 @@ where
 impl<'a, A: 'a, S, D> IntoNdProducer for &'a mut ArrayBase<S, D>
 where
     D: Dimension,
-    S: DataMut<Elem = A, Acc = Dense<A>>,
+    S: DataMut<Elem = A, Handle = NonNull<A>>,
 {
     type Item = &'a mut A;
     type Dim = D;

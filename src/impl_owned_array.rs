@@ -10,7 +10,6 @@ use rawpointer::PointerExt;
 
 use crate::imp_prelude::*;
 
-use crate::accessor::Dense;
 use crate::dimension;
 use crate::error::{ErrorKind, ShapeError};
 use crate::iterators::Baseiter;
@@ -912,7 +911,7 @@ pub(crate) unsafe fn drop_unreachable_raw<A, D>(
 
     // iter is a raw pointer iterator traversing the array in memory order now with the
     // sorted axes.
-    let mut iter = Baseiter::<Dense<A>, _>::new(self_.parts.handle, self_.parts.layout);
+    let mut iter = Baseiter::<NonNull<A>, _>::new(self_.parts.handle, self_.parts.layout);
     let mut dropped_elements = 0;
 
     let mut last_ptr = data_ptr;

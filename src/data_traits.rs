@@ -8,7 +8,7 @@
 
 //! The data (inner representation) traits for ndarray
 
-use crate::accessor::{Accessor, Dense};
+use crate::handle::Handle;
 #[allow(unused_imports)]
 use rawpointer::PointerExt;
 use std::ptr::NonNull;
@@ -43,10 +43,10 @@ pub unsafe trait RawData: Sized
 
     /// The storage family: how offsets become elements. Every storage in
     /// the crate is dense today.
-    type Acc: Accessor<Elem = Self::Elem>;
+    type Handle: Handle<Elem = Self::Elem>;
 
     #[doc(hidden)]
-    fn _is_pointer_inbounds(&self, handle: <Self::Acc as Accessor>::Handle) -> bool;
+    fn _is_pointer_inbounds(&self, handle: Self::Handle) -> bool;
 
     private_decl! {}
 }
@@ -90,12 +90,10 @@ pub unsafe trait RawDataClone: RawData
 {
     #[doc(hidden)]
     /// Unsafe because, `ptr` must point inside the current storage.
-    unsafe fn clone_with_ptr(&self, ptr: <Self::Acc as Accessor>::Handle) -> (Self, <Self::Acc as Accessor>::Handle);
+    unsafe fn clone_with_ptr(&self, ptr: Self::Handle) -> (Self, Self::Handle);
 
     #[doc(hidden)]
-    unsafe fn clone_from_with_ptr(
-        &mut self, other: &Self, ptr: <Self::Acc as Accessor>::Handle,
-    ) -> <Self::Acc as Accessor>::Handle
+    unsafe fn clone_from_with_ptr(&mut self, other: &Self, ptr: Self::Handle) -> Self::Handle
     {
         let (data, ptr) = other.clone_with_ptr(ptr);
         *self = data;
@@ -131,7 +129,7 @@ pub unsafe trait Data: RawData
     #[allow(clippy::wrong_self_convention)]
     fn to_shared<D>(self_: &ArrayBase<Self, D>) -> ArcArray<Self::Elem, D>
     where
-        Self: RawData<Acc = Dense<<Self as RawData>::Elem>>,
+        Self: RawData<Handle = NonNull<<Self as RawData>::Elem>>,
         Self::Elem: Clone,
         D: Dimension,
     {
@@ -179,7 +177,7 @@ pub unsafe trait DataMut: Data + RawDataMut
 unsafe impl<A> RawData for RawViewRepr<*const A>
 {
     type Elem = A;
-    type Acc = Dense<A>;
+    type Handle = NonNull<A>;
 
     #[inline(always)]
     fn _is_pointer_inbounds(&self, _ptr: NonNull<A>) -> bool
@@ -192,7 +190,7 @@ unsafe impl<A> RawData for RawViewRepr<*const A>
 
 unsafe impl<A> RawDataClone for RawViewRepr<*const A>
 {
-    unsafe fn clone_with_ptr(&self, ptr: <Self::Acc as Accessor>::Handle) -> (Self, <Self::Acc as Accessor>::Handle)
+    unsafe fn clone_with_ptr(&self, ptr: Self::Handle) -> (Self, Self::Handle)
     {
         (*self, ptr)
     }
@@ -201,7 +199,7 @@ unsafe impl<A> RawDataClone for RawViewRepr<*const A>
 unsafe impl<A> RawData for RawViewRepr<*mut A>
 {
     type Elem = A;
-    type Acc = Dense<A>;
+    type Handle = NonNull<A>;
 
     #[inline(always)]
     fn _is_pointer_inbounds(&self, _ptr: NonNull<A>) -> bool
@@ -231,7 +229,7 @@ unsafe impl<A> RawDataMut for RawViewRepr<*mut A>
 
 unsafe impl<A> RawDataClone for RawViewRepr<*mut A>
 {
-    unsafe fn clone_with_ptr(&self, ptr: <Self::Acc as Accessor>::Handle) -> (Self, <Self::Acc as Accessor>::Handle)
+    unsafe fn clone_with_ptr(&self, ptr: Self::Handle) -> (Self, Self::Handle)
     {
         (*self, ptr)
     }
@@ -240,7 +238,7 @@ unsafe impl<A> RawDataClone for RawViewRepr<*mut A>
 unsafe impl<A> RawData for OwnedArcRepr<A>
 {
     type Elem = A;
-    type Acc = Dense<A>;
+    type Handle = NonNull<A>;
 
     fn _is_pointer_inbounds(&self, self_ptr: NonNull<A>) -> bool
     {
@@ -336,7 +334,7 @@ unsafe impl<A> DataMut for OwnedArcRepr<A> where A: Clone {}
 
 unsafe impl<A> RawDataClone for OwnedArcRepr<A>
 {
-    unsafe fn clone_with_ptr(&self, ptr: <Self::Acc as Accessor>::Handle) -> (Self, <Self::Acc as Accessor>::Handle)
+    unsafe fn clone_with_ptr(&self, ptr: Self::Handle) -> (Self, Self::Handle)
     {
         // pointer is preserved
         (self.clone(), ptr)
@@ -346,7 +344,7 @@ unsafe impl<A> RawDataClone for OwnedArcRepr<A>
 unsafe impl<A> RawData for OwnedRepr<A>
 {
     type Elem = A;
-    type Acc = Dense<A>;
+    type Handle = NonNull<A>;
 
     fn _is_pointer_inbounds(&self, self_ptr: NonNull<A>) -> bool
     {
@@ -400,7 +398,7 @@ unsafe impl<A> DataMut for OwnedRepr<A> {}
 unsafe impl<A> RawDataClone for OwnedRepr<A>
 where A: Clone
 {
-    unsafe fn clone_with_ptr(&self, ptr: <Self::Acc as Accessor>::Handle) -> (Self, <Self::Acc as Accessor>::Handle)
+    unsafe fn clone_with_ptr(&self, ptr: Self::Handle) -> (Self, Self::Handle)
     {
         let mut u = self.clone();
         let mut new_ptr = u.as_nonnull_mut();
@@ -411,9 +409,7 @@ where A: Clone
         (u, new_ptr)
     }
 
-    unsafe fn clone_from_with_ptr(
-        &mut self, other: &Self, ptr: <Self::Acc as Accessor>::Handle,
-    ) -> <Self::Acc as Accessor>::Handle
+    unsafe fn clone_from_with_ptr(&mut self, other: &Self, ptr: Self::Handle) -> Self::Handle
     {
         let our_off = if size_of::<A>() != 0 {
             (ptr.as_ptr() as isize - other.as_ptr() as isize) / mem::size_of::<A>() as isize
@@ -425,19 +421,19 @@ where A: Clone
     }
 }
 
-unsafe impl<Acc: Accessor> RawData for ViewRepr<&Acc>
+unsafe impl<H: Handle> RawData for ViewRepr<&H>
 {
-    type Elem = Acc::Elem;
-    type Acc = Acc;
+    type Elem = H::Elem;
+    type Handle = H;
     #[inline(always)]
-    fn _is_pointer_inbounds(&self, _handle: Acc::Handle) -> bool
+    fn _is_pointer_inbounds(&self, _handle: H) -> bool
     {
         true
     }
     private_impl! {}
 }
 
-unsafe impl<Acc: Accessor> Data for ViewRepr<&Acc>
+unsafe impl<H: Handle> Data for ViewRepr<&H>
 {
     fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
     where
@@ -446,9 +442,9 @@ unsafe impl<Acc: Accessor> Data for ViewRepr<&Acc>
     {
         // Densify: visit every logical index in row-major order and copy the element out.
         let dim = self_.parts.layout.dim.clone();
-        let elems: Vec<Acc::Elem> = self_
+        let elems: Vec<H::Elem> = self_
             .into_base_iter()
-            .map(|handle| unsafe { Acc::get(handle, 0) }.clone())
+            .map(|handle| unsafe { handle.get(0) }.clone())
             .collect();
         unsafe { Array::from_shape_vec_unchecked(dim, elems) }
     }
@@ -459,27 +455,27 @@ unsafe impl<Acc: Accessor> Data for ViewRepr<&Acc>
     }
 }
 
-unsafe impl<Acc: Accessor> RawDataClone for ViewRepr<&Acc>
+unsafe impl<H: Handle> RawDataClone for ViewRepr<&H>
 {
-    unsafe fn clone_with_ptr(&self, ptr: Acc::Handle) -> (Self, Acc::Handle)
+    unsafe fn clone_with_ptr(&self, ptr: H) -> (Self, H)
     {
         (*self, ptr)
     }
 }
 
-unsafe impl<Acc: Accessor> RawData for ViewRepr<&mut Acc>
+unsafe impl<H: Handle> RawData for ViewRepr<&mut H>
 {
-    type Elem = Acc::Elem;
-    type Acc = Acc;
+    type Elem = H::Elem;
+    type Handle = H;
     #[inline(always)]
-    fn _is_pointer_inbounds(&self, _handle: Acc::Handle) -> bool
+    fn _is_pointer_inbounds(&self, _handle: H) -> bool
     {
         true
     }
     private_impl! {}
 }
 
-unsafe impl<Acc: Accessor> RawDataMut for ViewRepr<&mut Acc>
+unsafe impl<H: Handle> RawDataMut for ViewRepr<&mut H>
 {
     #[inline]
     fn try_ensure_unique<D>(_: &mut ArrayBase<Self, D>)
@@ -495,7 +491,7 @@ unsafe impl<Acc: Accessor> RawDataMut for ViewRepr<&mut Acc>
     }
 }
 
-unsafe impl<Acc: Accessor> Data for ViewRepr<&mut Acc>
+unsafe impl<H: Handle> Data for ViewRepr<&mut H>
 {
     fn into_owned<D>(self_: ArrayBase<Self, D>) -> Array<Self::Elem, D>
     where
@@ -504,9 +500,9 @@ unsafe impl<Acc: Accessor> Data for ViewRepr<&mut Acc>
     {
         // Densify: visit every logical index in row-major order and copy the element out.
         let dim = self_.parts.layout.dim.clone();
-        let elems: Vec<Acc::Elem> = self_
+        let elems: Vec<H::Elem> = self_
             .into_base_iter()
-            .map(|handle| unsafe { Acc::get(handle, 0) }.clone())
+            .map(|handle| unsafe { handle.get(0) }.clone())
             .collect();
         unsafe { Array::from_shape_vec_unchecked(dim, elems) }
     }
@@ -517,7 +513,7 @@ unsafe impl<Acc: Accessor> Data for ViewRepr<&mut Acc>
     }
 }
 
-unsafe impl<Acc: Accessor> DataMut for ViewRepr<&mut Acc> {}
+unsafe impl<H: Handle> DataMut for ViewRepr<&mut H> {}
 
 /// Array representation trait.
 ///
@@ -532,7 +528,7 @@ unsafe impl<Acc: Accessor> DataMut for ViewRepr<&mut Acc> {}
 // unsharing storage before mutating it. The initially allocated storage must be mutable so
 // that it can be mutated directly - through .raw_view_mut_unchecked() - for initialization.
 #[allow(clippy::missing_safety_doc)] // not implementable downstream
-pub unsafe trait DataOwned: Data<Acc = Dense<<Self as RawData>::Elem>>
+pub unsafe trait DataOwned: Data<Handle = NonNull<<Self as RawData>::Elem>>
 {
     /// Corresponding owned data with MaybeUninit elements
     type MaybeUninit: DataOwned<Elem = MaybeUninit<Self::Elem>> + RawDataSubst<Self::Elem, Output = Self>;
@@ -558,7 +554,7 @@ pub unsafe trait DataOwned: Data<Acc = Dense<<Self as RawData>::Elem>>
 pub unsafe trait DataShared: Clone + Data + RawDataClone {}
 
 unsafe impl<A> DataShared for OwnedArcRepr<A> {}
-unsafe impl<Acc: Accessor> DataShared for ViewRepr<&Acc> {}
+unsafe impl<H: Handle> DataShared for ViewRepr<&H> {}
 
 unsafe impl<A> DataOwned for OwnedRepr<A>
 {
@@ -599,7 +595,7 @@ unsafe impl<A> DataOwned for OwnedArcRepr<A>
 unsafe impl<A> RawData for CowRepr<'_, A>
 {
     type Elem = A;
-    type Acc = Dense<A>;
+    type Handle = NonNull<A>;
 
     #[inline]
     fn _is_pointer_inbounds(&self, ptr: NonNull<A>) -> bool
@@ -644,7 +640,7 @@ where A: Clone
 unsafe impl<A> RawDataClone for CowRepr<'_, A>
 where A: Clone
 {
-    unsafe fn clone_with_ptr(&self, ptr: <Self::Acc as Accessor>::Handle) -> (Self, <Self::Acc as Accessor>::Handle)
+    unsafe fn clone_with_ptr(&self, ptr: Self::Handle) -> (Self, Self::Handle)
     {
         match self {
             CowRepr::View(view) => {
@@ -658,9 +654,7 @@ where A: Clone
         }
     }
 
-    unsafe fn clone_from_with_ptr(
-        &mut self, other: &Self, ptr: <Self::Acc as Accessor>::Handle,
-    ) -> <Self::Acc as Accessor>::Handle
+    unsafe fn clone_from_with_ptr(&mut self, other: &Self, ptr: Self::Handle) -> Self::Handle
     {
         match (&mut *self, other) {
             (CowRepr::View(self_), CowRepr::View(other)) => self_.clone_from_with_ptr(other, ptr),
@@ -737,10 +731,10 @@ unsafe impl<'a, A> DataOwned for CowRepr<'a, A>
 /// keeping the same kind of storage.
 ///
 /// For example, `RawDataSubst<B>` can map the type `OwnedRepr<A>` to `OwnedRepr<B>`.
-pub trait RawDataSubst<A>: RawData<Acc = Dense<<Self as RawData>::Elem>>
+pub trait RawDataSubst<A>: RawData<Handle = NonNull<<Self as RawData>::Elem>>
 {
     /// The resulting array storage of the same kind but substituted element type
-    type Output: RawData<Elem = A, Acc = Dense<A>>;
+    type Output: RawData<Elem = A, Handle = NonNull<A>>;
 
     /// Unsafely translate the data representation from one element
     /// representation to another.
@@ -791,9 +785,9 @@ impl<A, B> RawDataSubst<B> for RawViewRepr<*mut A>
     }
 }
 
-impl<'a, A: 'a, B: 'a> RawDataSubst<B> for ViewRepr<&'a Dense<A>>
+impl<'a, A: 'a, B: 'a> RawDataSubst<B> for ViewRepr<&'a NonNull<A>>
 {
-    type Output = ViewRepr<&'a Dense<B>>;
+    type Output = ViewRepr<&'a NonNull<B>>;
 
     unsafe fn data_subst(self) -> Self::Output
     {
@@ -801,9 +795,9 @@ impl<'a, A: 'a, B: 'a> RawDataSubst<B> for ViewRepr<&'a Dense<A>>
     }
 }
 
-impl<'a, A: 'a, B: 'a> RawDataSubst<B> for ViewRepr<&'a mut Dense<A>>
+impl<'a, A: 'a, B: 'a> RawDataSubst<B> for ViewRepr<&'a mut NonNull<A>>
 {
-    type Output = ViewRepr<&'a mut Dense<B>>;
+    type Output = ViewRepr<&'a mut NonNull<B>>;
 
     unsafe fn data_subst(self) -> Self::Output
     {

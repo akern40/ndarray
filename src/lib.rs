@@ -139,6 +139,7 @@ use alloc::sync::Arc;
 use portable_atomic_util::Arc;
 
 use std::marker::PhantomData;
+use std::ptr::NonNull;
 
 pub use crate::dimension::dim::*;
 pub use crate::dimension::{Axis, AxisDescription, Dimension, IntoDimension, RemoveAxis};
@@ -195,7 +196,7 @@ mod extension;
 mod geomspace;
 mod indexes;
 mod iterators;
-mod accessor;
+mod handle;
 mod sparse;
 pub mod layout;
 mod linalg_traits;
@@ -222,17 +223,17 @@ mod dimension;
 
 pub use crate::zip::{FoldWhile, IntoNdProducer, NdProducer, Zip};
 
-pub use crate::accessor::{Accessor, Dense};
+pub use crate::handle::Handle;
 pub use crate::layout::strided::StridedLayout;
 pub use crate::layout::traits::{AxisOps, Layout, Strided};
 pub use crate::layout::LayoutBitset;
-pub use crate::sparse::{OwnedSparse, Sparse, SparseArray, SparseHandle};
+pub use crate::sparse::{OwnedSparse, SparseArray, SparseHandle};
 
 /// Implementation's prelude. Common types used everywhere.
 mod imp_prelude
 {
-    pub use crate::accessor::{Accessor, Dense};
     pub use crate::dimension::DimensionExt;
+    pub use crate::handle::Handle;
     pub use crate::layout::strided::StridedLayout;
     pub use crate::layout::traits::{AxisOps, Layout, Strided};
     pub use crate::prelude::*;
@@ -617,7 +618,7 @@ pub type Ixs = isize;
 /// // have indices in the lower half along all axes.
 /// fn fill_lower<S, D>(arr: &mut ArrayBase<S, D>, x: S::Elem)
 /// where
-///     S: DataMut<Acc = ndarray::Dense<<S as ndarray::RawData>::Elem>>,
+///     S: DataMut<Handle = core::ptr::NonNull<<S as ndarray::RawData>::Elem>>,
 ///     S::Elem: Clone,
 ///     D: Dimension,
 /// {
@@ -1300,10 +1301,8 @@ pub type Ixs = isize;
 // may change in the future.
 //
 // [`.offset()`]: https://doc.rust-lang.org/stable/std/primitive.pointer.html#method.offset-1
-pub struct ArrayBase<S, D, A = <S as RawData>::Elem, H = <<S as RawData>::Acc as Accessor>::Handle>
-where
-    S: RawData<Elem = A>,
-    S::Acc: Accessor<Handle = H>,
+pub struct ArrayBase<S, D, A = <S as RawData>::Elem, H = <S as RawData>::Handle>
+where S: RawData<Elem = A, Handle = H>
 {
     /// Data buffer / ownership information. (If owned, contains the data
     /// buffer; if borrowed, contains the lifetime and mutability.)
@@ -1319,7 +1318,7 @@ where
 /// of the reference types.
 struct ArrayParts<H, D, T: ?Sized>
 {
-    /// The accessor's handle (`H = <S::Acc as Accessor>::Handle`) into the
+    /// The storage's handle (`H = S::Handle`) into the
     /// buffer held by `data`; for dense storage a non-null pointer that may
     /// point anywhere in the buffer's range. If `S: Data`, this pointer must
     /// be aligned. The handle is a type parameter rather than a projection
@@ -1457,15 +1456,15 @@ impl<H, D> ArrayPartsSized<H, D>
 // alter the offset of the pointer. This is allowed, as it does not
 // cause a pointer deref.
 #[repr(transparent)]
-pub struct LayoutRefBase<Acc: Accessor, D>(ArrayPartsUnsized<<Acc as Accessor>::Handle, D>);
+pub struct LayoutRefBase<H: Handle, D>(ArrayPartsUnsized<H, D>);
 
 /// A [`LayoutRefBase`] over dense storage.
-pub type LayoutRef<A, D> = LayoutRefBase<Dense<A>, D>;
+pub type LayoutRef<A, D> = LayoutRefBase<NonNull<A>, D>;
 
-impl<Acc: Accessor, D> LayoutRefBase<Acc, D>
+impl<H: Handle, D> LayoutRefBase<H, D>
 {
     /// Get a reference to the data pointer.
-    fn _ptr(&self) -> &Acc::Handle
+    fn _ptr(&self) -> &H
     {
         &self.0.handle
     }
@@ -1557,10 +1556,10 @@ impl<Acc: Accessor, D> LayoutRefBase<Acc, D>
 /// into `ArrayRef`. In other words, having a `&mut ArrayRef` guarantees that the underlying
 /// data is un-shared and safe to write to.
 #[repr(transparent)]
-pub struct ArrayRefBase<Acc: Accessor, D>(LayoutRefBase<Acc, D>);
+pub struct ArrayRefBase<H: Handle, D>(LayoutRefBase<H, D>);
 
 /// An [`ArrayRefBase`] over dense storage.
-pub type ArrayRef<A, D> = ArrayRefBase<Dense<A>, D>;
+pub type ArrayRef<A, D> = ArrayRefBase<NonNull<A>, D>;
 
 /// A reference to an *n*-dimensional array whose data is not safe to read or write.
 ///
@@ -1574,10 +1573,10 @@ pub type ArrayRef<A, D> = ArrayRefBase<Dense<A>, D>;
 /// as [`LayoutRef`]; see [its documentation on writing functions](LayoutRef#writing-functions)
 /// for information on how to properly handle functionality on this type.
 #[repr(transparent)]
-pub struct RawRefBase<Acc: Accessor, D>(LayoutRefBase<Acc, D>);
+pub struct RawRefBase<H: Handle, D>(LayoutRefBase<H, D>);
 
 /// A [`RawRefBase`] over dense storage.
-pub type RawRef<A, D> = RawRefBase<Dense<A>, D>;
+pub type RawRef<A, D> = RawRefBase<NonNull<A>, D>;
 
 /// An array where the data has shared ownership and is copy on write.
 ///
@@ -1655,7 +1654,7 @@ pub type CowArray<'a, A, D> = ArrayBase<CowRepr<'a, A>, D>;
 /// Array views have all the methods of an array (see [`ArrayBase`]).
 ///
 /// See also [`ArrayViewMut`].
-pub type ArrayView<'a, A, D> = ArrayBase<ViewRepr<&'a Dense<A>>, D>;
+pub type ArrayView<'a, A, D> = ArrayBase<ViewRepr<&'a NonNull<A>>, D>;
 
 /// A read-write array view.
 ///
@@ -1668,7 +1667,7 @@ pub type ArrayView<'a, A, D> = ArrayBase<ViewRepr<&'a Dense<A>>, D>;
 /// Array views have all the methods of an array (see [`ArrayBase`]).
 ///
 /// See also [`ArrayView`].
-pub type ArrayViewMut<'a, A, D> = ArrayBase<ViewRepr<&'a mut Dense<A>>, D>;
+pub type ArrayViewMut<'a, A, D> = ArrayBase<ViewRepr<&'a mut NonNull<A>>, D>;
 
 /// A read-only array view without a lifetime.
 ///
@@ -1764,6 +1763,14 @@ pub struct ViewRepr<A>
     life: PhantomData<A>,
 }
 
+// A view's marker is `&'a H`/`&'a mut H` for a handle `H` (a raw pointer for
+// dense storage), so the auto traits would say "never". The right rule is the
+// one for `&'a Elem`/`&'a mut Elem`: what the view hands out.
+unsafe impl<H: Handle> Send for ViewRepr<&H> where H::Elem: Sync {}
+unsafe impl<H: Handle> Sync for ViewRepr<&H> where H::Elem: Sync {}
+unsafe impl<H: Handle> Send for ViewRepr<&mut H> where H::Elem: Send {}
+unsafe impl<H: Handle> Sync for ViewRepr<&mut H> where H::Elem: Sync {}
+
 impl<A> ViewRepr<A>
 {
     #[inline(always)]
@@ -1780,7 +1787,7 @@ impl<A> ViewRepr<A>
 pub enum CowRepr<'a, A>
 {
     /// Borrowed data.
-    View(ViewRepr<&'a Dense<A>>),
+    View(ViewRepr<&'a NonNull<A>>),
     /// Owned data.
     Owned(OwnedRepr<A>),
 }

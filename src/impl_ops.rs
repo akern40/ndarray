@@ -8,6 +8,7 @@
 
 use crate::dimension::DimMax;
 use crate::Zip;
+use core::ptr::NonNull;
 use num_complex::Complex;
 
 /// Elements that can be used as direct operands in arithmetic with arrays.
@@ -67,7 +68,7 @@ where
     A: Clone + $trt<B, Output=A>,
     B: Clone,
     S: DataOwned<Elem=A> + DataMut,
-    S2: Data<Elem=B, Acc=Dense<B>>,
+    S2: Data<Elem=B, Handle=NonNull<B>>,
     D: Dimension + DimMax<E>,
     E: Dimension,
 {
@@ -96,7 +97,7 @@ where
     A: Clone + $trt<B, Output=A>,
     B: Clone,
     S: DataOwned<Elem=A> + DataMut,
-    S2: Data<Elem=B, Acc=Dense<B>>,
+    S2: Data<Elem=B, Handle=NonNull<B>>,
     D: Dimension + DimMax<E>,
     E: Dimension,
 {
@@ -165,7 +166,7 @@ impl<'a, A, B, S, S2, D, E> $trt<ArrayBase<S2, E>> for &'a ArrayBase<S, D>
 where
     A: Clone + $trt<B, Output=B>,
     B: Clone,
-    S: Data<Elem=A, Acc=Dense<A>>,
+    S: Data<Elem=A, Handle=NonNull<A>>,
     S2: DataOwned<Elem=B> + DataMut,
     D: Dimension,
     E: Dimension + DimMax<D>,
@@ -235,8 +236,8 @@ impl<'a, A, B, S, S2, D, E> $trt<&'a ArrayBase<S2, E>> for &'a ArrayBase<S, D>
 where
     A: Clone + $trt<B, Output=A>,
     B: Clone,
-    S: Data<Elem=A, Acc=Dense<A>>,
-    S2: Data<Elem=B, Acc=Dense<B>>,
+    S: Data<Elem=A, Handle=NonNull<A>>,
+    S2: Data<Elem=B, Handle=NonNull<B>>,
     D: Dimension + DimMax<E>,
     E: Dimension,
 {
@@ -306,7 +307,7 @@ impl<A, S, D, B> $trt<B> for ArrayBase<S, D>
 /// and return the result as a new `Array`.
 impl<'a, A, S, D, B> $trt<B> for &'a ArrayBase<S, D>
     where A: Clone + $trt<B, Output=A>,
-          S: Data<Elem=A, Acc=Dense<A>>,
+          S: Data<Elem=A, Handle=NonNull<A>>,
           D: Dimension,
           B: ScalarOperand,
 {
@@ -375,7 +376,7 @@ impl<S, D> $trt<ArrayBase<S, D>> for $scalar
 // between the scalar `self` and array `rhs`,
 // and return the result as a new `Array`.
 impl<'a, S, D> $trt<&'a ArrayBase<S, D>> for $scalar
-    where S: Data<Elem=$scalar, Acc=Dense<$scalar>>,
+    where S: Data<Elem=$scalar, Handle=NonNull<$scalar>>,
           D: Dimension,
 {
     type Output = Array<$scalar, D>;
@@ -511,7 +512,7 @@ mod arithmetic_ops
     impl<'a, A, S, D> Neg for &'a ArrayBase<S, D>
     where
         &'a A: 'a + Neg<Output = A>,
-        S: Data<Elem = A, Acc = Dense<A>>,
+        S: Data<Elem = A, Handle = NonNull<A>>,
         D: Dimension,
     {
         type Output = Array<A, D>;
@@ -560,7 +561,7 @@ mod arithmetic_ops
     impl<'a, A, S, D> Not for &'a ArrayBase<S, D>
     where
         &'a A: 'a + Not<Output = A>,
-        S: Data<Elem = A, Acc = Dense<A>>,
+        S: Data<Elem = A, Handle = NonNull<A>>,
         D: Dimension,
     {
         type Output = Array<A, D>;
@@ -605,8 +606,8 @@ mod assign_ops
             impl<'a, A, S, S2, D, E> $trt<&'a ArrayBase<S2, E>> for ArrayBase<S, D>
             where
                 A: Clone + $trt<A>,
-                S: DataMut<Elem = A, Acc = Dense<A>>,
-                S2: Data<Elem = A, Acc = Dense<A>>,
+                S: DataMut<Elem = A, Handle = NonNull<A>>,
+                S2: Data<Elem = A, Handle = NonNull<A>>,
                 D: Dimension,
                 E: Dimension,
             {
@@ -638,7 +639,7 @@ mod assign_ops
             impl<A, S, D> $trt<A> for ArrayBase<S, D>
             where
                 A: ScalarOperand + $trt<A>,
-                S: DataMut<Elem = A, Acc = Dense<A>>,
+                S: DataMut<Elem = A, Handle = NonNull<A>>,
                 D: Dimension,
             {
                 fn $method(&mut self, rhs: A) {

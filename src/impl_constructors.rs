@@ -14,6 +14,7 @@
 use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+use core::ptr::NonNull;
 #[cfg(feature = "std")]
 use num_traits::Float;
 use num_traits::{One, Zero};
@@ -220,7 +221,7 @@ where S: DataOwned<Elem = A>
     where
         A: Clone + Zero,
         S: DataMut,
-        S2: Data<Elem = A, Acc = Dense<A>>,
+        S2: Data<Elem = A, Handle = NonNull<A>>,
     {
         let n = diag.len();
         let mut arr = Self::zeros((n, n));

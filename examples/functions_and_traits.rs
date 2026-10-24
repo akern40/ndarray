@@ -11,8 +11,9 @@
 //!
 //! Below, we illustrate how to write functions and traits for most variants of these types.
 
+use ndarray::RawData;
 use ndarray::{ArrayBase, ArrayRef, Data, DataMut, Dimension, LayoutRef, RawRef};
-use ndarray::{Dense, RawData};
+use std::ptr::NonNull;
 
 /// First, the newest pattern: this function accepts arrays whose data are safe to
 /// dereference and uniquely held.
@@ -60,12 +61,12 @@ fn takes_arrref_mut<A, D>(arr: &mut ArrayRef<A, D>)
 ///
 /// This function signature says three things:
 /// 1. Let me take a read only reference (that's the `&`)
-/// 2. Of an array whose data is safe to dereference (that's the `S: Data<Acc = Dense<<S as RawData>::Elem>>`)
-/// 3. And whose data is read-only (also `S: Data<Acc = Dense<<S as RawData>::Elem>>`)
+/// 2. Of an array whose data is safe to dereference (that's the `S: Data<Handle = NonNull<<S as RawData>::Elem>>`)
+/// 3. And whose data is read-only (also `S: Data<Handle = NonNull<<S as RawData>::Elem>>`)
 ///
 /// Let's see what we can do with this array:
 #[allow(dead_code)]
-fn takes_base<S: Data<Acc = Dense<<S as RawData>::Elem>>, D>(arr: &ArrayBase<S, D>)
+fn takes_base<S: Data<Handle = NonNull<<S as RawData>::Elem>>, D>(arr: &ArrayBase<S, D>)
 {
     // First off: we can pass it to functions that accept `&ArrayRef`.
     //
@@ -82,15 +83,15 @@ fn takes_base<S: Data<Acc = Dense<<S as RawData>::Elem>>, D>(arr: &ArrayBase<S, 
     takes_layout_asref(&arr);
 }
 
-/// Now, let's take a mutable reference to an `ArrayBase` - but let's keep `S: Data<Acc = Dense<<S as RawData>::Elem>>`, such
+/// Now, let's take a mutable reference to an `ArrayBase` - but let's keep `S: Data<Handle = NonNull<<S as RawData>::Elem>>`, such
 /// that we are allowed to change the _layout_ of the array, but not its data.
-fn takes_base_mut<S: Data<Acc = Dense<<S as RawData>::Elem>>, D>(arr: &mut ArrayBase<S, D>)
+fn takes_base_mut<S: Data<Handle = NonNull<<S as RawData>::Elem>>, D>(arr: &mut ArrayBase<S, D>)
 {
     // Of course we can call everything we did with a immutable reference:
     takes_base(arr);
 
     // However, we _can't_ call a function that takes `&mut ArrayRef`:
-    // this would require mutable data access, which `S: Data<Acc = Dense<<S as RawData>::Elem>>` does not provide.
+    // this would require mutable data access, which `S: Data<Handle = NonNull<<S as RawData>::Elem>>` does not provide.
     //
     // takes_arrref_mut(arr);
     // rustc: cannot borrow data in dereference of `ArrayBase<S, D>` as mutable
@@ -105,13 +106,13 @@ fn takes_base_mut<S: Data<Acc = Dense<<S as RawData>::Elem>>, D>(arr: &mut Array
     takes_layout_asmut(arr);
 }
 
-/// Finally, let's look at a mutable reference to an `ArrayBase` with `S: DataMut<Acc = Dense<<S as RawData>::Elem>>`.
+/// Finally, let's look at a mutable reference to an `ArrayBase` with `S: DataMut<Handle = NonNull<<S as RawData>::Elem>>`.
 ///
 /// Note that we require a constraint of `D: Dimension` to dereference to `&mut ArrayRef`.
 #[allow(dead_code)]
-fn takes_base_data_mut<S: DataMut<Acc = Dense<<S as RawData>::Elem>>, D: Dimension>(arr: &mut ArrayBase<S, D>)
+fn takes_base_data_mut<S: DataMut<Handle = NonNull<<S as RawData>::Elem>>, D: Dimension>(arr: &mut ArrayBase<S, D>)
 {
-    // Of course, everything we can do with just `S: Data<Acc = Dense<<S as RawData>::Elem>>`:
+    // Of course, everything we can do with just `S: Data<Handle = NonNull<<S as RawData>::Elem>>`:
     takes_base_mut(arr);
 
     // But also, we can now call functions that take `&mut ArrayRef`.

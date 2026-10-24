@@ -13,7 +13,6 @@ use crate::imp_prelude::*;
 use crate::OwnedRepr;
 
 use super::Baseiter;
-use crate::accessor::Dense;
 use crate::impl_owned_array::drop_unreachable_raw;
 
 /// By-value iterator for an array
@@ -21,7 +20,7 @@ pub struct IntoIter<A, D>
 where D: Dimension
 {
     array_data: OwnedRepr<A>,
-    inner: Baseiter<Dense<A>, D>,
+    inner: Baseiter<NonNull<A>, D>,
     data_len: usize,
     /// first memory address of an array element
     array_head_ptr: NonNull<A>,

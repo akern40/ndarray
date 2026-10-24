@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
-use crate::accessor::Dense;
 use crate::imp_prelude::*;
 use crate::Baseiter;
 use crate::IntoDimension;
 use crate::{LayoutBitset, NdProducer};
+use core::ptr::NonNull;
 
 impl_ndproducer! {
     ['a, A, D: Dimension]
@@ -97,7 +97,7 @@ where
 /// information.
 pub struct ExactChunksIter<'a, A, D>
 {
-    iter: Baseiter<Dense<A>, D>,
+    iter: Baseiter<NonNull<A>, D>,
     life: PhantomData<&'a A>,
     chunk: D,
     inner_strides: D,
@@ -233,7 +233,7 @@ impl_iterator! {
 /// for more information.
 pub struct ExactChunksIterMut<'a, A, D>
 {
-    iter: Baseiter<Dense<A>, D>,
+    iter: Baseiter<NonNull<A>, D>,
     life: PhantomData<&'a mut A>,
     chunk: D,
     inner_strides: D,

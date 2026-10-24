@@ -7,6 +7,7 @@
 // except according to those terms.
 
 use crate::imp_prelude::*;
+use core::ptr::NonNull;
 
 #[cfg(feature = "blas")]
 use crate::dimension::offset_from_low_addr_ptr_to_logical_ptr;
@@ -177,8 +178,8 @@ macro_rules! impl_dots {
     ) => {
         impl<A, S, S2> Dot<ArrayBase<S2, $shape2>> for ArrayBase<S, $shape1>
         where
-            S: Data<Elem = A, Acc = Dense<A>>,
-            S2: Data<Elem = A, Acc = Dense<A>>,
+            S: Data<Elem = A, Handle = NonNull<A>>,
+            S2: Data<Elem = A, Handle = NonNull<A>>,
             A: LinalgScalar,
         {
             type Output = <ArrayRef<A, $shape1> as Dot<ArrayRef<A, $shape2>>>::Output;
@@ -191,7 +192,7 @@ macro_rules! impl_dots {
 
         impl<A, S> Dot<ArrayRef<A, $shape2>> for ArrayBase<S, $shape1>
         where
-            S: Data<Elem = A, Acc = Dense<A>>,
+            S: Data<Elem = A, Handle = NonNull<A>>,
             A: LinalgScalar,
         {
             type Output = <ArrayRef<A, $shape1> as Dot<ArrayRef<A, $shape2>>>::Output;
@@ -204,7 +205,7 @@ macro_rules! impl_dots {
 
         impl<A, S> Dot<ArrayBase<S, $shape2>> for ArrayRef<A, $shape1>
         where
-            S: Data<Elem = A, Acc = Dense<A>>,
+            S: Data<Elem = A, Handle = NonNull<A>>,
             A: LinalgScalar,
         {
             type Output = <ArrayRef<A, $shape1> as Dot<ArrayRef<A, $shape2>>>::Output;

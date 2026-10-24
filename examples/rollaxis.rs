@@ -1,10 +1,10 @@
 use ndarray::prelude::*;
 use ndarray::Data;
-use ndarray::Dense;
+use std::ptr::NonNull;
 
 pub fn roll_axis<A, S, D>(mut a: ArrayBase<S, D>, to: Axis, from: Axis) -> ArrayBase<S, D>
 where
-    S: Data<Elem = A, Acc = Dense<A>>,
+    S: Data<Elem = A, Handle = NonNull<A>>,
     D: Dimension,
 {
     let i = to.index();

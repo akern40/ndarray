@@ -10,7 +10,7 @@
 use crate::imp_prelude::*;
 
 /// # Methods for Dynamic-Dimensional Arrays
-impl<Acc: Accessor> LayoutRefBase<Acc, IxDyn>
+impl<H: Handle> LayoutRefBase<H, IxDyn>
 {
     /// Insert new array axis of length 1 at `axis`, modifying the shape and
     /// strides in-place.

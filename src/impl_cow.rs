@@ -7,6 +7,7 @@
 // except according to those terms.
 
 use crate::imp_prelude::*;
+use core::ptr::NonNull;
 
 /// Methods specific to `CowArray`.
 ///
@@ -75,7 +76,7 @@ where Slice: AsRef<[A]>
 
 impl<'a, A, S, D> From<&'a ArrayBase<S, D>> for CowArray<'a, A, D>
 where
-    S: Data<Elem = A, Acc = Dense<A>>,
+    S: Data<Elem = A, Handle = NonNull<A>>,
     D: Dimension,
 {
     /// Create a read-only clone-on-write view of the array.

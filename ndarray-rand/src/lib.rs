@@ -36,11 +36,11 @@ use crate::rand::rngs::SmallRng;
 use crate::rand::seq::index;
 use crate::rand::{rng, Rng, SeedableRng};
 
-use ndarray::Dense;
 use ndarray::{Array, ArrayRef, Axis, RemoveAxis, ShapeBuilder};
 use ndarray::{ArrayBase, Data, DataOwned, Dimension, RawData};
 #[cfg(feature = "quickcheck")]
 use quickcheck::{Arbitrary, Gen};
+use std::ptr::NonNull;
 
 /// `rand`, re-exported for convenience and version-compatibility.
 pub mod rand
@@ -263,7 +263,7 @@ where D: Dimension
 
 impl<S, A, D> RandomExt<S, A, D> for ArrayBase<S, D>
 where
-    S: RawData<Elem = A, Acc = Dense<A>>,
+    S: RawData<Elem = A, Handle = NonNull<A>>,
     D: Dimension,
 {
     fn random<Sh, IdS>(shape: Sh, dist: IdS) -> ArrayBase<S, D>
