@@ -9,6 +9,7 @@
 //! flexible and expressive layout representations.
 
 mod bitset;
+pub mod block;
 pub mod rank;
 pub mod ranked;
 pub mod strided;
