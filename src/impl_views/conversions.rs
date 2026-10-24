@@ -13,6 +13,7 @@ use std::mem::MaybeUninit;
 
 use crate::imp_prelude::*;
 
+use crate::accessor::Accessor;
 use crate::{Baseiter, ElementsBase, ElementsBaseMut};
 
 use crate::dimension::offset_from_low_addr_ptr_to_logical_ptr;
@@ -21,6 +22,30 @@ use crate::math_cell::MathCell;
 use crate::IndexLonger;
 
 /// Methods for read-only array views.
+impl<Acc, D> ArrayBase<ViewRepr<&Acc>, D>
+where
+    Acc: Accessor,
+    D: Dimension,
+{
+    #[inline]
+    pub(crate) fn into_base_iter(self) -> Baseiter<Acc, D>
+    {
+        unsafe { Baseiter::new(self.parts.handle, self.parts.layout) }
+    }
+}
+
+impl<Acc, D> ArrayBase<ViewRepr<&mut Acc>, D>
+where
+    Acc: Accessor,
+    D: Dimension,
+{
+    #[inline]
+    pub(crate) fn into_base_iter(self) -> Baseiter<Acc, D>
+    {
+        unsafe { Baseiter::new(self.parts.handle, self.parts.layout) }
+    }
+}
+
 impl<'a, A, D> ArrayView<'a, A, D>
 where D: Dimension
 {
@@ -197,7 +222,7 @@ impl<A, D> RawArrayView<A, D>
 where D: Dimension
 {
     #[inline]
-    pub(crate) fn into_base_iter(self) -> Baseiter<A, D>
+    pub(crate) fn into_base_iter(self) -> Baseiter<Dense<A>, D>
     {
         unsafe { Baseiter::new(self.parts.handle, self.parts.layout) }
     }
@@ -207,7 +232,7 @@ impl<A, D> RawArrayViewMut<A, D>
 where D: Dimension
 {
     #[inline]
-    pub(crate) fn into_base_iter(self) -> Baseiter<A, D>
+    pub(crate) fn into_base_iter(self) -> Baseiter<Dense<A>, D>
     {
         unsafe { Baseiter::new(self.parts.handle, self.parts.layout) }
     }
@@ -218,13 +243,7 @@ impl<'a, A, D> ArrayView<'a, A, D>
 where D: Dimension
 {
     #[inline]
-    pub(crate) fn into_base_iter(self) -> Baseiter<A, D>
-    {
-        unsafe { Baseiter::new(self.parts.handle, self.parts.layout) }
-    }
-
-    #[inline]
-    pub(crate) fn into_elements_base(self) -> ElementsBase<'a, A, D>
+    pub(crate) fn into_elements_base(self) -> ElementsBase<'a, Dense<A>, D>
     {
         ElementsBase::new(self)
     }
@@ -286,13 +305,7 @@ where D: Dimension
     }
 
     #[inline]
-    pub(crate) fn into_base_iter(self) -> Baseiter<A, D>
-    {
-        unsafe { Baseiter::new(self.parts.handle, self.parts.layout) }
-    }
-
-    #[inline]
-    pub(crate) fn into_elements_base(self) -> ElementsBaseMut<'a, A, D>
+    pub(crate) fn into_elements_base(self) -> ElementsBaseMut<'a, Dense<A>, D>
     {
         ElementsBaseMut::new(self)
     }

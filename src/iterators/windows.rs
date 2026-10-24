@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use super::Baseiter;
+use crate::accessor::Dense;
 use crate::imp_prelude::*;
 use crate::IntoDimension;
 use crate::LayoutBitset;
@@ -94,7 +95,7 @@ where
 /// information.
 pub struct WindowsIter<'a, A, D>
 {
-    iter: Baseiter<A, D>,
+    iter: Baseiter<Dense<A>, D>,
     life: PhantomData<&'a A>,
     window: D,
     strides: D,

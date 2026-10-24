@@ -24,7 +24,7 @@ pub unsafe trait Accessor: Sized
     type Elem;
     /// The value an array holds to reach its elements: a data pointer for
     /// dense storage.
-    type Handle: Copy;
+    type Handle: Copy + fmt::Debug;
 
     /// Advance `handle` by `by` elements.
     ///
