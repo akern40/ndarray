@@ -10,6 +10,7 @@
 
 mod bitset;
 pub mod block;
+pub mod const_strided;
 pub mod rank;
 pub mod ranked;
 pub mod strided;
