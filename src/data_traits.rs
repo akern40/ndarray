@@ -258,6 +258,11 @@ unsafe impl<'a, A> DataOwned for Cow<'a, DenseBuf<A>>
 
 /// Array representation trait.
 ///
+/// TODO(design): revisit. Reinterprets a storage of `A` as the same storage of
+/// `B` when the two have identical memory layout (`cast`, `assume_init`). In the
+/// buffer/wrapper design this is a buffer-level `DenseBuf<A> -> DenseBuf<B>` with
+/// the wrapper mapping generically; dense by nature either way.
+///
 /// The RawDataSubst trait maps the element type of array storage, while
 /// keeping the same kind of storage.
 ///
