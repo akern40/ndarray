@@ -76,7 +76,7 @@ fn array_layout<D: Dimension>(dim: &D, strides: &D) -> LayoutBitset
     }
 }
 
-impl<A, D> LayoutRef<A, D>
+impl<Acc: Accessor, D> LayoutRefBase<Acc, D>
 where D: Dimension
 {
     pub(crate) fn layout_impl(&self) -> LayoutBitset

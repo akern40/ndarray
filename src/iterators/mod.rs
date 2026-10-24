@@ -14,6 +14,7 @@ pub mod iter;
 mod lanes;
 mod windows;
 
+use crate::Dense;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 use std::iter::FromIterator;
@@ -865,7 +866,7 @@ impl<A, D: Dimension> AxisIterCore<A, D>
     fn new<S, Di>(v: ArrayBase<S, Di>, axis: Axis) -> Self
     where
         Di: RemoveAxis<Smaller = D>,
-        S: Data<Elem = A>,
+        S: Data<Elem = A, Acc = Dense<A>>,
     {
         AxisIterCore {
             index: 0,

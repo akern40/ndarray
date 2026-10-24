@@ -82,7 +82,7 @@ impl<A, D, S> Serialize for ArrayBase<S, D>
 where
     A: Serialize,
     D: Dimension + Serialize,
-    S: Data<Elem = A>,
+    S: Data<Elem = A, Acc = Dense<A>>,
 {
     fn serialize<Se>(&self, serializer: Se) -> Result<Se::Ok, Se::Error>
     where Se: Serializer

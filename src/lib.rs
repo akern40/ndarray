@@ -138,7 +138,6 @@ use alloc::sync::Arc;
 #[cfg(not(target_has_atomic = "ptr"))]
 use portable_atomic_util::Arc;
 
-use core::ptr::NonNull;
 use std::marker::PhantomData;
 
 pub use crate::dimension::dim::*;
@@ -230,7 +229,7 @@ pub use crate::layout::LayoutBitset;
 /// Implementation's prelude. Common types used everywhere.
 mod imp_prelude
 {
-    pub use crate::accessor::Accessor;
+    pub use crate::accessor::{Accessor, Dense};
     pub use crate::dimension::DimensionExt;
     pub use crate::layout::strided::StridedLayout;
     pub use crate::layout::traits::{AxisOps, Layout, Strided};
@@ -250,6 +249,7 @@ mod imp_prelude
         RemoveAxis,
         ViewRepr,
     };
+    pub use crate::{LayoutRefBase, RawRefBase};
 }
 
 pub mod prelude;
@@ -615,7 +615,7 @@ pub type Ixs = isize;
 /// // have indices in the lower half along all axes.
 /// fn fill_lower<S, D>(arr: &mut ArrayBase<S, D>, x: S::Elem)
 /// where
-///     S: DataMut,
+///     S: DataMut<Acc = ndarray::Dense<<S as ndarray::RawData>::Elem>>,
 ///     S::Elem: Clone,
 ///     D: Dimension,
 /// {
@@ -1460,10 +1460,10 @@ pub struct LayoutRefBase<Acc: Accessor, D>(ArrayPartsUnsized<<Acc as Accessor>::
 /// A [`LayoutRefBase`] over dense storage.
 pub type LayoutRef<A, D> = LayoutRefBase<Dense<A>, D>;
 
-impl<A, D> LayoutRef<A, D>
+impl<Acc: Accessor, D> LayoutRefBase<Acc, D>
 {
     /// Get a reference to the data pointer.
-    fn _ptr(&self) -> &NonNull<A>
+    fn _ptr(&self) -> &Acc::Handle
     {
         &self.0.handle
     }

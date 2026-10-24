@@ -11,6 +11,7 @@
 use crate::accessor::{Accessor, Dense};
 #[allow(unused_imports)]
 use rawpointer::PointerExt;
+use std::ptr::NonNull;
 
 #[cfg(target_has_atomic = "ptr")]
 use alloc::sync::Arc;
@@ -45,7 +46,7 @@ pub unsafe trait RawData: Sized
     type Acc: Accessor<Elem = Self::Elem>;
 
     #[doc(hidden)]
-    fn _is_pointer_inbounds(&self, ptr: *const Self::Elem) -> bool;
+    fn _is_pointer_inbounds(&self, handle: <Self::Acc as Accessor>::Handle) -> bool;
 
     private_decl! {}
 }
@@ -130,6 +131,7 @@ pub unsafe trait Data: RawData
     #[allow(clippy::wrong_self_convention)]
     fn to_shared<D>(self_: &ArrayBase<Self, D>) -> ArcArray<Self::Elem, D>
     where
+        Self: RawData<Acc = Dense<<Self as RawData>::Elem>>,
         Self::Elem: Clone,
         D: Dimension,
     {
@@ -180,7 +182,7 @@ unsafe impl<A> RawData for RawViewRepr<*const A>
     type Acc = Dense<A>;
 
     #[inline(always)]
-    fn _is_pointer_inbounds(&self, _ptr: *const Self::Elem) -> bool
+    fn _is_pointer_inbounds(&self, _ptr: NonNull<A>) -> bool
     {
         true
     }
@@ -202,7 +204,7 @@ unsafe impl<A> RawData for RawViewRepr<*mut A>
     type Acc = Dense<A>;
 
     #[inline(always)]
-    fn _is_pointer_inbounds(&self, _ptr: *const Self::Elem) -> bool
+    fn _is_pointer_inbounds(&self, _ptr: NonNull<A>) -> bool
     {
         true
     }
@@ -240,7 +242,7 @@ unsafe impl<A> RawData for OwnedArcRepr<A>
     type Elem = A;
     type Acc = Dense<A>;
 
-    fn _is_pointer_inbounds(&self, self_ptr: *const Self::Elem) -> bool
+    fn _is_pointer_inbounds(&self, self_ptr: NonNull<A>) -> bool
     {
         self.0._is_pointer_inbounds(self_ptr)
     }
@@ -346,12 +348,12 @@ unsafe impl<A> RawData for OwnedRepr<A>
     type Elem = A;
     type Acc = Dense<A>;
 
-    fn _is_pointer_inbounds(&self, self_ptr: *const Self::Elem) -> bool
+    fn _is_pointer_inbounds(&self, self_ptr: NonNull<A>) -> bool
     {
         let slc = self.as_slice();
         let ptr = slc.as_ptr() as *mut A;
         let end = unsafe { ptr.add(slc.len()) };
-        self_ptr >= ptr && self_ptr <= end
+        self_ptr.as_ptr() >= ptr && self_ptr.as_ptr() <= end
     }
 
     private_impl! {}
@@ -429,7 +431,7 @@ unsafe impl<A> RawData for ViewRepr<&A>
     type Acc = Dense<A>;
 
     #[inline(always)]
-    fn _is_pointer_inbounds(&self, _ptr: *const Self::Elem) -> bool
+    fn _is_pointer_inbounds(&self, _ptr: NonNull<A>) -> bool
     {
         true
     }
@@ -468,7 +470,7 @@ unsafe impl<A> RawData for ViewRepr<&mut A>
     type Acc = Dense<A>;
 
     #[inline(always)]
-    fn _is_pointer_inbounds(&self, _ptr: *const Self::Elem) -> bool
+    fn _is_pointer_inbounds(&self, _ptr: NonNull<A>) -> bool
     {
         true
     }
@@ -595,7 +597,7 @@ unsafe impl<A> RawData for CowRepr<'_, A>
     type Acc = Dense<A>;
 
     #[inline]
-    fn _is_pointer_inbounds(&self, ptr: *const Self::Elem) -> bool
+    fn _is_pointer_inbounds(&self, ptr: NonNull<A>) -> bool
     {
         match self {
             CowRepr::View(view) => view._is_pointer_inbounds(ptr),

@@ -3,6 +3,7 @@
 //! could be a "feature preview" before sorting is added to the main crate.
 //!
 use ndarray::prelude::*;
+use ndarray::Dense;
 use ndarray::{Data, RemoveAxis, Zip};
 
 use rawpointer::PointerExt;
@@ -69,7 +70,7 @@ pub trait PermuteArray
 
 impl<A, S, D> SortArray for ArrayBase<S, D>
 where
-    S: Data<Elem = A>,
+    S: Data<Elem = A, Acc = Dense<A>>,
     D: Dimension,
 {
     fn identity(&self, axis: Axis) -> Permutation

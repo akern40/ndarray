@@ -220,7 +220,7 @@ where S: DataOwned<Elem = A>
     where
         A: Clone + Zero,
         S: DataMut,
-        S2: Data<Elem = A>,
+        S2: Data<Elem = A, Acc = Dense<A>>,
     {
         let n = diag.len();
         let mut arr = Self::zeros((n, n));

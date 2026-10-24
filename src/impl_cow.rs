@@ -75,7 +75,7 @@ where Slice: AsRef<[A]>
 
 impl<'a, A, S, D> From<&'a ArrayBase<S, D>> for CowArray<'a, A, D>
 where
-    S: Data<Elem = A>,
+    S: Data<Elem = A, Acc = Dense<A>>,
     D: Dimension,
 {
     /// Create a read-only clone-on-write view of the array.

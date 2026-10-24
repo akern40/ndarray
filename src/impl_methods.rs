@@ -29,7 +29,6 @@ use crate::shape_builder::ShapeArg;
 use crate::zip::{IntoNdProducer, Zip};
 use crate::ArrayRef;
 use crate::AxisDescription;
-use crate::LayoutRef;
 use crate::RawRef;
 use crate::{arraytraits, DimMax};
 
@@ -54,7 +53,7 @@ use crate::stacking::concatenate;
 use crate::{NdIndex, Slice, SliceInfoElem};
 
 /// # Methods For All Array Types
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<Acc: Accessor, D: Dimension> LayoutRefBase<Acc, D>
 {
     /// Return the total number of elements in the array.
     pub fn len(&self) -> usize
@@ -269,7 +268,7 @@ where
     pub fn to_owned(&self) -> Array<A, D>
     where
         A: Clone,
-        S: Data,
+        S: Data<Acc = Dense<A>>,
     {
         (**self).to_owned()
     }
@@ -279,7 +278,7 @@ where
     pub fn to_shared(&self) -> ArcArray<A, D>
     where
         A: Clone,
-        S: Data,
+        S: Data<Acc = Dense<A>>,
     {
         S::to_shared(self)
     }
@@ -606,7 +605,7 @@ where
     }
 }
 
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<Acc: Accessor, D: Dimension> LayoutRefBase<Acc, D>
 {
     /// Slice the array in place without changing the number of dimensions.
     ///
@@ -679,7 +678,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<Acc: Accessor, D: Dimension> LayoutRefBase<Acc, D>
 {
     /// Slice the array in place along the specified axis.
     ///
@@ -690,7 +689,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     {
         let offset = self.0.layout.slice_axis(axis, indices);
         unsafe {
-            self.0.handle = self._ptr().offset(offset);
+            self.0.handle = Acc::offset(self.0.handle, offset);
         }
         // debug_assert!(self.pointer_is_inbounds());
     }
@@ -748,7 +747,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<Acc: Accessor, D: Dimension> LayoutRefBase<Acc, D>
 {
     /// Slice the array in place, with a closure specifying the slice for each
     /// axis.
@@ -1049,7 +1048,7 @@ where
     }
 }
 
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<Acc: Accessor, D: Dimension> LayoutRefBase<Acc, D>
 {
     /// Selects `index` along the axis, collapsing the axis into length one.
     ///
@@ -1058,7 +1057,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     pub fn collapse_axis(&mut self, axis: Axis, index: usize)
     {
         let offset = self.0.layout.collapse_axis(axis, index);
-        self.0.handle = unsafe { self._ptr().offset(offset) };
+        self.0.handle = unsafe { Acc::offset(self.0.handle, offset) };
         // debug_assert!(self.pointer_is_inbounds());
     }
 }
@@ -1603,7 +1602,7 @@ where
     }
 }
 
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<Acc: Accessor, D: Dimension> LayoutRefBase<Acc, D>
 {
     /// Return `true` if the array data is laid out in contiguous “C order” in
     /// memory (where the last index is the most rapidly varying).
@@ -1707,10 +1706,10 @@ where
     /// the data may change the strides.
     #[inline(always)]
     pub fn as_mut_ptr(&mut self) -> *mut A
-    where S: RawDataMut
+    where S: RawDataMut<Acc = Dense<A>>
     {
         self.try_ensure_unique(); // for ArcArray
-        AsRef::<RawRef<A, D>>::as_ref(self)._ptr().as_ptr()
+        AsRef::<RawRefBase<S::Acc, D>>::as_ref(self)._ptr().as_ptr()
     }
 }
 
@@ -1742,12 +1741,12 @@ where
     /// data is guaranteed to be uniquely held on return.
     #[inline]
     pub fn raw_view_mut(&mut self) -> RawArrayViewMut<A, D>
-    where S: RawDataMut
+    where S: RawDataMut<Acc = Dense<A>>
     {
         self.try_ensure_unique(); // for ArcArray
         unsafe {
             RawArrayViewMut::new(
-                *AsRef::<RawRef<A, D>>::as_ref(self)._ptr(),
+                *AsRef::<RawRefBase<S::Acc, D>>::as_ref(self)._ptr(),
                 StridedLayout::new(self.parts.layout.dim.clone(), self.parts.layout.strides.clone()),
             )
         }
@@ -1766,7 +1765,7 @@ where
     /// Return the array’s data as a slice, if it is contiguous and in standard order.
     /// Return `None` otherwise.
     pub fn as_slice_mut(&mut self) -> Option<&mut [A]>
-    where S: DataMut
+    where S: DataMut<Acc = Dense<A>>
     {
         if self.is_standard_layout() {
             self.ensure_unique();
@@ -1783,7 +1782,7 @@ where
     /// method unshares the data if necessary, but it preserves the existing
     /// strides.
     pub fn as_slice_memory_order_mut(&mut self) -> Option<&mut [A]>
-    where S: DataMut
+    where S: DataMut<Acc = Dense<A>>
     {
         self.try_as_slice_memory_order_mut().ok()
     }
@@ -1791,7 +1790,7 @@ where
     /// Return the array’s data as a slice if it is contiguous, otherwise
     /// return `self` in the `Err` variant.
     pub(crate) fn try_as_slice_memory_order_mut(&mut self) -> Result<&mut [A], &mut Self>
-    where S: DataMut
+    where S: DataMut<Acc = Dense<A>>
     {
         if self.is_contiguous() {
             self.ensure_unique();
@@ -2022,14 +2021,18 @@ where
     /// );
     /// ```
     pub fn into_shape_with_order<E>(self, shape: E) -> Result<ArrayBase<S, E::Dim>, ShapeError>
-    where E: ShapeArg
+    where
+        E: ShapeArg,
+        S: RawData<Acc = Dense<A>>,
     {
         let (shape, order) = shape.into_shape_and_order();
         self.into_shape_with_order_impl(shape, order.unwrap_or(Order::RowMajor))
     }
 
     fn into_shape_with_order_impl<E>(self, shape: E, order: Order) -> Result<ArrayBase<S, E>, ShapeError>
-    where E: Dimension
+    where
+        E: Dimension,
+        S: RawData<Acc = Dense<A>>,
     {
         let shape = shape.into_dimension();
         if size_of_shape_checked(&shape) != Ok(self.parts.layout.dim.size()) {
@@ -2074,7 +2077,9 @@ where
     /// ```
     #[deprecated(note = "Use `.into_shape_with_order()` or `.to_shape()`", since = "0.16.0")]
     pub fn into_shape<E>(self, shape: E) -> Result<ArrayBase<S, E::Dim>, ShapeError>
-    where E: IntoDimension
+    where
+        E: IntoDimension,
+        S: RawData<Acc = Dense<A>>,
     {
         let shape = shape.into_dimension();
         if size_of_shape_checked(&shape) != Ok(self.parts.layout.dim.size()) {
@@ -2457,7 +2462,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<Acc: Accessor, D: Dimension> LayoutRefBase<Acc, D>
 {
     /// Swap axes `ax` and `bx`.
     ///
@@ -2619,7 +2624,7 @@ impl<A, D: Dimension> ArrayRef<A, D>
     }
 }
 
-impl<A, D: Dimension> LayoutRef<A, D>
+impl<Acc: Accessor, D: Dimension> LayoutRefBase<Acc, D>
 {
     /// Return an iterator over the length and stride of each axis.
     pub fn axes(&self) -> Axes<'_, D>
@@ -2648,7 +2653,7 @@ impl<A, D: Dimension> LayoutRef<A, D>
     pub fn invert_axis(&mut self, axis: Axis)
     {
         let offset = self.0.layout.invert_axis(axis);
-        self.0.handle = unsafe { self._ptr().offset(offset) };
+        self.0.handle = unsafe { Acc::offset(self.0.handle, offset) };
     }
 
     /// If possible, merge in the axis `take` to `into`.
@@ -2742,7 +2747,7 @@ where
 
     pub(crate) fn pointer_is_inbounds(&self) -> bool
     {
-        self.data._is_pointer_inbounds(self.as_ptr())
+        self.data._is_pointer_inbounds(self.parts.handle)
     }
 }
 
@@ -2968,7 +2973,7 @@ where
     /// Elements are visited in arbitrary order.
     pub fn mapv_into<F>(mut self, f: F) -> Self
     where
-        S: DataMut,
+        S: DataMut<Acc = Dense<A>>,
         F: FnMut(A) -> A,
         A: Clone,
     {
@@ -2992,7 +2997,7 @@ where
     /// [`mapv`]: ArrayRef::mapv
     pub fn mapv_into_any<B, F>(self, mut f: F) -> Array<B, D>
     where
-        S: DataMut,
+        S: DataMut<Acc = Dense<A>>,
         F: FnMut(A) -> B,
         A: Clone + 'static,
         B: 'static,

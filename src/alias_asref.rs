@@ -13,7 +13,9 @@ use crate::{
 };
 
 /// Functions coming from RawRef
-impl<A, S: RawData<Elem = A>, D: Dimension> ArrayBase<S, D>
+use crate::Dense;
+
+impl<A, S: RawData<Elem = A, Acc = Dense<A>>, D: Dimension> ArrayBase<S, D>
 {
     /// Return a raw pointer to the element at `index`, or return `None`
     /// if the index is out of bounds.

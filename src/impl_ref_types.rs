@@ -29,7 +29,7 @@
 //! This allows users to write a single method or trait implementation that takes `T: AsRef<RawRef<A, D>>`
 //! or `T: AsRef<LayoutRef<A, D>>` and have that functionality work on any of the relevant array types.
 
-use crate::Accessor;
+use crate::{Accessor, ArrayRefBase, LayoutRefBase, RawRefBase};
 use alloc::borrow::ToOwned;
 use core::{
     borrow::{Borrow, BorrowMut},
@@ -45,17 +45,15 @@ use crate::{
     Data,
     DataMut,
     Dimension,
-    LayoutRef,
     RawData,
     RawDataMut,
-    RawRef,
 };
 
 // D1: &ArrayBase -> &ArrayRef when data is safe to read
 impl<S, D> Deref for ArrayBase<S, D>
 where S: Data
 {
-    type Target = ArrayRef<S::Elem, D>;
+    type Target = ArrayRefBase<S::Acc, D>;
 
     fn deref(&self) -> &Self::Target
     {
@@ -65,7 +63,8 @@ where S: Data
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
         let parts: &ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D> = &self.parts;
-        let ptr = (parts as *const ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *const ArrayRef<S::Elem, D>;
+        let ptr =
+            (parts as *const ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *const ArrayRefBase<S::Acc, D>;
         unsafe { &*ptr }
     }
 }
@@ -85,15 +84,15 @@ where
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
         let parts: &mut ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D> = &mut self.parts;
-        let ptr = (parts as *mut ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *mut ArrayRef<S::Elem, D>;
+        let ptr = (parts as *mut ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *mut ArrayRefBase<S::Acc, D>;
         unsafe { &mut *ptr }
     }
 }
 
 // D3: &ArrayRef -> &RawRef
-impl<A, D> Deref for ArrayRef<A, D>
+impl<Acc: Accessor, D> Deref for ArrayRefBase<Acc, D>
 {
-    type Target = RawRef<A, D>;
+    type Target = RawRefBase<Acc, D>;
 
     fn deref(&self) -> &Self::Target
     {
@@ -102,12 +101,12 @@ impl<A, D> Deref for ArrayRef<A, D>
         // - It is "dereferencable" because it comes from a reference
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
-        unsafe { &*((self as *const ArrayRef<A, D>) as *const RawRef<A, D>) }
+        unsafe { &*((self as *const ArrayRefBase<Acc, D>) as *const RawRefBase<Acc, D>) }
     }
 }
 
 // D4: &mut ArrayRef -> &mut RawRef
-impl<A, D> DerefMut for ArrayRef<A, D>
+impl<Acc: Accessor, D> DerefMut for ArrayRefBase<Acc, D>
 {
     fn deref_mut(&mut self) -> &mut Self::Target
     {
@@ -116,14 +115,14 @@ impl<A, D> DerefMut for ArrayRef<A, D>
         // - It is "dereferencable" because it comes from a reference
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
-        unsafe { &mut *((self as *mut ArrayRef<A, D>) as *mut RawRef<A, D>) }
+        unsafe { &mut *((self as *mut ArrayRefBase<Acc, D>) as *mut RawRefBase<Acc, D>) }
     }
 }
 
 // D5: &RawRef -> &LayoutRef
-impl<A, D> Deref for RawRef<A, D>
+impl<Acc: Accessor, D> Deref for RawRefBase<Acc, D>
 {
-    type Target = LayoutRef<A, D>;
+    type Target = LayoutRefBase<Acc, D>;
 
     fn deref(&self) -> &Self::Target
     {
@@ -132,7 +131,7 @@ impl<A, D> Deref for RawRef<A, D>
 }
 
 // D5: &mut RawRef -> &mut LayoutRef
-impl<A, D> DerefMut for RawRef<A, D>
+impl<Acc: Accessor, D> DerefMut for RawRefBase<Acc, D>
 {
     fn deref_mut(&mut self) -> &mut Self::Target
     {
@@ -141,10 +140,10 @@ impl<A, D> DerefMut for RawRef<A, D>
 }
 
 // A1: &ArrayBase -AR-> &RawRef
-impl<A, S, D> AsRef<RawRef<A, D>> for ArrayBase<S, D>
-where S: RawData<Elem = A>
+impl<S, D> AsRef<RawRefBase<S::Acc, D>> for ArrayBase<S, D>
+where S: RawData
 {
-    fn as_ref(&self) -> &RawRef<A, D>
+    fn as_ref(&self) -> &RawRefBase<S::Acc, D>
     {
         // SAFETY:
         // - The pointer is aligned because neither type uses repr(align)
@@ -152,16 +151,16 @@ where S: RawData<Elem = A>
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
         let parts: &ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D> = &self.parts;
-        let ptr = (parts as *const ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *const RawRef<S::Elem, D>;
+        let ptr = (parts as *const ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *const RawRefBase<S::Acc, D>;
         unsafe { &*ptr }
     }
 }
 
 // A2: &mut ArrayBase -AM-> &mut RawRef
-impl<A, S, D> AsMut<RawRef<A, D>> for ArrayBase<S, D>
-where S: RawDataMut<Elem = A>
+impl<S, D> AsMut<RawRefBase<S::Acc, D>> for ArrayBase<S, D>
+where S: RawDataMut
 {
-    fn as_mut(&mut self) -> &mut RawRef<A, D>
+    fn as_mut(&mut self) -> &mut RawRefBase<S::Acc, D>
     {
         // SAFETY:
         // - The pointer is aligned because neither type uses repr(align)
@@ -169,120 +168,121 @@ where S: RawDataMut<Elem = A>
         // - For the same reason, it is initialized
         // - The cast is valid because ArrayRef uses #[repr(transparent)]
         let parts: &mut ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D> = &mut self.parts;
-        let ptr = (parts as *mut ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *mut RawRef<S::Elem, D>;
+        let ptr = (parts as *mut ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *mut RawRefBase<S::Acc, D>;
         unsafe { &mut *ptr }
     }
 }
 
 // A3: &ArrayBase -AR-> &LayoutRef
-impl<A, S, D> AsRef<LayoutRef<A, D>> for ArrayBase<S, D>
-where S: RawData<Elem = A>
+impl<S, D> AsRef<LayoutRefBase<S::Acc, D>> for ArrayBase<S, D>
+where S: RawData
 {
-    fn as_ref(&self) -> &LayoutRef<A, D>
+    fn as_ref(&self) -> &LayoutRefBase<S::Acc, D>
     {
         let parts: &ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D> = &self.parts;
-        let ptr = (parts as *const ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *const LayoutRef<S::Elem, D>;
+        let ptr =
+            (parts as *const ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *const LayoutRefBase<S::Acc, D>;
         unsafe { &*ptr }
     }
 }
 
 // A3: &mut ArrayBase -AM-> &mut LayoutRef
-impl<A, S, D> AsMut<LayoutRef<A, D>> for ArrayBase<S, D>
-where S: RawData<Elem = A>
+impl<S, D> AsMut<LayoutRefBase<S::Acc, D>> for ArrayBase<S, D>
+where S: RawData
 {
-    fn as_mut(&mut self) -> &mut LayoutRef<A, D>
+    fn as_mut(&mut self) -> &mut LayoutRefBase<S::Acc, D>
     {
         let parts: &mut ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D> = &mut self.parts;
-        let ptr = (parts as *mut ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *mut LayoutRef<S::Elem, D>;
+        let ptr = (parts as *mut ArrayPartsUnsized<<S::Acc as Accessor>::Handle, D>) as *mut LayoutRefBase<S::Acc, D>;
         unsafe { &mut *ptr }
     }
 }
 
 // A4: &ArrayRef -AR-> &RawRef
-impl<A, D> AsRef<RawRef<A, D>> for ArrayRef<A, D>
+impl<Acc: Accessor, D> AsRef<RawRefBase<Acc, D>> for ArrayRefBase<Acc, D>
 {
-    fn as_ref(&self) -> &RawRef<A, D>
+    fn as_ref(&self) -> &RawRefBase<Acc, D>
     {
         self
     }
 }
 
 // A4: &mut ArrayRef -AM-> &mut RawRef
-impl<A, D> AsMut<RawRef<A, D>> for ArrayRef<A, D>
+impl<Acc: Accessor, D> AsMut<RawRefBase<Acc, D>> for ArrayRefBase<Acc, D>
 {
-    fn as_mut(&mut self) -> &mut RawRef<A, D>
+    fn as_mut(&mut self) -> &mut RawRefBase<Acc, D>
     {
         self
     }
 }
 
 // A4: &ArrayRef -AR-> &LayoutRef
-impl<A, D> AsRef<LayoutRef<A, D>> for ArrayRef<A, D>
+impl<Acc: Accessor, D> AsRef<LayoutRefBase<Acc, D>> for ArrayRefBase<Acc, D>
 {
-    fn as_ref(&self) -> &LayoutRef<A, D>
+    fn as_ref(&self) -> &LayoutRefBase<Acc, D>
     {
         self
     }
 }
 
 // A4: &mut ArrayRef -AM-> &mut LayoutRef
-impl<A, D> AsMut<LayoutRef<A, D>> for ArrayRef<A, D>
+impl<Acc: Accessor, D> AsMut<LayoutRefBase<Acc, D>> for ArrayRefBase<Acc, D>
 {
-    fn as_mut(&mut self) -> &mut LayoutRef<A, D>
+    fn as_mut(&mut self) -> &mut LayoutRefBase<Acc, D>
     {
         self
     }
 }
 
 // A5: &RawRef -AR-> &LayoutRef
-impl<A, D> AsRef<LayoutRef<A, D>> for RawRef<A, D>
+impl<Acc: Accessor, D> AsRef<LayoutRefBase<Acc, D>> for RawRefBase<Acc, D>
 {
-    fn as_ref(&self) -> &LayoutRef<A, D>
+    fn as_ref(&self) -> &LayoutRefBase<Acc, D>
     {
         self
     }
 }
 
 // A5: &mut RawRef -AM-> &mut LayoutRef
-impl<A, D> AsMut<LayoutRef<A, D>> for RawRef<A, D>
+impl<Acc: Accessor, D> AsMut<LayoutRefBase<Acc, D>> for RawRefBase<Acc, D>
 {
-    fn as_mut(&mut self) -> &mut LayoutRef<A, D>
+    fn as_mut(&mut self) -> &mut LayoutRefBase<Acc, D>
     {
         self
     }
 }
 
 // A6: &RawRef -AR-> &RawRef
-impl<A, D> AsRef<RawRef<A, D>> for RawRef<A, D>
+impl<Acc: Accessor, D> AsRef<RawRefBase<Acc, D>> for RawRefBase<Acc, D>
 {
-    fn as_ref(&self) -> &RawRef<A, D>
+    fn as_ref(&self) -> &RawRefBase<Acc, D>
     {
         self
     }
 }
 
 // A6: &mut RawRef -AM-> &mut RawRef
-impl<A, D> AsMut<RawRef<A, D>> for RawRef<A, D>
+impl<Acc: Accessor, D> AsMut<RawRefBase<Acc, D>> for RawRefBase<Acc, D>
 {
-    fn as_mut(&mut self) -> &mut RawRef<A, D>
+    fn as_mut(&mut self) -> &mut RawRefBase<Acc, D>
     {
         self
     }
 }
 
 // A6: &LayoutRef -AR-> &LayoutRef
-impl<A, D> AsRef<LayoutRef<A, D>> for LayoutRef<A, D>
+impl<Acc: Accessor, D> AsRef<LayoutRefBase<Acc, D>> for LayoutRefBase<Acc, D>
 {
-    fn as_ref(&self) -> &LayoutRef<A, D>
+    fn as_ref(&self) -> &LayoutRefBase<Acc, D>
     {
         self
     }
 }
 
 // A6: &mut LayoutRef -AR-> &mut LayoutRef
-impl<A, D> AsMut<LayoutRef<A, D>> for LayoutRef<A, D>
+impl<Acc: Accessor, D> AsMut<LayoutRefBase<Acc, D>> for LayoutRefBase<Acc, D>
 {
-    fn as_mut(&mut self) -> &mut LayoutRef<A, D>
+    fn as_mut(&mut self) -> &mut LayoutRefBase<Acc, D>
     {
         self
     }
@@ -309,39 +309,39 @@ impl<H: Copy, D: Clone> Clone for ArrayPartsSized<H, D>
 
 impl<H: Copy, D: Clone + Copy> Copy for ArrayPartsSized<H, D> {}
 
-impl<S, D> Borrow<RawRef<S::Elem, D>> for ArrayBase<S, D>
+impl<S, D> Borrow<RawRefBase<S::Acc, D>> for ArrayBase<S, D>
 where S: RawData
 {
-    fn borrow(&self) -> &RawRef<S::Elem, D>
+    fn borrow(&self) -> &RawRefBase<S::Acc, D>
     {
         self.as_ref()
     }
 }
 
-impl<S, D> BorrowMut<RawRef<S::Elem, D>> for ArrayBase<S, D>
+impl<S, D> BorrowMut<RawRefBase<S::Acc, D>> for ArrayBase<S, D>
 where S: RawDataMut
 {
-    fn borrow_mut(&mut self) -> &mut RawRef<S::Elem, D>
+    fn borrow_mut(&mut self) -> &mut RawRefBase<S::Acc, D>
     {
         self.as_mut()
     }
 }
 
-impl<S, D> Borrow<ArrayRef<S::Elem, D>> for ArrayBase<S, D>
+impl<S, D> Borrow<ArrayRefBase<S::Acc, D>> for ArrayBase<S, D>
 where S: Data
 {
-    fn borrow(&self) -> &ArrayRef<S::Elem, D>
+    fn borrow(&self) -> &ArrayRefBase<S::Acc, D>
     {
         self
     }
 }
 
-impl<S, D> BorrowMut<ArrayRef<S::Elem, D>> for ArrayBase<S, D>
+impl<S, D> BorrowMut<ArrayRefBase<S::Acc, D>> for ArrayBase<S, D>
 where
     S: DataMut,
     D: Dimension,
 {
-    fn borrow_mut(&mut self) -> &mut ArrayRef<S::Elem, D>
+    fn borrow_mut(&mut self) -> &mut ArrayRefBase<S::Acc, D>
     {
         self
     }
@@ -370,25 +370,25 @@ impl<A, S, D> ArrayBase<S, D>
 where S: RawData<Elem = A>
 {
     /// Cheaply convert a reference to the array to an &LayoutRef
-    pub fn as_layout_ref(&self) -> &LayoutRef<A, D>
+    pub fn as_layout_ref(&self) -> &LayoutRefBase<S::Acc, D>
     {
         self.as_ref()
     }
 
     /// Cheaply and mutably convert a reference to the array to an &LayoutRef
-    pub fn as_layout_ref_mut(&mut self) -> &mut LayoutRef<A, D>
+    pub fn as_layout_ref_mut(&mut self) -> &mut LayoutRefBase<S::Acc, D>
     {
         self.as_mut()
     }
 
     /// Cheaply convert a reference to the array to an &RawRef
-    pub fn as_raw_ref(&self) -> &RawRef<A, D>
+    pub fn as_raw_ref(&self) -> &RawRefBase<S::Acc, D>
     {
         self.as_ref()
     }
 
     /// Cheaply and mutably convert a reference to the array to an &RawRef
-    pub fn as_raw_ref_mut(&mut self) -> &mut RawRef<A, D>
+    pub fn as_raw_ref_mut(&mut self) -> &mut RawRefBase<S::Acc, D>
     where S: RawDataMut<Elem = A>
     {
         self.as_mut()

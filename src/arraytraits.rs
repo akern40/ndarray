@@ -100,7 +100,7 @@ impl<S, D, I> Index<I> for ArrayBase<S, D>
 where
     D: Dimension,
     I: NdIndex<D>,
-    S: Data,
+    S: Data<Acc = Dense<<S as RawData>::Elem>>,
 {
     type Output = S::Elem;
 
@@ -118,7 +118,7 @@ impl<S, D, I> IndexMut<I> for ArrayBase<S, D>
 where
     D: Dimension,
     I: NdIndex<D>,
-    S: DataMut,
+    S: DataMut<Acc = Dense<<S as RawData>::Elem>>,
 {
     #[inline]
     fn index_mut(&mut self, index: I) -> &mut S::Elem
@@ -195,8 +195,8 @@ where
 impl<A, B, S, S2, D> PartialEq<ArrayBase<S2, D>> for ArrayBase<S, D>
 where
     A: PartialEq<B>,
-    S: Data<Elem = A>,
-    S2: Data<Elem = B>,
+    S: Data<Elem = A, Acc = Dense<A>>,
+    S2: Data<Elem = B, Acc = Dense<B>>,
     D: Dimension,
 {
     fn eq(&self, rhs: &ArrayBase<S2, D>) -> bool
@@ -210,8 +210,8 @@ where
 impl<A, B, S, S2, D> PartialEq<&ArrayBase<S2, D>> for ArrayBase<S, D>
 where
     A: PartialEq<B>,
-    S: Data<Elem = A>,
-    S2: Data<Elem = B>,
+    S: Data<Elem = A, Acc = Dense<A>>,
+    S2: Data<Elem = B, Acc = Dense<B>>,
     D: Dimension,
 {
     fn eq(&self, rhs: &&ArrayBase<S2, D>) -> bool
@@ -225,8 +225,8 @@ where
 impl<A, B, S, S2, D> PartialEq<ArrayBase<S2, D>> for &ArrayBase<S, D>
 where
     A: PartialEq<B>,
-    S: Data<Elem = A>,
-    S2: Data<Elem = B>,
+    S: Data<Elem = A, Acc = Dense<A>>,
+    S2: Data<Elem = B, Acc = Dense<B>>,
     D: Dimension,
 {
     fn eq(&self, rhs: &ArrayBase<S2, D>) -> bool
@@ -237,14 +237,14 @@ where
 impl<S, D> Eq for ArrayBase<S, D>
 where
     D: Dimension,
-    S: Data,
+    S: Data<Acc = Dense<<S as RawData>::Elem>>,
     S::Elem: Eq,
 {
 }
 
 impl<A, B, S, D> PartialEq<ArrayRef<B, D>> for ArrayBase<S, D>
 where
-    S: Data<Elem = A>,
+    S: Data<Elem = A, Acc = Dense<A>>,
     A: PartialEq<B>,
     D: Dimension,
 {
@@ -256,7 +256,7 @@ where
 
 impl<A, B, S, D> PartialEq<&ArrayRef<B, D>> for ArrayBase<S, D>
 where
-    S: Data<Elem = A>,
+    S: Data<Elem = A, Acc = Dense<A>>,
     A: PartialEq<B>,
     D: Dimension,
 {
@@ -268,7 +268,7 @@ where
 
 impl<A, B, S, D> PartialEq<ArrayRef<B, D>> for &ArrayBase<S, D>
 where
-    S: Data<Elem = A>,
+    S: Data<Elem = A, Acc = Dense<A>>,
     A: PartialEq<B>,
     D: Dimension,
 {
@@ -280,7 +280,7 @@ where
 
 impl<A, B, S, D> PartialEq<ArrayBase<S, D>> for ArrayRef<A, D>
 where
-    S: Data<Elem = B>,
+    S: Data<Elem = B, Acc = Dense<B>>,
     A: PartialEq<B>,
     D: Dimension,
 {
@@ -292,7 +292,7 @@ where
 
 impl<A, B, S, D> PartialEq<&ArrayBase<S, D>> for ArrayRef<A, D>
 where
-    S: Data<Elem = B>,
+    S: Data<Elem = B, Acc = Dense<B>>,
     A: PartialEq<B>,
     D: Dimension,
 {
@@ -304,7 +304,7 @@ where
 
 impl<A, B, S, D> PartialEq<ArrayBase<S, D>> for &ArrayRef<A, D>
 where
-    S: Data<Elem = B>,
+    S: Data<Elem = B, Acc = Dense<B>>,
     A: PartialEq<B>,
     D: Dimension,
 {
@@ -394,7 +394,7 @@ where D: Dimension
 impl<'a, S, D> IntoIterator for &'a ArrayBase<S, D>
 where
     D: Dimension,
-    S: Data,
+    S: Data<Acc = Dense<<S as RawData>::Elem>>,
 {
     type Item = &'a S::Elem;
     type IntoIter = Iter<'a, S::Elem, D>;
@@ -408,7 +408,7 @@ where
 impl<'a, S, D> IntoIterator for &'a mut ArrayBase<S, D>
 where
     D: Dimension,
-    S: DataMut,
+    S: DataMut<Acc = Dense<<S as RawData>::Elem>>,
 {
     type Item = &'a mut S::Elem;
     type IntoIter = IterMut<'a, S::Elem, D>;
@@ -471,7 +471,7 @@ where
 impl<S, D> hash::Hash for ArrayBase<S, D>
 where
     D: Dimension,
-    S: Data,
+    S: Data<Acc = Dense<<S as RawData>::Elem>>,
     S::Elem: hash::Hash,
 {
     // Note: elements are hashed in the logical order
@@ -559,7 +559,7 @@ impl<'a, A, const N: usize> From<&'a [[A; N]]> for ArrayView<'a, A, Ix2>
 /// Implementation of `ArrayView::from(&A)` where `A` is an array.
 impl<'a, A, S, D> From<&'a ArrayBase<S, D>> for ArrayView<'a, A, D>
 where
-    S: Data<Elem = A>,
+    S: Data<Elem = A, Acc = Dense<A>>,
     D: Dimension,
 {
     /// Create a read-only array view of the array.
@@ -637,7 +637,7 @@ impl<'a, A, const N: usize> From<&'a mut [[A; N]]> for ArrayViewMut<'a, A, Ix2>
 /// Implementation of `ArrayViewMut::from(&mut A)` where `A` is an array.
 impl<'a, A, S, D> From<&'a mut ArrayBase<S, D>> for ArrayViewMut<'a, A, D>
 where
-    S: DataMut<Elem = A>,
+    S: DataMut<Elem = A, Acc = Dense<A>>,
     D: Dimension,
 {
     /// Create a read-write array view of the array.

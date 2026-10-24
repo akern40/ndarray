@@ -177,8 +177,8 @@ macro_rules! impl_dots {
     ) => {
         impl<A, S, S2> Dot<ArrayBase<S2, $shape2>> for ArrayBase<S, $shape1>
         where
-            S: Data<Elem = A>,
-            S2: Data<Elem = A>,
+            S: Data<Elem = A, Acc = Dense<A>>,
+            S2: Data<Elem = A, Acc = Dense<A>>,
             A: LinalgScalar,
         {
             type Output = <ArrayRef<A, $shape1> as Dot<ArrayRef<A, $shape2>>>::Output;
@@ -191,7 +191,7 @@ macro_rules! impl_dots {
 
         impl<A, S> Dot<ArrayRef<A, $shape2>> for ArrayBase<S, $shape1>
         where
-            S: Data<Elem = A>,
+            S: Data<Elem = A, Acc = Dense<A>>,
             A: LinalgScalar,
         {
             type Output = <ArrayRef<A, $shape1> as Dot<ArrayRef<A, $shape2>>>::Output;
@@ -204,7 +204,7 @@ macro_rules! impl_dots {
 
         impl<A, S> Dot<ArrayBase<S, $shape2>> for ArrayRef<A, $shape1>
         where
-            S: Data<Elem = A>,
+            S: Data<Elem = A, Acc = Dense<A>>,
             A: LinalgScalar,
         {
             type Output = <ArrayRef<A, $shape1> as Dot<ArrayRef<A, $shape2>>>::Output;

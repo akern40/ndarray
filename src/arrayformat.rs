@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::{ArrayBase, ArrayView, Axis, Data, Dimension, NdProducer};
+use crate::Dense;
 use crate::{
     aliases::{Ix1, IxDyn},
     ArrayRef,
@@ -175,7 +176,7 @@ where
 ///
 /// The array is shown in multiline style.
 impl<A: fmt::Display, S, D: Dimension> fmt::Display for ArrayBase<S, D>
-where S: Data<Elem = A>
+where S: Data<Elem = A, Acc = Dense<A>>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
     {
@@ -201,7 +202,7 @@ impl<A: fmt::Display, D: Dimension> fmt::Display for ArrayRef<A, D>
 ///
 /// The array is shown in multiline style.
 impl<A: fmt::Debug, S, D: Dimension> fmt::Debug for ArrayBase<S, D>
-where S: Data<Elem = A>
+where S: Data<Elem = A, Acc = Dense<A>>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
     {
@@ -241,7 +242,7 @@ impl<A: fmt::Debug, D: Dimension> fmt::Debug for ArrayRef<A, D>
 ///
 /// The array is shown in multiline style.
 impl<A: fmt::LowerExp, S, D: Dimension> fmt::LowerExp for ArrayBase<S, D>
-where S: Data<Elem = A>
+where S: Data<Elem = A, Acc = Dense<A>>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
     {
@@ -267,7 +268,7 @@ impl<A: fmt::LowerExp, D: Dimension> fmt::LowerExp for ArrayRef<A, D>
 ///
 /// The array is shown in multiline style.
 impl<A: fmt::UpperExp, S, D: Dimension> fmt::UpperExp for ArrayBase<S, D>
-where S: Data<Elem = A>
+where S: Data<Elem = A, Acc = Dense<A>>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
     {
@@ -293,7 +294,7 @@ impl<A: fmt::UpperExp, D: Dimension> fmt::UpperExp for ArrayRef<A, D>
 ///
 /// The array is shown in multiline style.
 impl<A: fmt::LowerHex, S, D: Dimension> fmt::LowerHex for ArrayBase<S, D>
-where S: Data<Elem = A>
+where S: Data<Elem = A, Acc = Dense<A>>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
     {
@@ -319,7 +320,7 @@ impl<A: fmt::LowerHex, D: Dimension> fmt::LowerHex for ArrayRef<A, D>
 ///
 /// The array is shown in multiline style.
 impl<A: fmt::Binary, S, D: Dimension> fmt::Binary for ArrayBase<S, D>
-where S: Data<Elem = A>
+where S: Data<Elem = A, Acc = Dense<A>>
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
     {
