@@ -13,6 +13,7 @@ use crate::dimension::{self, CanIndexCheckMode};
 use crate::error::ShapeError;
 use crate::extension::nonnull::nonnull_debug_checked_from_ptr;
 use crate::imp_prelude::*;
+use crate::Accessor;
 use crate::{is_aligned, StrideShape};
 
 /// Methods for read-only array views.
@@ -228,6 +229,36 @@ where D: Dimension
 }
 
 /// Private array view methods
+impl<Acc, D> ArrayBase<ViewRepr<&'_ Acc>, D>
+where
+    Acc: Accessor,
+    D: Dimension,
+{
+    /// Create a view of any accessor family from a handle and a layout.
+    ///
+    /// Unsafe because the caller guarantees the layout's offsets are in bounds
+    /// of the buffer behind `handle` for the view's lifetime.
+    #[inline(always)]
+    pub(crate) unsafe fn from_handle(handle: Acc::Handle, layout: StridedLayout<D>) -> Self
+    {
+        ArrayBase::from_data_ptr(ViewRepr::new(), handle).with_layout(layout)
+    }
+}
+
+impl<Acc, D> ArrayBase<ViewRepr<&'_ mut Acc>, D>
+where
+    Acc: Accessor,
+    D: Dimension,
+{
+    /// Mutable counterpart of [`from_handle`](ArrayBase::from_handle); the
+    /// caller additionally guarantees unique access to the elements.
+    #[inline(always)]
+    pub(crate) unsafe fn from_handle_mut(handle: Acc::Handle, layout: StridedLayout<D>) -> Self
+    {
+        ArrayBase::from_data_ptr(ViewRepr::new(), handle).with_layout(layout)
+    }
+}
+
 impl<A, D> ArrayView<'_, A, D>
 where D: Dimension
 {

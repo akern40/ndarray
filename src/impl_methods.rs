@@ -160,21 +160,23 @@ impl<Acc: Accessor, D: Dimension> LayoutRefBase<Acc, D>
     }
 }
 
-impl<A, D: Dimension> ArrayRef<A, D>
+impl<Acc: Accessor, D: Dimension> ArrayRefBase<Acc, D>
 {
     /// Return a read-only view of the array
-    pub fn view(&self) -> ArrayView<'_, A, D>
+    pub fn view(&self) -> ArrayBase<ViewRepr<&'_ Acc>, D>
     {
-        // debug_assert!(self.pointer_is_inbounds());
-        unsafe { ArrayView::new(*self._ptr(), StridedLayout::new(self._dim().clone(), self._strides().clone())) }
+        unsafe { ArrayBase::from_handle(*self._ptr(), self._layout().clone()) }
     }
 
     /// Return a read-write view of the array
-    pub fn view_mut(&mut self) -> ArrayViewMut<'_, A, D>
+    pub fn view_mut(&mut self) -> ArrayBase<ViewRepr<&'_ mut Acc>, D>
     {
-        unsafe { ArrayViewMut::new(*self._ptr(), StridedLayout::new(self._dim().clone(), self._strides().clone())) }
+        unsafe { ArrayBase::from_handle_mut(*self._ptr(), self._layout().clone()) }
     }
+}
 
+impl<A, D: Dimension> ArrayRef<A, D>
+{
     /// Return a shared view of the array with elements as if they were embedded in cells.
     ///
     /// The cell view requires a mutable borrow of the array. Once borrowed the
