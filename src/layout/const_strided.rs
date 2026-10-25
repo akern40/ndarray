@@ -6,9 +6,12 @@
 //! for lengths, `CStride<N>` / `DynStride` for strides. `offset` folds over
 //! the tuple, so a fully-const layout compiles to constant multiplies.
 //!
-//! Finding: runtime-axis ops erase all axes; `reverse_axes`/`into_dyn` are the
-//! only type-preserving-or-better ops; keeping per-axis const types under
-//! slicing needs const-axis ops (`slice_axis0`).
+//! Finding: `AxisOps` takes the axis as a run-time `Axis(usize)`, so the output
+//! type cannot know which axis changed: an op erases its property on *every*
+//! axis (collapse erases lengths, invert erases strides, slice/swap/permute/
+//! merge erase both). Only `reverse_axes` (a static permutation) keeps every
+//! const. Keeping the other axes' consts needs the axis as a const parameter
+//! (`slice_axis0` below).
 
 use crate::layout::ranked::Ranked;
 use crate::layout::strided::StridedLayout;
