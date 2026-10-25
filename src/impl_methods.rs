@@ -805,7 +805,7 @@ impl<B: Buffer, D: Dimension> LayoutRefBase<B, StridedLayout<D>>
     #[track_caller]
     pub fn slice_axis_inplace(&mut self, axis: Axis, indices: Slice)
     {
-        let offset = self.0.layout.slice_axis(axis, indices);
+        let offset = self.0.layout.slice_axis_inplace(axis, indices);
         unsafe {
             self.0.handle = self.0.handle.offset(offset);
         }
@@ -1071,7 +1071,7 @@ where
     {
         self.collapse_axis(axis, index);
         // safe because new dimension, strides allow access to a subset of old data
-        let layout = self.parts.layout.remove_axis(axis);
+        let layout = self.parts.layout.clone().remove_axis(axis);
         unsafe { self.with_layout(layout) }
     }
 }
@@ -1084,7 +1084,7 @@ impl<B: Buffer, D: Dimension> LayoutRefBase<B, StridedLayout<D>>
     #[track_caller]
     pub fn collapse_axis(&mut self, axis: Axis, index: usize)
     {
-        let offset = self.0.layout.collapse_axis(axis, index);
+        let offset = self.0.layout.collapse_axis_inplace(axis, index);
         self.0.handle = unsafe { self.0.handle.offset(offset) };
         // debug_assert!(self.pointer_is_inbounds());
     }
@@ -2513,7 +2513,7 @@ impl<B: Buffer, D: Dimension> LayoutRefBase<B, StridedLayout<D>>
     #[track_caller]
     pub fn swap_axes(&mut self, ax: usize, bx: usize)
     {
-        self.0.layout.swap_axes(ax, bx);
+        self.0.layout.swap_axes_inplace(ax, bx);
     }
 }
 
@@ -2550,7 +2550,7 @@ where
     {
         let axes = axes.into_dimension();
         // safe because the layout checks that axes is a permutation of the old
-        let layout = self.parts.layout.permute_axes(&axes);
+        let layout = self.parts.layout.clone().permute_axes(&axes);
         unsafe { self.with_layout(layout) }
     }
 
@@ -2582,42 +2582,7 @@ where
     where T: IntoDimension<Dim = D>
     {
         let axes = axes.into_dimension();
-        // Ensure that each axis is used exactly once.
-        let mut usage_counts = D::zeros(self.ndim());
-        for axis in axes.slice() {
-            usage_counts[*axis] += 1;
-        }
-        for count in usage_counts.slice() {
-            assert_eq!(*count, 1, "each axis must be listed exactly once");
-        }
-
-        let dim = self.parts.layout.dim.slice_mut();
-        let strides = self.parts.layout.strides.slice_mut();
-        let axes = axes.slice();
-
-        // The cycle detection is done using a bitmask to track visited positions.
-        // For example, axes from [0,1,2] to [2, 0, 1]
-        // For axis values [1, 0, 2]:
-        // 1 << 1  // 0b0001 << 1 = 0b0010 (decimal 2)
-        // 1 << 0  // 0b0001 << 0 = 0b0001 (decimal 1)
-        // 1 << 2  // 0b0001 << 2 = 0b0100 (decimal 4)
-        //
-        // Each axis gets its own unique bit position in the bitmask:
-        // - Axis 0: bit 0 (rightmost)
-        // - Axis 1: bit 1
-        // - Axis 2: bit 2
-        //
-        let mut visited = 0usize;
-        for (new_axis, &axis) in axes.iter().enumerate() {
-            if (visited & (1 << axis)) != 0 {
-                continue;
-            }
-
-            dim.swap(axis, new_axis);
-            strides.swap(axis, new_axis);
-
-            visited |= (1 << axis) | (1 << new_axis);
-        }
+        self.parts.layout = self.parts.layout.clone().permute_axes(&axes);
     }
 
     /// Transpose the array by reversing axes.
@@ -2626,7 +2591,7 @@ where
     /// while retaining the same data.
     pub fn reversed_axes(mut self) -> ArrayBase<S, StridedLayout<D>>
     {
-        self.parts.layout.reverse_axes();
+        self.parts.layout.reverse_axes_inplace();
         self
     }
 
@@ -2636,8 +2601,7 @@ where
     /// and strides.
     pub fn reverse_axes(&mut self)
     {
-        self.parts.layout.dim.slice_mut().reverse();
-        self.parts.layout.strides.slice_mut().reverse();
+        self.parts.layout.reverse_axes_inplace();
     }
 }
 
@@ -2671,7 +2635,7 @@ impl<B: Buffer, D: Dimension> LayoutRefBase<B, StridedLayout<D>>
     #[track_caller]
     pub fn invert_axis(&mut self, axis: Axis)
     {
-        let offset = self.0.layout.invert_axis(axis);
+        let offset = self.0.layout.invert_axis_inplace(axis);
         self.0.handle = unsafe { self.0.handle.offset(offset) };
     }
 
@@ -2713,7 +2677,7 @@ impl<B: Buffer, D: Dimension> LayoutRefBase<B, StridedLayout<D>>
     #[track_caller]
     pub fn merge_axes(&mut self, take: Axis, into: Axis) -> bool
     {
-        self.0.layout.merge_axes(take, into)
+        self.0.layout.merge_axes_inplace(take, into)
     }
 }
 
@@ -2747,7 +2711,7 @@ where
     pub fn insert_axis(self, axis: Axis) -> ArrayBase<S, StridedLayout<D::Larger>>
     {
         // safe because a new axis of length one does not affect memory layout
-        let layout = self.parts.layout.insert_axis(axis);
+        let layout = self.parts.layout.clone().insert_axis(axis);
         unsafe { self.with_layout(layout) }
     }
 

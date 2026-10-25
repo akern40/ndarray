@@ -4,8 +4,10 @@
 //! * [`Layout`]: shape, size and the index → offset map. Enough for indexing
 //!   and element iteration.
 //! * [`AxisOps`]: the layout is made of axes that can be indexed, sliced,
-//!   inserted, removed, permuted and merged. In-place operations that move
-//!   the origin return the element offset the array's handle must advance by.
+//!   inserted, removed, permuted and merged. By-value operations describe
+//!   their result layout with per-operation associated types; operations that
+//!   move the origin return the element offset the array's handle must advance
+//!   by.
 //! * [`Strided`]: the layout is a stride vector, so strides, contiguity and
 //!   memory-order questions have answers.
 //!
@@ -60,6 +62,18 @@ pub trait Layout: Ranked + Clone
 /// must advance so that logical index 0 still names the right element.
 pub trait AxisOps: Layout
 {
+    /// After `collapse_axis`.
+    type Collapsed: AxisOps<Index = Self::Index>;
+    /// After `slice_axis`.
+    type Sliced: AxisOps<Index = Self::Index>;
+    /// After `invert_axis`.
+    type Inverted: AxisOps<Index = Self::Index>;
+    /// After a permutation chosen at run time (`swap_axes`, `permute_axes`).
+    type Permuted: AxisOps<Index = Self::Index>;
+    /// After `reverse_axes` (a permutation known statically).
+    type Reversed: AxisOps<Index = Self::Index>;
+    /// After a successful `merge_axes`.
+    type Merged: AxisOps<Index = Self::Index>;
     /// This layout with one axis removed.
     type Smaller: AxisOps;
     /// This layout with one axis added.
@@ -70,41 +84,42 @@ pub trait AxisOps: Layout
     /// Fix `axis` at `index`, leaving it with length 1; returns the origin offset.
     ///
     /// ***Panics*** if `index` is out of bounds.
-    fn collapse_axis(&mut self, axis: Axis, index: usize) -> isize;
+    fn collapse_axis(self, axis: Axis, index: usize) -> (Self::Collapsed, isize);
 
     /// Restrict `axis` to `slice`; returns the origin offset.
     ///
     /// ***Panics*** if the slice is out of bounds.
-    fn slice_axis(&mut self, axis: Axis, slice: Slice) -> isize;
+    fn slice_axis(self, axis: Axis, slice: Slice) -> (Self::Sliced, isize);
 
     /// Reverse the direction of `axis`; returns the origin offset.
-    fn invert_axis(&mut self, axis: Axis) -> isize;
+    fn invert_axis(self, axis: Axis) -> (Self::Inverted, isize);
 
     /// Swap two axes.
-    fn swap_axes(&mut self, a: usize, b: usize);
+    fn swap_axes(self, a: usize, b: usize) -> Self::Permuted;
 
     /// Reverse the order of all axes.
-    fn reverse_axes(&mut self);
+    fn reverse_axes(self) -> Self::Reversed;
 
-    /// Merge `take` into `into` if the result is still expressible; returns
-    /// whether it was.
-    fn merge_axes(&mut self, take: Axis, into: Axis) -> bool;
+    /// Merge `take` into `into` if the result is still expressible.
+    ///
+    /// Returns `Err(self)` unchanged if the merged axis is not expressible.
+    fn merge_axes(self, take: Axis, into: Axis) -> Result<Self::Merged, Self>;
 
     /// Insert a length-1 axis at `axis`.
     ///
     /// ***Panics*** if `axis.index() > ndim`.
-    fn insert_axis(&self, axis: Axis) -> Self::Larger;
+    fn insert_axis(self, axis: Axis) -> Self::Larger;
 
     /// Remove `axis` (its length must already be 1 if the elements are to be
     /// preserved; see `collapse_axis`).
     ///
     /// ***Panics*** if the axis is out of bounds or the rank is 0.
-    fn remove_axis(&self, axis: Axis) -> Self::Smaller;
+    fn remove_axis(self, axis: Axis) -> Self::Smaller;
 
     /// Reorder the axes: new axis `k` is old axis `axes[k]`.
     ///
     /// ***Panics*** unless `axes` is a permutation of `0..ndim`.
-    fn permute_axes(&self, axes: &Self::Index) -> Self;
+    fn permute_axes(self, axes: &Self::Index) -> Self::Permuted;
 
     /// Forget the static rank.
     fn into_dyn(self) -> Self::Dyn;

@@ -45,6 +45,56 @@ impl<D: Dimension> StridedLayout<D>
     {
         index.index_unchecked(&self.strides)
     }
+
+    #[inline]
+    #[track_caller]
+    pub(crate) fn collapse_axis_inplace(&mut self, axis: Axis, index: usize) -> isize
+    {
+        dimension::do_collapse_axis(&mut self.dim, &self.strides, axis.index(), index)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub(crate) fn slice_axis_inplace(&mut self, axis: Axis, slice: Slice) -> isize
+    {
+        dimension::do_slice(&mut self.dim.slice_mut()[axis.index()], &mut self.strides.slice_mut()[axis.index()], slice)
+    }
+
+    #[inline]
+    #[track_caller]
+    pub(crate) fn invert_axis_inplace(&mut self, axis: Axis) -> isize
+    {
+        let s = self.strides.axis(axis) as isize;
+        let m = self.dim.axis(axis);
+        self.strides.set_axis(axis, (-s) as usize);
+        if m != 0 {
+            dimension::stride_offset(m - 1, s as usize)
+        } else {
+            0
+        }
+    }
+
+    #[inline]
+    #[track_caller]
+    pub(crate) fn swap_axes_inplace(&mut self, a: usize, b: usize)
+    {
+        self.dim.slice_mut().swap(a, b);
+        self.strides.slice_mut().swap(a, b);
+    }
+
+    #[inline]
+    pub(crate) fn reverse_axes_inplace(&mut self)
+    {
+        self.dim.slice_mut().reverse();
+        self.strides.slice_mut().reverse();
+    }
+
+    #[inline]
+    #[track_caller]
+    pub(crate) fn merge_axes_inplace(&mut self, take: Axis, into: Axis) -> bool
+    {
+        dimension::merge_axes(&mut self.dim, &mut self.strides, take, into)
+    }
 }
 
 impl<D: Dimension> Ranked for StridedLayout<D>
@@ -156,63 +206,69 @@ impl<D: Dimension> Strided for StridedLayout<D>
 
 impl<D: Dimension> AxisOps for StridedLayout<D>
 {
+    type Collapsed = Self;
+    type Sliced = Self;
+    type Inverted = Self;
+    type Permuted = Self;
+    type Reversed = Self;
+    type Merged = Self;
     type Smaller = StridedLayout<D::Smaller>;
     type Larger = StridedLayout<D::Larger>;
     type Dyn = StridedLayout<IxDyn>;
 
     #[inline]
     #[track_caller]
-    fn collapse_axis(&mut self, axis: Axis, index: usize) -> isize
+    fn collapse_axis(mut self, axis: Axis, index: usize) -> (Self::Collapsed, isize)
     {
-        dimension::do_collapse_axis(&mut self.dim, &self.strides, axis.index(), index)
+        let offset = self.collapse_axis_inplace(axis, index);
+        (self, offset)
     }
 
     #[inline]
     #[track_caller]
-    fn slice_axis(&mut self, axis: Axis, slice: Slice) -> isize
+    fn slice_axis(mut self, axis: Axis, slice: Slice) -> (Self::Sliced, isize)
     {
-        dimension::do_slice(&mut self.dim.slice_mut()[axis.index()], &mut self.strides.slice_mut()[axis.index()], slice)
+        let offset = self.slice_axis_inplace(axis, slice);
+        (self, offset)
     }
 
     #[inline]
     #[track_caller]
-    fn invert_axis(&mut self, axis: Axis) -> isize
+    fn invert_axis(mut self, axis: Axis) -> (Self::Inverted, isize)
     {
-        let s = self.strides.axis(axis) as isize;
-        let m = self.dim.axis(axis);
-        self.strides.set_axis(axis, (-s) as usize);
-        if m != 0 {
-            dimension::stride_offset(m - 1, s as usize)
+        let offset = self.invert_axis_inplace(axis);
+        (self, offset)
+    }
+
+    #[inline]
+    #[track_caller]
+    fn swap_axes(mut self, a: usize, b: usize) -> Self::Permuted
+    {
+        self.swap_axes_inplace(a, b);
+        self
+    }
+
+    #[inline]
+    fn reverse_axes(mut self) -> Self::Reversed
+    {
+        self.reverse_axes_inplace();
+        self
+    }
+
+    #[inline]
+    #[track_caller]
+    fn merge_axes(mut self, take: Axis, into: Axis) -> Result<Self::Merged, Self>
+    {
+        if self.merge_axes_inplace(take, into) {
+            Ok(self)
         } else {
-            0
+            Err(self)
         }
     }
 
     #[inline]
     #[track_caller]
-    fn swap_axes(&mut self, a: usize, b: usize)
-    {
-        self.dim.slice_mut().swap(a, b);
-        self.strides.slice_mut().swap(a, b);
-    }
-
-    #[inline]
-    fn reverse_axes(&mut self)
-    {
-        self.dim.slice_mut().reverse();
-        self.strides.slice_mut().reverse();
-    }
-
-    #[inline]
-    #[track_caller]
-    fn merge_axes(&mut self, take: Axis, into: Axis) -> bool
-    {
-        dimension::merge_axes(&mut self.dim, &mut self.strides, take, into)
-    }
-
-    #[inline]
-    #[track_caller]
-    fn insert_axis(&self, axis: Axis) -> Self::Larger
+    fn insert_axis(self, axis: Axis) -> Self::Larger
     {
         assert!(axis.index() <= self.dim.ndim());
         StridedLayout::new(self.dim.insert_axis(axis), self.strides.insert_axis(axis))
@@ -220,7 +276,7 @@ impl<D: Dimension> AxisOps for StridedLayout<D>
 
     #[inline]
     #[track_caller]
-    fn remove_axis(&self, axis: Axis) -> Self::Smaller
+    fn remove_axis(self, axis: Axis) -> Self::Smaller
     {
         assert!(self.dim.ndim() > 0, "cannot remove an axis from a 0-dimensional layout");
         assert!(axis.index() < self.dim.ndim());
@@ -229,7 +285,7 @@ impl<D: Dimension> AxisOps for StridedLayout<D>
 
     #[inline]
     #[track_caller]
-    fn permute_axes(&self, axes: &D) -> Self
+    fn permute_axes(self, axes: &D) -> Self::Permuted
     {
         let n = self.dim.ndim();
         assert_eq!(axes.ndim(), n, "the permutation must list every axis");

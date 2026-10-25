@@ -155,21 +155,27 @@ impl<D: Dimension> Layout for BlockLayout<D>
 
 impl<D: Dimension> AxisOps for BlockLayout<D>
 {
+    type Collapsed = Self;
+    type Sliced = Self;
+    type Inverted = Self;
+    type Permuted = Self;
+    type Reversed = Self;
+    type Merged = Self;
     type Smaller = BlockLayout<D::Smaller>;
     type Larger = BlockLayout<D::Larger>;
     type Dyn = BlockLayout<IxDyn>;
 
     // The window absorbs the move; nothing for the handle to do.
-    fn collapse_axis(&mut self, axis: Axis, index: usize) -> isize
+    fn collapse_axis(mut self, axis: Axis, index: usize) -> (Self::Collapsed, isize)
     {
         let a = axis.index();
         assert!(index < self.dim[a]);
         self.start[a] = self.coord(a, index);
         self.dim[a] = 1;
-        0
+        (self, 0)
     }
 
-    fn slice_axis(&mut self, axis: Axis, slice: Slice) -> isize
+    fn slice_axis(mut self, axis: Axis, slice: Slice) -> (Self::Sliced, isize)
     {
         let a = axis.index();
         let mut len = self.dim[a];
@@ -180,42 +186,44 @@ impl<D: Dimension> AxisOps for BlockLayout<D>
         }
         self.step[a] = (self.step_of(a) * stride as isize) as usize;
         self.dim[a] = len;
-        0
+        (self, 0)
     }
 
-    fn invert_axis(&mut self, axis: Axis) -> isize
+    fn invert_axis(mut self, axis: Axis) -> (Self::Inverted, isize)
     {
         let a = axis.index();
         if self.dim[a] > 0 {
             self.start[a] = self.coord(a, self.dim[a] - 1);
         }
         self.step[a] = (-self.step_of(a)) as usize;
-        0
+        (self, 0)
     }
 
-    fn swap_axes(&mut self, a: usize, b: usize)
+    fn swap_axes(mut self, a: usize, b: usize) -> Self::Permuted
     {
         self.perm.slice_mut().swap(a, b);
         self.dim.slice_mut().swap(a, b);
         self.start.slice_mut().swap(a, b);
         self.step.slice_mut().swap(a, b);
+        self
     }
 
-    fn reverse_axes(&mut self)
+    fn reverse_axes(mut self) -> Self::Reversed
     {
         self.perm.slice_mut().reverse();
         self.dim.slice_mut().reverse();
         self.start.slice_mut().reverse();
         self.step.slice_mut().reverse();
+        self
     }
 
     // Two logical axes are never one physical run in a tiled layout.
-    fn merge_axes(&mut self, _take: Axis, _into: Axis) -> bool
+    fn merge_axes(self, _take: Axis, _into: Axis) -> Result<Self::Merged, Self>
     {
-        false
+        Err(self)
     }
 
-    fn insert_axis(&self, axis: Axis) -> Self::Larger
+    fn insert_axis(self, axis: Axis) -> Self::Larger
     {
         let a = axis.index();
         let mut perm = self.perm.insert_axis(axis);
@@ -227,9 +235,9 @@ impl<D: Dimension> AxisOps for BlockLayout<D>
         let mut step = self.step.insert_axis(axis);
         step[a] = 1;
         BlockLayout {
-            phys: self.phys.clone(),
-            tile: self.tile.clone(),
-            base: self.base.clone(),
+            phys: self.phys,
+            tile: self.tile,
+            base: self.base,
             perm,
             dim,
             start,
@@ -239,17 +247,17 @@ impl<D: Dimension> AxisOps for BlockLayout<D>
 
     // The physical axis stays; its coordinate is frozen at the window start
     // (which is what `index_axis` leaves after `collapse_axis`).
-    fn remove_axis(&self, axis: Axis) -> Self::Smaller
+    fn remove_axis(self, axis: Axis) -> Self::Smaller
     {
         assert!(self.dim.ndim() > 0);
         let a = axis.index();
-        let mut base = self.base.clone();
+        let mut base = self.base;
         if self.perm[a] != UNIT {
             base[self.perm[a]] = self.start[a];
         }
         BlockLayout {
-            phys: self.phys.clone(),
-            tile: self.tile.clone(),
+            phys: self.phys,
+            tile: self.tile,
             base,
             perm: self.perm.try_remove_axis(axis),
             dim: self.dim.try_remove_axis(axis),
@@ -258,16 +266,25 @@ impl<D: Dimension> AxisOps for BlockLayout<D>
         }
     }
 
-    fn permute_axes(&self, axes: &D) -> Self
+    fn permute_axes(mut self, axes: &D) -> Self::Permuted
     {
-        let mut out = self.clone();
+        let n = self.dim.ndim();
+        assert_eq!(axes.ndim(), n, "the permutation must list every axis");
+        let mut perm = D::zeros(n);
+        let mut dim = D::zeros(n);
+        let mut start = D::zeros(n);
+        let mut step = D::zeros(n);
         for (k, &src) in axes.slice().iter().enumerate() {
-            out.perm[k] = self.perm[src];
-            out.dim[k] = self.dim[src];
-            out.start[k] = self.start[src];
-            out.step[k] = self.step[src];
+            perm[k] = self.perm[src];
+            dim[k] = self.dim[src];
+            start[k] = self.start[src];
+            step[k] = self.step[src];
         }
-        out
+        self.perm = perm;
+        self.dim = dim;
+        self.start = start;
+        self.step = step;
+        self
     }
 
     fn into_dyn(self) -> Self::Dyn
@@ -326,13 +343,12 @@ mod tests
     fn transpose_slice_invert_are_windows()
     {
         let l = a();
-        let mut t = l.clone();
-        t.swap_axes(0, 1);
+        let t = l.clone().swap_axes(0, 1);
         assert_eq!(t.shape(), &[6, 4]);
         assert_eq!(t.offset(&Ix2(5, 3)), l.offset(&Ix2(3, 5)));
 
-        let mut s = l.clone();
-        assert_eq!(s.slice_axis(Axis(1), Slice::new(1, Some(6), 2)), 0);
+        let (s, origin) = l.clone().slice_axis(Axis(1), Slice::new(1, Some(6), 2));
+        assert_eq!(origin, 0);
         assert_eq!(s.shape(), &[4, 3]);
         for i in 0..4 {
             for k in 0..3 {
@@ -340,8 +356,8 @@ mod tests
             }
         }
 
-        let mut inv = s.clone();
-        inv.invert_axis(Axis(1));
+        let (inv, origin) = s.clone().invert_axis(Axis(1));
+        assert_eq!(origin, 0);
         for i in 0..4 {
             for k in 0..3 {
                 assert_eq!(inv.offset(&Ix2(i, k)), s.offset(&Ix2(i, 2 - k)));
@@ -353,8 +369,8 @@ mod tests
     fn rank_changing_ops()
     {
         let l = a();
-        let mut row = l.clone();
-        row.collapse_axis(Axis(0), 3);
+        let (row, origin) = l.clone().collapse_axis(Axis(0), 3);
+        assert_eq!(origin, 0);
         let row: BlockLayout<Ix1> = row.remove_axis(Axis(0));
         assert_eq!(row.shape(), &[6]);
         for j in 0..6 {

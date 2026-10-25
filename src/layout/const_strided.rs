@@ -6,14 +6,14 @@
 //! for lengths, `CStride<N>` / `DynStride` for strides. `offset` folds over
 //! the tuple, so a fully-const layout compiles to constant multiplies.
 //!
-//! Finding: `AxisOps` takes `&mut self`, so an operation that changes which
-//! axes are constant (slicing with a step, collapsing) cannot be expressed on
-//! a const layout; it needs by-value methods with per-op output types. The
-//! by-value `transpose`/`slice_axis0` below show what those look like.
+//! Finding: runtime-axis ops erase all axes; `reverse_axes`/`into_dyn` are the
+//! only type-preserving-or-better ops; keeping per-axis const types under
+//! slicing needs const-axis ops (`slice_axis0`).
 
 use crate::layout::ranked::Ranked;
-use crate::layout::traits::{Layout, Strided};
-use crate::{Axis, Dim, Ix1, Ix2};
+use crate::layout::strided::StridedLayout;
+use crate::layout::traits::{AxisOps, Layout, Strided};
+use crate::{Axis, Dim, Ix1, Ix2, Ix3, IxDyn, Slice};
 
 /// A per-axis length, static or dynamic.
 pub trait Extent: Copy
@@ -106,14 +106,22 @@ impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> CStrided<(E0, E
         _ => None,
     };
 
-    /// By-value transpose: the output type is the permuted tuple.
-    pub fn transpose(self) -> CStrided<(E1, E0), (S1, S0)>
+    #[allow(clippy::wrong_self_convention)]
+    fn to_strided(&self) -> StridedLayout<Ix2>
     {
-        CStrided::new((self.shape.1, self.shape.0), (self.strides.1, self.strides.0))
+        StridedLayout::new(Dim(self.dim), Dim([self.strides.0.get() as usize, self.strides.1.get() as usize]))
     }
 
-    /// By-value step-slice of axis 0: that axis becomes dynamic in both
-    /// length and stride; axis 1 keeps its (possibly const) types.
+    fn from_strided(layout: StridedLayout<Ix2>) -> CStrided<(Dyn, Dyn), (DynStride, DynStride)>
+    {
+        CStrided::new(
+            (Dyn(layout.dim[0]), Dyn(layout.dim[1])),
+            (DynStride(layout.strides[0] as isize), DynStride(layout.strides[1] as isize)),
+        )
+    }
+
+    /// By-value step-slice of axis 0: because the axis is known statically,
+    /// only that axis becomes dynamic in length and stride.
     #[allow(clippy::type_complexity)]
     pub fn slice_axis0(self, start: usize, end: usize, step: usize) -> (CStrided<(Dyn, E1), (DynStride, S1)>, isize)
     {
@@ -124,6 +132,82 @@ impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> CStrided<(E0, E
             CStrided::new((Dyn(len), self.shape.1), (DynStride(self.str[0] * step as isize), self.strides.1)),
             origin,
         )
+    }
+}
+
+impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> AxisOps for CStrided<(E0, E1), (S0, S1)>
+{
+    type Collapsed = CStrided<(Dyn, Dyn), (S0, S1)>;
+    type Sliced = CStrided<(Dyn, Dyn), (DynStride, DynStride)>;
+    type Inverted = CStrided<(E0, E1), (DynStride, DynStride)>;
+    type Permuted = CStrided<(Dyn, Dyn), (DynStride, DynStride)>;
+    type Reversed = CStrided<(E1, E0), (S1, S0)>;
+    type Merged = CStrided<(Dyn, Dyn), (DynStride, DynStride)>;
+    type Smaller = StridedLayout<Ix1>;
+    type Larger = StridedLayout<Ix3>;
+    type Dyn = StridedLayout<IxDyn>;
+
+    fn collapse_axis(self, axis: Axis, index: usize) -> (Self::Collapsed, isize)
+    {
+        let mut layout = self.to_strided();
+        let offset = layout.collapse_axis_inplace(axis, index);
+        (CStrided::new((Dyn(layout.dim[0]), Dyn(layout.dim[1])), self.strides), offset)
+    }
+
+    fn slice_axis(self, axis: Axis, slice: Slice) -> (Self::Sliced, isize)
+    {
+        let mut layout = self.to_strided();
+        let offset = layout.slice_axis_inplace(axis, slice);
+        (Self::from_strided(layout), offset)
+    }
+
+    fn invert_axis(self, axis: Axis) -> (Self::Inverted, isize)
+    {
+        let shape = self.shape;
+        let mut layout = self.to_strided();
+        let offset = layout.invert_axis_inplace(axis);
+        (
+            CStrided::new(shape, (DynStride(layout.strides[0] as isize), DynStride(layout.strides[1] as isize))),
+            offset,
+        )
+    }
+
+    fn swap_axes(self, a: usize, b: usize) -> Self::Permuted
+    {
+        Self::from_strided(self.to_strided().swap_axes(a, b))
+    }
+
+    fn permute_axes(self, axes: &Self::Index) -> Self::Permuted
+    {
+        Self::from_strided(self.to_strided().permute_axes(axes))
+    }
+
+    fn reverse_axes(self) -> Self::Reversed
+    {
+        CStrided::new((self.shape.1, self.shape.0), (self.strides.1, self.strides.0))
+    }
+
+    fn merge_axes(self, take: Axis, into: Axis) -> Result<Self::Merged, Self>
+    {
+        match self.to_strided().merge_axes(take, into) {
+            Ok(layout) => Ok(Self::from_strided(layout)),
+            Err(_) => Err(self),
+        }
+    }
+
+    fn insert_axis(self, axis: Axis) -> Self::Larger
+    {
+        self.to_strided().insert_axis(axis)
+    }
+
+    fn remove_axis(self, axis: Axis) -> Self::Smaller
+    {
+        self.to_strided().remove_axis(axis)
+    }
+
+    fn into_dyn(self) -> Self::Dyn
+    {
+        self.to_strided().into_dyn()
     }
 }
 
@@ -232,13 +316,23 @@ impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> Strided for CSt
     }
 }
 
-#[allow(dead_code)]
-type Row = Ix1;
-
 #[cfg(test)]
 mod tests
 {
     use super::*;
+    use crate::layout::traits::Layout;
+
+    fn assert_same<L>(left: &L, right: &StridedLayout<L::Index>, origins: (isize, isize))
+    where L: Layout
+    {
+        assert_eq!(origins.0, origins.1);
+        assert_eq!(left.shape(), right.shape());
+        let mut index = left.first_index();
+        while let Some(index_value) = index {
+            assert_eq!(left.offset(&index_value), right.offset(&index_value));
+            index = left.next_index(index_value);
+        }
+    }
 
     #[test]
     fn const_layout_is_statically_contiguous()
@@ -252,16 +346,72 @@ mod tests
     }
 
     #[test]
-    fn ops_change_the_type()
+    fn ops_agree_with_runtime_layout()
     {
-        let l = CStrided::new((Const::<3>, Dyn(5)), (DynStride(5), CStride::<1>));
-        assert_eq!(<CStrided<(Const<3>, Dyn), (DynStride, CStride<1>)>>::STATIC_C_CONTIGUOUS, None);
-        assert!(l.is_contiguous());
-        let t = l.transpose();
-        assert_eq!(t.offset(&Dim([4, 2])), l.offset(&Dim([2, 4])));
-        let (s, origin) = l.slice_axis0(1, 3, 2);
-        assert_eq!(origin, 5);
-        assert_eq!(s.shape(), &[1, 5]);
-        assert_eq!(s.offset(&Dim([0, 2])) + origin, l.offset(&Dim([1, 2])));
+        let l = CStrided::new((Const::<3>, Const::<4>), (CStride::<4>, CStride::<1>));
+        let r = l.to_strided();
+
+        let (collapsed, collapsed_origin) = l.collapse_axis(Axis(1), 2);
+        let (runtime_collapsed, runtime_collapsed_origin) = r.clone().collapse_axis(Axis(1), 2);
+        assert_same(&collapsed, &runtime_collapsed, (collapsed_origin, runtime_collapsed_origin));
+
+        let (sliced, sliced_origin) = l.slice_axis(Axis(0), Slice::new(0, None, 2));
+        let (runtime_sliced, runtime_sliced_origin) = r.clone().slice_axis(Axis(0), Slice::new(0, None, 2));
+        assert_same(&sliced, &runtime_sliced, (sliced_origin, runtime_sliced_origin));
+
+        let (inverted, inverted_origin) = l.invert_axis(Axis(1));
+        let (runtime_inverted, runtime_inverted_origin) = r.clone().invert_axis(Axis(1));
+        assert_same(&inverted, &runtime_inverted, (inverted_origin, runtime_inverted_origin));
+
+        let swapped = l.swap_axes(0, 1);
+        let runtime_swapped = r.clone().swap_axes(0, 1);
+        assert_same(&swapped, &runtime_swapped, (0, 0));
+
+        let permuted = l.permute_axes(&Dim([1, 0]));
+        let runtime_permuted = r.clone().permute_axes(&Dim([1, 0]));
+        assert_same(&permuted, &runtime_permuted, (0, 0));
+
+        let reversed = l.reverse_axes();
+        let runtime_reversed = r.clone().reverse_axes();
+        assert_same(&reversed, &runtime_reversed, (0, 0));
+
+        let merged = l.clone().merge_axes(Axis(0), Axis(1)).unwrap();
+        let runtime_merged = r.clone().merge_axes(Axis(0), Axis(1)).unwrap();
+        assert_same(&merged, &runtime_merged, (0, 0));
+
+        let (collapsed, collapsed_origin) = l.collapse_axis(Axis(1), 2);
+        let (runtime_collapsed, runtime_collapsed_origin) = r.clone().collapse_axis(Axis(1), 2);
+        let removed = collapsed.remove_axis(Axis(1));
+        let runtime_removed = runtime_collapsed.remove_axis(Axis(1));
+        assert_same(&removed, &runtime_removed, (collapsed_origin, runtime_collapsed_origin));
+
+        let inserted = l.clone().insert_axis(Axis(1));
+        let runtime_inserted = r.clone().insert_axis(Axis(1));
+        assert_same(&inserted, &runtime_inserted, (0, 0));
+
+        let dynamic = l.into_dyn();
+        let runtime_dynamic = r.into_dyn();
+        assert_same(&dynamic, &runtime_dynamic, (0, 0));
+    }
+
+    #[test]
+    fn ops_have_the_documented_types()
+    {
+        type L = CStrided<(Const<3>, Const<4>), (CStride<4>, CStride<1>)>;
+        let l = L::new((Const, Const), (CStride, CStride));
+
+        let (_collapsed, _): (CStrided<(Dyn, Dyn), (CStride<4>, CStride<1>)>, isize) = l.collapse_axis(Axis(1), 2);
+        let (_sliced, _): (CStrided<(Dyn, Dyn), (DynStride, DynStride)>, isize) =
+            l.slice_axis(Axis(0), Slice::new(0, None, 2));
+        let (_inverted, _): (CStrided<(Const<3>, Const<4>), (DynStride, DynStride)>, isize) = l.invert_axis(Axis(1));
+        let _swapped: CStrided<(Dyn, Dyn), (DynStride, DynStride)> = l.swap_axes(0, 1);
+        let _permuted: CStrided<(Dyn, Dyn), (DynStride, DynStride)> = l.permute_axes(&Dim([1, 0]));
+        type Reversed = CStrided<(Const<4>, Const<3>), (CStride<1>, CStride<4>)>;
+        let _reversed: Reversed = l.reverse_axes();
+        assert_eq!(Reversed::STATIC_C_CONTIGUOUS, Some(false));
+        let _merged: CStrided<(Dyn, Dyn), (DynStride, DynStride)> = l.merge_axes(Axis(0), Axis(1)).unwrap();
+        let _smaller: StridedLayout<Ix1> = l.remove_axis(Axis(1));
+        let _larger: StridedLayout<Ix3> = l.insert_axis(Axis(1));
+        let _dynamic: StridedLayout<IxDyn> = l.into_dyn();
     }
 }
