@@ -1,17 +1,27 @@
 #![allow(missing_docs)] // spike
-//! Spike: a strided layout whose shape and strides may be compile-time
-//! constants, mdspan-style (`extents<3, dynamic_extent>` + `layout_stride`).
+//! Spike: a strided layout whose shape, strides and axis order may be known
+//! at compile time, mdspan-style (`extents<3, dynamic_extent>` +
+//! `layout_stride` / `layout_right`).
 //!
 //! Shape and strides are tuples of per-axis *extents*: `Const<N>` / `Dyn`
 //! for lengths, `CStride<N>` / `DynStride` for strides. `offset` folds over
-//! the tuple, so a fully-const layout compiles to constant multiplies.
+//! the tuple, so a fully-const layout compiles to constant multiplies. The
+//! order parameter `O` records which axis ordering is guaranteed: `RowMajor`
+//! (like mdspan `layout_right`), `ColMajor` (`layout_left`), or `AnyOrder`
+//! (fully general; `StridedLayout<D>` is this case under another name).
 //!
-//! Finding: `AxisOps` takes the axis as a run-time `Axis(usize)`, so the output
-//! type cannot know which axis changed: an op erases its property on *every*
-//! axis (collapse erases lengths, invert erases strides, slice/swap/permute/
-//! merge erase both). Only `reverse_axes` (a static permutation) keeps every
-//! const. Keeping the other axes' consts needs the axis as a const parameter
-//! (`slice_axis0` below).
+//! Findings:
+//! * `AxisOps` takes the axis as a run-time `Axis(usize)`, so the output type
+//!   cannot know which axis changed: an op erases its property on *every* axis
+//!   (collapse erases lengths, invert erases strides, slice/swap/permute/merge
+//!   erase both). Only `reverse_axes` (a static permutation) keeps every const.
+//!   Keeping the other axes' consts needs the axis as a const parameter
+//!   (`slice_axis0` below).
+//! * Order survives most ops: collapse/slice/invert/merge/insert/remove keep
+//!   `O` unchanged, `reverse_axes` flips `RowMajor` ↔ `ColMajor`, and only a
+//!   run-time permutation erases to `AnyOrder`.
+
+use core::marker::PhantomData;
 
 use crate::layout::ranked::Ranked;
 use crate::layout::strided::StridedLayout;
@@ -78,25 +88,60 @@ impl StrideExtent for DynStride
     }
 }
 
-/// A strided layout over extent tuples `Sh` (lengths) and `St` (strides).
+/// The guaranteed ordering of the strides, independent of whether the stride
+/// *values* are constant.
+pub trait Order: Copy + core::fmt::Debug
+{
+    /// The ordering after `reverse_axes`.
+    type Reversed: Order;
+}
+/// Increasing stride along increasing axis index (C order).
+#[derive(Clone, Copy, Debug)]
+pub struct RowMajor;
+/// Decreasing stride along increasing axis index (Fortran order).
+#[derive(Clone, Copy, Debug)]
+pub struct ColMajor;
+/// No ordering guarantee — the general case.
+#[derive(Clone, Copy, Debug)]
+pub struct AnyOrder;
+
+impl Order for RowMajor
+{
+    type Reversed = ColMajor;
+}
+impl Order for ColMajor
+{
+    type Reversed = RowMajor;
+}
+impl Order for AnyOrder
+{
+    type Reversed = AnyOrder;
+}
+
+/// A strided layout over extent tuples `Sh` (lengths) and `St` (strides) with
+/// axis-order guarantee `O`. Named `ExtStrided` (parameterized extents) for the
+/// spike; the long-term shape is `StridedLayout<Sh, St, O>` once `shape()`
+/// returns `&L::Shape` instead of a slice.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CStrided<Sh, St>
+pub struct ExtStrided<Sh, St, O = AnyOrder>
 {
     pub shape: Sh,
     pub strides: St,
+    order: PhantomData<O>,
     /// Materialised copies so `shape()`/`strides()` can return slices today.
     dim: [usize; 2],
     str: [isize; 2],
 }
 
 // Rank 2 only for the spike; a macro would produce ranks 0..=6.
-impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> CStrided<(E0, E1), (S0, S1)>
+impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent, O: Order> ExtStrided<(E0, E1), (S0, S1), O>
 {
     pub fn new(shape: (E0, E1), strides: (S0, S1)) -> Self
     {
-        CStrided {
+        ExtStrided {
             shape,
             strides,
+            order: PhantomData,
             dim: [shape.0.get(), shape.1.get()],
             str: [strides.0.get(), strides.1.get()],
         }
@@ -115,37 +160,40 @@ impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> CStrided<(E0, E
         StridedLayout::new(Dim(self.dim), Dim([self.strides.0.get() as usize, self.strides.1.get() as usize]))
     }
 
-    fn from_strided(layout: StridedLayout<Ix2>) -> CStrided<(Dyn, Dyn), (DynStride, DynStride)>
+    fn from_strided<OR: Order>(layout: StridedLayout<Ix2>) -> ExtStrided<(Dyn, Dyn), (DynStride, DynStride), OR>
     {
-        CStrided::new(
+        ExtStrided::new(
             (Dyn(layout.dim[0]), Dyn(layout.dim[1])),
             (DynStride(layout.strides[0] as isize), DynStride(layout.strides[1] as isize)),
         )
     }
 
     /// By-value step-slice of axis 0: because the axis is known statically,
-    /// only that axis becomes dynamic in length and stride.
+    /// only that axis becomes dynamic in length and stride. Order survives:
+    /// stepping an axis multiplies its stride, which cannot change the order.
     #[allow(clippy::type_complexity)]
-    pub fn slice_axis0(self, start: usize, end: usize, step: usize) -> (CStrided<(Dyn, E1), (DynStride, S1)>, isize)
+    pub fn slice_axis0(
+        self, start: usize, end: usize, step: usize,
+    ) -> (ExtStrided<(Dyn, E1), (DynStride, S1), O>, isize)
     {
         assert!(step > 0 && start <= end && end <= self.dim[0]);
         let len = (end - start + step - 1) / step;
         let origin = start as isize * self.str[0];
         (
-            CStrided::new((Dyn(len), self.shape.1), (DynStride(self.str[0] * step as isize), self.strides.1)),
+            ExtStrided::new((Dyn(len), self.shape.1), (DynStride(self.str[0] * step as isize), self.strides.1)),
             origin,
         )
     }
 }
 
-impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> AxisOps for CStrided<(E0, E1), (S0, S1)>
+impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent, O: Order> AxisOps for ExtStrided<(E0, E1), (S0, S1), O>
 {
-    type Collapsed = CStrided<(Dyn, Dyn), (S0, S1)>;
-    type Sliced = CStrided<(Dyn, Dyn), (DynStride, DynStride)>;
-    type Inverted = CStrided<(E0, E1), (DynStride, DynStride)>;
-    type Permuted = CStrided<(Dyn, Dyn), (DynStride, DynStride)>;
-    type Reversed = CStrided<(E1, E0), (S1, S0)>;
-    type Merged = CStrided<(Dyn, Dyn), (DynStride, DynStride)>;
+    type Collapsed = ExtStrided<(Dyn, Dyn), (S0, S1), O>;
+    type Sliced = ExtStrided<(Dyn, Dyn), (DynStride, DynStride), O>;
+    type Inverted = ExtStrided<(E0, E1), (DynStride, DynStride), O>;
+    type Permuted = ExtStrided<(Dyn, Dyn), (DynStride, DynStride), AnyOrder>;
+    type Reversed = ExtStrided<(E1, E0), (S1, S0), O::Reversed>;
+    type Merged = ExtStrided<(Dyn, Dyn), (DynStride, DynStride), O>;
     type Smaller = StridedLayout<Ix1>;
     type Larger = StridedLayout<Ix3>;
     type Dyn = StridedLayout<IxDyn>;
@@ -154,7 +202,7 @@ impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> AxisOps for CSt
     {
         let mut layout = self.to_strided();
         let offset = layout.collapse_axis_inplace(axis, index);
-        (CStrided::new((Dyn(layout.dim[0]), Dyn(layout.dim[1])), self.strides), offset)
+        (ExtStrided::new((Dyn(layout.dim[0]), Dyn(layout.dim[1])), self.strides), offset)
     }
 
     fn slice_axis(self, axis: Axis, slice: Slice) -> (Self::Sliced, isize)
@@ -170,7 +218,7 @@ impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> AxisOps for CSt
         let mut layout = self.to_strided();
         let offset = layout.invert_axis_inplace(axis);
         (
-            CStrided::new(shape, (DynStride(layout.strides[0] as isize), DynStride(layout.strides[1] as isize))),
+            ExtStrided::new(shape, (DynStride(layout.strides[0] as isize), DynStride(layout.strides[1] as isize))),
             offset,
         )
     }
@@ -187,7 +235,7 @@ impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> AxisOps for CSt
 
     fn reverse_axes(self) -> Self::Reversed
     {
-        CStrided::new((self.shape.1, self.shape.0), (self.strides.1, self.strides.0))
+        ExtStrided::new((self.shape.1, self.shape.0), (self.strides.1, self.strides.0))
     }
 
     fn merge_axes(self, take: Axis, into: Axis) -> Result<Self::Merged, Self>
@@ -214,7 +262,7 @@ impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> AxisOps for CSt
     }
 }
 
-impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> Ranked for CStrided<(E0, E1), (S0, S1)>
+impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent, O: Order> Ranked for ExtStrided<(E0, E1), (S0, S1), O>
 {
     type NDim = <Ix2 as Ranked>::NDim;
     fn ndim(&self) -> usize
@@ -223,7 +271,7 @@ impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> Ranked for CStr
     }
 }
 
-impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> Layout for CStrided<(E0, E1), (S0, S1)>
+impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent, O: Order> Layout for ExtStrided<(E0, E1), (S0, S1), O>
 {
     type Index = Ix2;
 
@@ -276,7 +324,7 @@ impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> Layout for CStr
     }
 }
 
-impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent> Strided for CStrided<(E0, E1), (S0, S1)>
+impl<E0: Extent, E1: Extent, S0: StrideExtent, S1: StrideExtent, O: Order> Strided for ExtStrided<(E0, E1), (S0, S1), O>
 {
     fn strides(&self) -> &[isize]
     {
@@ -337,12 +385,13 @@ mod tests
         }
     }
 
+    type RowContig = ExtStrided<(Const<3>, Const<4>), (CStride<4>, CStride<1>), RowMajor>;
+
     #[test]
     fn const_layout_is_statically_contiguous()
     {
-        type L = CStrided<(Const<3>, Const<4>), (CStride<4>, CStride<1>)>;
-        assert_eq!(L::STATIC_C_CONTIGUOUS, Some(true));
-        let l = L::new((Const, Const), (CStride, CStride));
+        assert_eq!(RowContig::STATIC_C_CONTIGUOUS, Some(true));
+        let l = RowContig::new((Const, Const), (CStride, CStride));
         assert_eq!(l.offset(&Dim([2, 3])), 11);
         assert_eq!(l.shape(), &[3, 4]);
         assert!(l.is_contiguous());
@@ -351,7 +400,7 @@ mod tests
     #[test]
     fn ops_agree_with_runtime_layout()
     {
-        let l = CStrided::new((Const::<3>, Const::<4>), (CStride::<4>, CStride::<1>));
+        let l = RowContig::new((Const, Const), (CStride, CStride));
         let r = l.to_strided();
 
         let (collapsed, collapsed_origin) = l.collapse_axis(Axis(1), 2);
@@ -378,7 +427,7 @@ mod tests
         let runtime_reversed = r.clone().reverse_axes();
         assert_same(&reversed, &runtime_reversed, (0, 0));
 
-        let merged = l.clone().merge_axes(Axis(0), Axis(1)).unwrap();
+        let merged = l.merge_axes(Axis(0), Axis(1)).unwrap();
         let runtime_merged = r.clone().merge_axes(Axis(0), Axis(1)).unwrap();
         assert_same(&merged, &runtime_merged, (0, 0));
 
@@ -388,7 +437,7 @@ mod tests
         let runtime_removed = runtime_collapsed.remove_axis(Axis(1));
         assert_same(&removed, &runtime_removed, (collapsed_origin, runtime_collapsed_origin));
 
-        let inserted = l.clone().insert_axis(Axis(1));
+        let inserted = l.insert_axis(Axis(1));
         let runtime_inserted = r.clone().insert_axis(Axis(1));
         assert_same(&inserted, &runtime_inserted, (0, 0));
 
@@ -400,19 +449,27 @@ mod tests
     #[test]
     fn ops_have_the_documented_types()
     {
-        type L = CStrided<(Const<3>, Const<4>), (CStride<4>, CStride<1>)>;
+        type L = ExtStrided<(Const<3>, Const<4>), (CStride<4>, CStride<1>), RowMajor>;
         let l = L::new((Const, Const), (CStride, CStride));
 
-        let (_collapsed, _): (CStrided<(Dyn, Dyn), (CStride<4>, CStride<1>)>, isize) = l.collapse_axis(Axis(1), 2);
-        let (_sliced, _): (CStrided<(Dyn, Dyn), (DynStride, DynStride)>, isize) =
+        // collapse erases lengths, keeps strides and order
+        let (_collapsed, _): (ExtStrided<(Dyn, Dyn), (CStride<4>, CStride<1>), RowMajor>, isize) =
+            l.collapse_axis(Axis(1), 2);
+        // slice erases lengths and strides, keeps order
+        let (_sliced, _): (ExtStrided<(Dyn, Dyn), (DynStride, DynStride), RowMajor>, isize) =
             l.slice_axis(Axis(0), Slice::new(0, None, 2));
-        let (_inverted, _): (CStrided<(Const<3>, Const<4>), (DynStride, DynStride)>, isize) = l.invert_axis(Axis(1));
-        let _swapped: CStrided<(Dyn, Dyn), (DynStride, DynStride)> = l.swap_axes(0, 1);
-        let _permuted: CStrided<(Dyn, Dyn), (DynStride, DynStride)> = l.permute_axes(&Dim([1, 0]));
-        type Reversed = CStrided<(Const<4>, Const<3>), (CStride<1>, CStride<4>)>;
+        // invert erases strides, keeps lengths and order
+        let (_inverted, _): (ExtStrided<(Const<3>, Const<4>), (DynStride, DynStride), RowMajor>, isize) =
+            l.invert_axis(Axis(1));
+        // a runtime permutation erases order too
+        let _swapped: ExtStrided<(Dyn, Dyn), (DynStride, DynStride), AnyOrder> = l.swap_axes(0, 1);
+        let _permuted: ExtStrided<(Dyn, Dyn), (DynStride, DynStride), AnyOrder> = l.permute_axes(&Dim([1, 0]));
+        // reverse swaps the tuples and flips the order
+        type Reversed = ExtStrided<(Const<4>, Const<3>), (CStride<1>, CStride<4>), ColMajor>;
         let _reversed: Reversed = l.reverse_axes();
         assert_eq!(Reversed::STATIC_C_CONTIGUOUS, Some(false));
-        let _merged: CStrided<(Dyn, Dyn), (DynStride, DynStride)> = l.merge_axes(Axis(0), Axis(1)).unwrap();
+        // merge keeps order
+        let _merged: ExtStrided<(Dyn, Dyn), (DynStride, DynStride), RowMajor> = l.merge_axes(Axis(0), Axis(1)).unwrap();
         let _smaller: StridedLayout<Ix1> = l.remove_axis(Axis(1));
         let _larger: StridedLayout<Ix3> = l.insert_axis(Axis(1));
         let _dynamic: StridedLayout<IxDyn> = l.into_dyn();
