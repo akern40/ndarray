@@ -1,0 +1,5 @@
+/target
+/.hegel/
+/docs/node_modules/
+/docs/dist/
+/docs/.astro/

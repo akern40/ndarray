@@ -1,0 +1,93 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.100"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/akern40/ndarray"
+publish = false
+
+[workspace.dependencies]
+hegeltest = "=0.54.0"
+divan = { package = "codspeed-divan-compat", version = "=6.0.0" }
+
+[workspace.lints.rust]
+rust_2018_idioms = { level = "deny", priority = -1 }
+missing_docs = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+unsafe_op_in_unsafe_fn = "deny"
+missing_debug_implementations = "deny"
+unreachable_pub = "deny"
+unnameable_types = "deny"
+unused_qualifications = "deny"
+unused_lifetimes = "deny"
+redundant_lifetimes = "deny"
+explicit_outlives_requirements = "deny"
+let_underscore_drop = "deny"
+meta_variable_misuse = "deny"
+trivial_casts = "deny"
+trivial_numeric_casts = "deny"
+unit_bindings = "deny"
+non_ascii_idents = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+undocumented_unsafe_blocks = "warn"
+multiple_unsafe_ops_per_block = "deny"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+std_instead_of_core = "deny"
+std_instead_of_alloc = "deny"
+alloc_instead_of_core = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+mod_module_files = "deny"
+impl_trait_in_params = "deny"
+clone_on_ref_ptr = "deny"
+mem_forget = "deny"
+get_unwrap = "deny"
+if_then_some_else_none = "deny"
+lossy_float_literal = "deny"
+empty_structs_with_brackets = "deny"
+empty_enum_variants_with_brackets = "deny"
+empty_drop = "deny"
+fn_to_numeric_cast_any = "deny"
+format_push_string = "deny"
+infinite_loop = "deny"
+partial_pub_fields = "deny"
+rest_pat_in_fully_bound_structs = "deny"
+same_name_method = "deny"
+redundant_type_annotations = "deny"
+renamed_function_params = "deny"
+str_to_string = "deny"
+try_err = "deny"
+unnecessary_self_imports = "deny"
+unneeded_field_pattern = "deny"
+wildcard_enum_match_arm = "deny"
+missing_asserts_for_indexing = "deny"
+wildcard_dependencies = "deny"
+negative_feature_names = "deny"
+redundant_feature_names = "deny"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "deny"
+invalid_codeblock_attributes = "deny"
+invalid_html_tags = "deny"
+invalid_rust_codeblocks = "deny"
+bare_urls = "deny"
+unescaped_backticks = "deny"
+redundant_explicit_links = "deny"
+missing_crate_level_docs = "warn"
