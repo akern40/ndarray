@@ -1,7 +1,4 @@
-#![feature(test)]
-
-extern crate test;
-use test::Bencher;
+use bencher::{benchmark_group, benchmark_main, Bencher};
 
 use ndarray::prelude::*;
 
@@ -10,7 +7,6 @@ const X: usize = 64;
 const Y: usize = 16;
 
 #[cfg(feature = "std")]
-#[bench]
 fn clip(bench: &mut Bencher)
 {
     let mut a = Array::linspace(0.0..=127.0, N * 2)
@@ -30,3 +26,9 @@ fn clip(bench: &mut Bencher)
         })
     });
 }
+
+benchmark_group!(
+    benches,
+    clip,
+);
+benchmark_main!(benches);

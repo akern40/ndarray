@@ -1,8 +1,7 @@
-#![feature(test)]
 #![allow(clippy::many_single_char_names, clippy::deref_addrof, clippy::unreadable_literal)]
-extern crate test;
-use test::black_box;
-use test::Bencher;
+
+use bencher::{benchmark_group, benchmark_main, Bencher};
+use std::hint::black_box;
 
 use ndarray::prelude::*;
 
@@ -11,7 +10,6 @@ const X: usize = 64;
 const Y: usize = 16;
 
 #[cfg(feature = "std")]
-#[bench]
 fn map_regular(bench: &mut Bencher)
 {
     let a = Array::linspace(0.0..=127.0, N)
@@ -26,7 +24,6 @@ pub fn double_array(mut a: ArrayViewMut2<'_, f64>)
 }
 
 #[cfg(feature = "std")]
-#[bench]
 fn map_stride_double_f64(bench: &mut Bencher)
 {
     let mut a = Array::linspace(0.0..=127.0, N * 2)
@@ -39,7 +36,6 @@ fn map_stride_double_f64(bench: &mut Bencher)
 }
 
 #[cfg(feature = "std")]
-#[bench]
 fn map_stride_f64(bench: &mut Bencher)
 {
     let a = Array::linspace(0.0..=127.0, N * 2)
@@ -50,7 +46,6 @@ fn map_stride_f64(bench: &mut Bencher)
 }
 
 #[cfg(feature = "std")]
-#[bench]
 fn map_stride_u32(bench: &mut Bencher)
 {
     let a = Array::linspace(0.0..=127.0, N * 2)
@@ -62,7 +57,6 @@ fn map_stride_u32(bench: &mut Bencher)
 }
 
 #[cfg(feature = "std")]
-#[bench]
 fn fold_axis(bench: &mut Bencher)
 {
     let a = Array::linspace(0.0..=127.0, N * 2)
@@ -74,7 +68,6 @@ fn fold_axis(bench: &mut Bencher)
 const MA: usize = 64;
 const MASZ: usize = MA * MA;
 
-#[bench]
 fn map_axis_0(bench: &mut Bencher)
 {
     let a = Array::from_iter(0..MASZ as i32)
@@ -83,7 +76,6 @@ fn map_axis_0(bench: &mut Bencher)
     bench.iter(|| a.map_axis(Axis(0), black_box));
 }
 
-#[bench]
 fn map_axis_1(bench: &mut Bencher)
 {
     let a = Array::from_iter(0..MASZ as i32)
@@ -91,3 +83,15 @@ fn map_axis_1(bench: &mut Bencher)
         .unwrap();
     bench.iter(|| a.map_axis(Axis(1), black_box));
 }
+
+benchmark_group!(
+    benches,
+    map_regular,
+    map_stride_double_f64,
+    map_stride_f64,
+    map_stride_u32,
+    fold_axis,
+    map_axis_0,
+    map_axis_1,
+);
+benchmark_main!(benches);

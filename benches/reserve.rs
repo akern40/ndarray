@@ -1,11 +1,7 @@
-#![feature(test)]
-
-extern crate test;
-use test::Bencher;
+use bencher::{benchmark_group, benchmark_main, Bencher};
 
 use ndarray::prelude::*;
 
-#[bench]
 fn push_reserve(bench: &mut Bencher)
 {
     let ones: Array<f32, _> = array![1f32];
@@ -18,7 +14,6 @@ fn push_reserve(bench: &mut Bencher)
     });
 }
 
-#[bench]
 fn push_no_reserve(bench: &mut Bencher)
 {
     let ones: Array<f32, _> = array![1f32];
@@ -29,3 +24,10 @@ fn push_no_reserve(bench: &mut Bencher)
         }
     });
 }
+
+benchmark_group!(
+    benches,
+    push_reserve,
+    push_no_reserve,
+);
+benchmark_main!(benches);

@@ -1,11 +1,7 @@
-#![feature(test)]
-
-extern crate test;
-use test::Bencher;
+use bencher::{benchmark_group, benchmark_main, Bencher};
 
 use ndarray::prelude::*;
 
-#[bench]
 fn select_axis0(bench: &mut Bencher)
 {
     let a = Array::<f32, _>::zeros((256, 256));
@@ -13,7 +9,6 @@ fn select_axis0(bench: &mut Bencher)
     bench.iter(|| a.select(Axis(0), &selectable));
 }
 
-#[bench]
 fn select_axis1(bench: &mut Bencher)
 {
     let a = Array::<f32, _>::zeros((256, 256));
@@ -21,7 +16,6 @@ fn select_axis1(bench: &mut Bencher)
     bench.iter(|| a.select(Axis(1), &selectable));
 }
 
-#[bench]
 fn select_1d(bench: &mut Bencher)
 {
     let a = Array::<f32, _>::zeros(1024);
@@ -30,3 +24,11 @@ fn select_1d(bench: &mut Bencher)
 
     bench.iter(|| a.select(Axis(0), &selectable));
 }
+
+benchmark_group!(
+    benches,
+    select_axis0,
+    select_axis1,
+    select_1d,
+);
+benchmark_main!(benches);
