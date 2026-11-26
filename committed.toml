@@ -1,0 +1,5 @@
+style = "conventional"
+merge_commit = false
+subject_capitalized = false
+subject_length = 72
+allowed_types = ["feat", "fix", "perf", "refactor", "test", "docs", "build", "ci", "chore"]

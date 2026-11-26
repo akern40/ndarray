@@ -1,0 +1,26 @@
+[tools]
+node = "26.13.1"
+cargo-nextest = "0.9.152"
+committed = "1.1.12"
+release-plz = "0.4.3"
+"cargo:kani-verifier" = { version = "0.68.0", os = ["linux", "macos"] }
+
+[tasks.check]
+run = [
+  "cargo fmt --all --check",
+  "cargo clippy --workspace --all-targets --all-features",
+  "cargo nextest run --workspace --all-features --no-tests=warn",
+  "cargo test --doc --workspace --all-features",
+  "cargo build -p nd-layout --target thumbv7em-none-eabihf",
+]
+
+[tasks.docs]
+dir = "docs"
+run = [
+  "npm ci",
+  "npm run build",
+]
+
+[tasks.hooks]
+quiet = true
+run = "git config core.hooksPath .githooks"
