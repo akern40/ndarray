@@ -3,6 +3,20 @@
 This branch (`next`) is a ground-up rewrite of ndarray as layered crates. It shares no history with
 `master`. Build one trait or struct at a time; never port spike code wholesale.
 
+## Environment
+
+This project uses `mise` for provisioning and managing development tools and commands.
+Checks, docs, and pinned tools can be run via `mise exec --`.
+
+## Reference Material
+
+Since this branch is a ground-up rewrite, it shares no history with `master`. When designing its
+new elements, the following reference sources are important:
+- The original `master` branch, as a reference for what ndarray can do now and how it does it
+- The `rust-ndarray/ndarray` `refactor` branch, as a reference for previous incremental design work
+- The `akern40/ndarray` `layout-spike` branch for some agent-driven experimentation
+- The `akern40/ndarray-design` repository, multiple branches, for design notes and exploration, both human-written and agent-generated
+
 ## Comments and docs are human-only
 
 Agents never write comments of any kind: no `//`, `///`, `//!`, `/* */` in Rust, no `#` lines in
