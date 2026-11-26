@@ -1,8 +1,6 @@
-#![feature(test)]
 #![allow(clippy::many_single_char_names, clippy::deref_addrof, clippy::unreadable_literal)]
 
-extern crate test;
-use test::Bencher;
+use bencher::{benchmark_group, benchmark_main, Bencher};
 
 use num_complex::Complex;
 use num_traits::{Float, One, Zero};
@@ -13,7 +11,6 @@ use ndarray::linalg::general_mat_mul;
 use ndarray::linalg::general_mat_vec_mul;
 use ndarray::LinalgScalar;
 
-#[bench]
 fn gemv_64_64c(bench: &mut Bencher)
 {
     let a = Array::zeros((64, 64));
@@ -25,7 +22,6 @@ fn gemv_64_64c(bench: &mut Bencher)
     });
 }
 
-#[bench]
 fn gemv_64_64f(bench: &mut Bencher)
 {
     let a = Array::zeros((64, 64).f());
@@ -37,7 +33,6 @@ fn gemv_64_64f(bench: &mut Bencher)
     });
 }
 
-#[bench]
 fn gemv_64_32(bench: &mut Bencher)
 {
     let a = Array::zeros((64, 32));
@@ -49,13 +44,11 @@ fn gemv_64_32(bench: &mut Bencher)
     });
 }
 
-#[bench]
 fn cgemm_100(bench: &mut Bencher)
 {
     cgemm_bench::<f32>(100, bench);
 }
 
-#[bench]
 fn zgemm_100(bench: &mut Bencher)
 {
     cgemm_bench::<f64>(100, bench);
@@ -73,3 +66,13 @@ where A: LinalgScalar + Float
         general_mat_mul(Complex::one(), &a, &x, Complex::zero(), &mut y);
     });
 }
+
+benchmark_group!(
+    benches,
+    gemv_64_64c,
+    gemv_64_64f,
+    gemv_64_32,
+    cgemm_100,
+    zgemm_100,
+);
+benchmark_main!(benches);

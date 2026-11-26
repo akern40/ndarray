@@ -1,23 +1,19 @@
-#![feature(test)]
 #![allow(clippy::many_single_char_names, clippy::deref_addrof, clippy::unreadable_literal)]
 
-extern crate test;
+use bencher::{benchmark_group, benchmark_main, Bencher};
 use rawpointer::PointerExt;
-use test::black_box;
-use test::Bencher;
+use std::hint::black_box;
 
 use ndarray::prelude::*;
 use ndarray::Slice;
 use ndarray::{FoldWhile, Zip};
 
-#[bench]
 fn iter_sum_2d_regular(bench: &mut Bencher)
 {
     let a = Array::<i32, _>::zeros((64, 64));
     bench.iter(|| a.iter().sum::<i32>());
 }
 
-#[bench]
 fn iter_sum_2d_cutout(bench: &mut Bencher)
 {
     let a = Array::<i32, _>::zeros((66, 66));
@@ -26,7 +22,6 @@ fn iter_sum_2d_cutout(bench: &mut Bencher)
     bench.iter(|| a.iter().sum::<i32>());
 }
 
-#[bench]
 fn iter_all_2d_cutout(bench: &mut Bencher)
 {
     let a = Array::<i32, _>::zeros((66, 66));
@@ -35,7 +30,6 @@ fn iter_all_2d_cutout(bench: &mut Bencher)
     bench.iter(|| a.iter().all(|&x| x >= 0));
 }
 
-#[bench]
 fn iter_sum_2d_transpose(bench: &mut Bencher)
 {
     let a = Array::<i32, _>::zeros((66, 66));
@@ -44,7 +38,6 @@ fn iter_sum_2d_transpose(bench: &mut Bencher)
 }
 
 #[cfg(feature = "std")]
-#[bench]
 fn iter_filter_sum_2d_u32(bench: &mut Bencher)
 {
     let a = Array::linspace(0.0..=1.0, 256)
@@ -55,7 +48,6 @@ fn iter_filter_sum_2d_u32(bench: &mut Bencher)
 }
 
 #[cfg(feature = "std")]
-#[bench]
 fn iter_filter_sum_2d_f32(bench: &mut Bencher)
 {
     let a = Array::linspace(0.0..=1.0, 256)
@@ -66,7 +58,6 @@ fn iter_filter_sum_2d_f32(bench: &mut Bencher)
 }
 
 #[cfg(feature = "std")]
-#[bench]
 fn iter_filter_sum_2d_stride_u32(bench: &mut Bencher)
 {
     let a = Array::linspace(0.0..=1.0, 256)
@@ -78,7 +69,6 @@ fn iter_filter_sum_2d_stride_u32(bench: &mut Bencher)
 }
 
 #[cfg(feature = "std")]
-#[bench]
 fn iter_filter_sum_2d_stride_f32(bench: &mut Bencher)
 {
     let a = Array::linspace(0.0..=1.0, 256)
@@ -90,7 +80,6 @@ fn iter_filter_sum_2d_stride_f32(bench: &mut Bencher)
 }
 
 #[cfg(feature = "std")]
-#[bench]
 fn iter_rev_step_by_contiguous(bench: &mut Bencher)
 {
     let a = Array::linspace(0.0..=1.0, 512);
@@ -102,7 +91,6 @@ fn iter_rev_step_by_contiguous(bench: &mut Bencher)
 }
 
 #[cfg(feature = "std")]
-#[bench]
 fn iter_rev_step_by_discontiguous(bench: &mut Bencher)
 {
     let mut a = Array::linspace(0.0..=1.0, 1024);
@@ -116,7 +104,6 @@ fn iter_rev_step_by_discontiguous(bench: &mut Bencher)
 
 const ZIPSZ: usize = 10_000;
 
-#[bench]
 fn sum_3_std_zip1(bench: &mut Bencher)
 {
     let a = vec![1; ZIPSZ];
@@ -129,7 +116,6 @@ fn sum_3_std_zip1(bench: &mut Bencher)
     });
 }
 
-#[bench]
 fn sum_3_std_zip2(bench: &mut Bencher)
 {
     let a = vec![1; ZIPSZ];
@@ -143,7 +129,6 @@ fn sum_3_std_zip2(bench: &mut Bencher)
     });
 }
 
-#[bench]
 fn sum_3_std_zip3(bench: &mut Bencher)
 {
     let a = vec![1; ZIPSZ];
@@ -158,7 +143,6 @@ fn sum_3_std_zip3(bench: &mut Bencher)
     });
 }
 
-#[bench]
 fn vector_sum_3_std_zip(bench: &mut Bencher)
 {
     let a = vec![1.; ZIPSZ];
@@ -171,7 +155,6 @@ fn vector_sum_3_std_zip(bench: &mut Bencher)
     });
 }
 
-#[bench]
 fn sum_3_azip(bench: &mut Bencher)
 {
     let a = vec![1; ZIPSZ];
@@ -186,7 +169,6 @@ fn sum_3_azip(bench: &mut Bencher)
     });
 }
 
-#[bench]
 fn sum_3_azip_fold(bench: &mut Bencher)
 {
     let a = vec![1; ZIPSZ];
@@ -201,7 +183,6 @@ fn sum_3_azip_fold(bench: &mut Bencher)
     });
 }
 
-#[bench]
 fn vector_sum_3_azip(bench: &mut Bencher)
 {
     let a = vec![1.; ZIPSZ];
@@ -223,7 +204,6 @@ fn vector_sum3_unchecked(a: &[f64], b: &[f64], c: &mut [f64])
     }
 }
 
-#[bench]
 fn vector_sum_3_zip_unchecked(bench: &mut Bencher)
 {
     let a = vec![1.; ZIPSZ];
@@ -234,7 +214,6 @@ fn vector_sum_3_zip_unchecked(bench: &mut Bencher)
     });
 }
 
-#[bench]
 fn vector_sum_3_zip_unchecked_manual(bench: &mut Bencher)
 {
     let a = vec![1.; ZIPSZ];
@@ -255,7 +234,6 @@ fn vector_sum_3_zip_unchecked_manual(bench: &mut Bencher)
 const ISZ: usize = 16;
 const I2DSZ: usize = 64;
 
-#[bench]
 fn indexed_iter_1d_ix1(bench: &mut Bencher)
 {
     let mut a = Array::<f64, _>::zeros(I2DSZ * I2DSZ);
@@ -271,7 +249,6 @@ fn indexed_iter_1d_ix1(bench: &mut Bencher)
     })
 }
 
-#[bench]
 fn indexed_zip_1d_ix1(bench: &mut Bencher)
 {
     let mut a = Array::<f64, _>::zeros(I2DSZ * I2DSZ);
@@ -287,7 +264,6 @@ fn indexed_zip_1d_ix1(bench: &mut Bencher)
     })
 }
 
-#[bench]
 fn indexed_iter_2d_ix2(bench: &mut Bencher)
 {
     let mut a = Array::<f64, _>::zeros((I2DSZ, I2DSZ));
@@ -302,7 +278,6 @@ fn indexed_iter_2d_ix2(bench: &mut Bencher)
         }
     })
 }
-#[bench]
 fn indexed_zip_2d_ix2(bench: &mut Bencher)
 {
     let mut a = Array::<f64, _>::zeros((I2DSZ, I2DSZ));
@@ -318,7 +293,6 @@ fn indexed_zip_2d_ix2(bench: &mut Bencher)
     })
 }
 
-#[bench]
 fn indexed_iter_3d_ix3(bench: &mut Bencher)
 {
     let mut a = Array::<f64, _>::zeros((ISZ, ISZ, ISZ));
@@ -334,7 +308,6 @@ fn indexed_iter_3d_ix3(bench: &mut Bencher)
     })
 }
 
-#[bench]
 fn indexed_zip_3d_ix3(bench: &mut Bencher)
 {
     let mut a = Array::<f64, _>::zeros((ISZ, ISZ, ISZ));
@@ -350,7 +323,6 @@ fn indexed_zip_3d_ix3(bench: &mut Bencher)
     })
 }
 
-#[bench]
 fn indexed_iter_3d_dyn(bench: &mut Bencher)
 {
     let mut a = Array::<f64, _>::zeros((ISZ, ISZ, ISZ));
@@ -367,7 +339,6 @@ fn indexed_iter_3d_dyn(bench: &mut Bencher)
     })
 }
 
-#[bench]
 fn iter_sum_1d_strided_fold(bench: &mut Bencher)
 {
     let mut a = Array::<u64, _>::ones(10240);
@@ -375,7 +346,6 @@ fn iter_sum_1d_strided_fold(bench: &mut Bencher)
     bench.iter(|| a.iter().sum::<u64>());
 }
 
-#[bench]
 fn iter_sum_1d_strided_rfold(bench: &mut Bencher)
 {
     let mut a = Array::<u64, _>::ones(10240);
@@ -383,14 +353,12 @@ fn iter_sum_1d_strided_rfold(bench: &mut Bencher)
     bench.iter(|| a.iter().rfold(0, |acc, &x| acc + x));
 }
 
-#[bench]
 fn iter_axis_iter_sum(bench: &mut Bencher)
 {
     let a = Array::<f32, _>::zeros((64, 64));
     bench.iter(|| a.axis_iter(Axis(0)).map(|plane| plane.sum()).sum::<f32>());
 }
 
-#[bench]
 fn iter_axis_chunks_1_iter_sum(bench: &mut Bencher)
 {
     let a = Array::<f32, _>::zeros((64, 64));
@@ -401,7 +369,6 @@ fn iter_axis_chunks_1_iter_sum(bench: &mut Bencher)
     });
 }
 
-#[bench]
 fn iter_axis_chunks_5_iter_sum(bench: &mut Bencher)
 {
     let a = Array::<f32, _>::zeros((64, 64));
@@ -419,7 +386,6 @@ pub fn zip_mut_with(data: &Array3<f32>, out: &mut Array3<f32>)
     });
 }
 
-#[bench]
 fn zip_mut_with_cc(b: &mut Bencher)
 {
     let data: Array3<f32> = Array3::zeros((ISZ, ISZ, ISZ));
@@ -427,10 +393,47 @@ fn zip_mut_with_cc(b: &mut Bencher)
     b.iter(|| zip_mut_with(&data, &mut out));
 }
 
-#[bench]
 fn zip_mut_with_ff(b: &mut Bencher)
 {
     let data: Array3<f32> = Array3::zeros((ISZ, ISZ, ISZ).f());
     let mut out = Array3::zeros(data.dim().f());
     b.iter(|| zip_mut_with(&data, &mut out));
 }
+
+benchmark_group!(
+    benches,
+    iter_sum_2d_regular,
+    iter_sum_2d_cutout,
+    iter_all_2d_cutout,
+    iter_sum_2d_transpose,
+    iter_filter_sum_2d_u32,
+    iter_filter_sum_2d_f32,
+    iter_filter_sum_2d_stride_u32,
+    iter_filter_sum_2d_stride_f32,
+    iter_rev_step_by_contiguous,
+    iter_rev_step_by_discontiguous,
+    sum_3_std_zip1,
+    sum_3_std_zip2,
+    sum_3_std_zip3,
+    vector_sum_3_std_zip,
+    sum_3_azip,
+    sum_3_azip_fold,
+    vector_sum_3_azip,
+    vector_sum_3_zip_unchecked,
+    vector_sum_3_zip_unchecked_manual,
+    indexed_iter_1d_ix1,
+    indexed_zip_1d_ix1,
+    indexed_iter_2d_ix2,
+    indexed_zip_2d_ix2,
+    indexed_iter_3d_ix3,
+    indexed_zip_3d_ix3,
+    indexed_iter_3d_dyn,
+    iter_sum_1d_strided_fold,
+    iter_sum_1d_strided_rfold,
+    iter_axis_iter_sum,
+    iter_axis_chunks_1_iter_sum,
+    iter_axis_chunks_5_iter_sum,
+    zip_mut_with_cc,
+    zip_mut_with_ff,
+);
+benchmark_main!(benches);

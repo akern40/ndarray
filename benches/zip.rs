@@ -1,9 +1,8 @@
-#![feature(test)]
-extern crate test;
+use bencher::{benchmark_group, benchmark_main, Bencher};
 use ndarray::s;
 use ndarray::IntoNdProducer;
 use ndarray::{Array3, ShapeBuilder, Zip};
-use test::{black_box, Bencher};
+use std::hint::black_box;
 
 pub fn zip_copy<'a, A, P, Q>(data: P, out: Q)
 where
@@ -44,7 +43,6 @@ pub fn zip_indexed(data: &Array3<f32>, out: &mut Array3<f32>)
 // array size in benchmarks
 const SZ3: (usize, usize, usize) = (100, 110, 100);
 
-#[bench]
 fn zip_cc(b: &mut Bencher)
 {
     let data: Array3<f32> = Array3::zeros(SZ3);
@@ -52,7 +50,6 @@ fn zip_cc(b: &mut Bencher)
     b.iter(|| zip_copy(&data, &mut out));
 }
 
-#[bench]
 fn zip_cf(b: &mut Bencher)
 {
     let data: Array3<f32> = Array3::zeros(SZ3);
@@ -60,7 +57,6 @@ fn zip_cf(b: &mut Bencher)
     b.iter(|| zip_copy(&data, &mut out));
 }
 
-#[bench]
 fn zip_fc(b: &mut Bencher)
 {
     let data: Array3<f32> = Array3::zeros(SZ3.f());
@@ -68,7 +64,6 @@ fn zip_fc(b: &mut Bencher)
     b.iter(|| zip_copy(&data, &mut out));
 }
 
-#[bench]
 fn zip_ff(b: &mut Bencher)
 {
     let data: Array3<f32> = Array3::zeros(SZ3.f());
@@ -76,7 +71,6 @@ fn zip_ff(b: &mut Bencher)
     b.iter(|| zip_copy(&data, &mut out));
 }
 
-#[bench]
 fn zip_indexed_cc(b: &mut Bencher)
 {
     let data: Array3<f32> = Array3::zeros(SZ3);
@@ -84,7 +78,6 @@ fn zip_indexed_cc(b: &mut Bencher)
     b.iter(|| zip_indexed(&data, &mut out));
 }
 
-#[bench]
 fn zip_indexed_ff(b: &mut Bencher)
 {
     let data: Array3<f32> = Array3::zeros(SZ3.f());
@@ -92,7 +85,6 @@ fn zip_indexed_ff(b: &mut Bencher)
     b.iter(|| zip_indexed(&data, &mut out));
 }
 
-#[bench]
 fn slice_zip_cc(b: &mut Bencher)
 {
     let data: Array3<f32> = Array3::zeros(SZ3);
@@ -102,7 +94,6 @@ fn slice_zip_cc(b: &mut Bencher)
     b.iter(|| zip_copy(&data, &mut out));
 }
 
-#[bench]
 fn slice_zip_ff(b: &mut Bencher)
 {
     let data: Array3<f32> = Array3::zeros(SZ3.f());
@@ -112,7 +103,6 @@ fn slice_zip_ff(b: &mut Bencher)
     b.iter(|| zip_copy(&data, &mut out));
 }
 
-#[bench]
 fn slice_split_zip_cc(b: &mut Bencher)
 {
     let data: Array3<f32> = Array3::zeros(SZ3);
@@ -122,7 +112,6 @@ fn slice_split_zip_cc(b: &mut Bencher)
     b.iter(|| zip_copy_split(&data, &mut out));
 }
 
-#[bench]
 fn slice_split_zip_ff(b: &mut Bencher)
 {
     let data: Array3<f32> = Array3::zeros(SZ3.f());
@@ -131,3 +120,18 @@ fn slice_split_zip_ff(b: &mut Bencher)
     let mut out = out.slice_mut(s![1.., 1.., 1..]);
     b.iter(|| zip_copy_split(&data, &mut out));
 }
+
+benchmark_group!(
+    benches,
+    zip_cc,
+    zip_cf,
+    zip_fc,
+    zip_ff,
+    zip_indexed_cc,
+    zip_indexed_ff,
+    slice_zip_cc,
+    slice_zip_ff,
+    slice_split_zip_cc,
+    slice_split_zip_ff,
+);
+benchmark_main!(benches);

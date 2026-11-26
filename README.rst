@@ -9,7 +9,7 @@ or take a look at the `quickstart tutorial <./README-quick-start.md>`_.
 
 __ https://docs.rs/ndarray/
 
-|build_status|_ |crates|_ |matrix-chat|_ |irc|_
+|build_status|_ |crates|_ |codspeed|_ |matrix-chat|_ |irc|_
 
 .. |build_status| image:: https://github.com/rust-ndarray/ndarray/actions/workflows/ci.yaml/badge.svg
    :alt: CI build status
@@ -18,6 +18,10 @@ __ https://docs.rs/ndarray/
 .. |crates| image:: https://img.shields.io/crates/v/ndarray.svg
    :alt: ndarray at crates.io
 .. _crates: https://crates.io/crates/ndarray
+
+.. |codspeed| image:: https://img.shields.io/endpoint?url=https://codspeed.io/badge.json
+   :alt: CodSpeed
+.. _codspeed: https://app.codspeed.io/akern40/ndarray?utm_source=badge
 
 .. |matrix-chat| image:: https://img.shields.io/badge/Matrix-%23rust--sci%3Amatrix.org-lightgrey
    :alt: Matrix chat at #rust-sci:matrix.org
@@ -158,6 +162,18 @@ BLAS on MSRV
 
 Although ``ndarray`` currently maintains an MSRV via `rust-version`, this is separate from the MSRV (either stated or real) of the various BLAS providers.
 So, while ``ndarray`` may be compatible with older toolchains, the BLAS providers it depends on may not be.
+
+Benchmarks
+----------
+
+The benchmarks in ``benches/`` and ``ndarray-rand/benches/`` use the ``bencher`` API
+through `codspeed-bencher-compat <https://crates.io/crates/codspeed-bencher-compat>`_.
+They run on stable Rust with ``cargo bench``, and CI measures them with
+`CodSpeed <https://codspeed.io>`_ on every pull request. To run them with CodSpeed locally::
+
+    cargo install cargo-codspeed --locked
+    cargo codspeed build -m simulation -p ndarray -p ndarray-rand -F ndarray/rayon
+    cargo codspeed run -p ndarray -p ndarray-rand
 
 Recent Changes
 --------------

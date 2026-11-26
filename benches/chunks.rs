@@ -1,12 +1,8 @@
-#![feature(test)]
-
-extern crate test;
-use test::Bencher;
+use bencher::{benchmark_group, benchmark_main, Bencher};
 
 use ndarray::prelude::*;
 use ndarray::NdProducer;
 
-#[bench]
 fn chunk2x2_iter_sum(bench: &mut Bencher)
 {
     let a = Array::<f32, _>::zeros((256, 256));
@@ -19,7 +15,6 @@ fn chunk2x2_iter_sum(bench: &mut Bencher)
     });
 }
 
-#[bench]
 fn chunk2x2_sum(bench: &mut Bencher)
 {
     let a = Array::<f32, _>::zeros((256, 256));
@@ -32,7 +27,6 @@ fn chunk2x2_sum(bench: &mut Bencher)
     });
 }
 
-#[bench]
 fn chunk2x2_sum_get1(bench: &mut Bencher)
 {
     let a = Array::<f32, _>::zeros((256, 256));
@@ -48,7 +42,6 @@ fn chunk2x2_sum_get1(bench: &mut Bencher)
     });
 }
 
-#[bench]
 fn chunk2x2_sum_uget1(bench: &mut Bencher)
 {
     let a = Array::<f32, _>::zeros((256, 256));
@@ -66,7 +59,6 @@ fn chunk2x2_sum_uget1(bench: &mut Bencher)
     });
 }
 
-#[bench]
 #[allow(clippy::identity_op)]
 fn chunk2x2_sum_get2(bench: &mut Bencher)
 {
@@ -85,3 +77,13 @@ fn chunk2x2_sum_get2(bench: &mut Bencher)
         }
     });
 }
+
+benchmark_group!(
+    benches,
+    chunk2x2_iter_sum,
+    chunk2x2_sum,
+    chunk2x2_sum_get1,
+    chunk2x2_sum_uget1,
+    chunk2x2_sum_get2,
+);
+benchmark_main!(benches);

@@ -58,6 +58,56 @@ approx = { workspace = true, default-features = true }
 itertools = { workspace = true }
 ndarray-gen = { workspace = true }
 proptest = { workspace = true }
+bencher = { workspace = true }
+
+[[bench]]
+name = "append"
+harness = false
+
+[[bench]]
+name = "bench1"
+harness = false
+
+[[bench]]
+name = "chunks"
+harness = false
+
+[[bench]]
+name = "construct"
+harness = false
+
+[[bench]]
+name = "gemv_gemm"
+harness = false
+
+[[bench]]
+name = "higher-order"
+harness = false
+
+[[bench]]
+name = "iter"
+harness = false
+
+[[bench]]
+name = "numeric"
+harness = false
+
+[[bench]]
+name = "par_rayon"
+harness = false
+required-features = ["rayon"]
+
+[[bench]]
+name = "reserve"
+harness = false
+
+[[bench]]
+name = "to_shape"
+harness = false
+
+[[bench]]
+name = "zip"
+harness = false
 
 [features]
 default = ["std"]
@@ -109,6 +159,7 @@ rand = { version = "0.9.0", features = ["small_rng"] }
 rand_distr = { version = "0.5.0" }
 itertools = { version = "0.13.0", default-features = false, features = ["use_std"] }
 cblas-sys = { version = "0.1.4", default-features = false }
+bencher = { version = "6.1.0", package = "codspeed-bencher-compat" }
 
 [profile.bench]
 debug = true
