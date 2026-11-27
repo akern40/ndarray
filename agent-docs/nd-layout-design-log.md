@@ -244,3 +244,33 @@ The large gap is expected: `SliceView` performs complete checked affine offset c
 slice access for every element, while `ndarray` uses specialized counted or slice-backed iterators. This is
 evidence for designing cursor/incremental traversal next rather than optimizing isolated random-access
 `get` calls.
+
+Follow-up: `reverse_axes` was implemented as a metadata-only transformation for `StridedLayout` and
+`SliceView`. Reversing axis order reverses shape and strides but preserves the offset set exactly, so the
+cached offset bounds can be reused without recomputation. Because the layout's zero offset is unchanged,
+the backed view's explicit origin is also unchanged. This confirms that axis permutation is independent
+of backing storage and does not require revalidation when it starts from a valid view. Hegel coverage
+checks the algebraic correspondence `reversed[index] == original[reverse(index)]`, involution, bounds,
+and uniqueness for rank-two layouts; fixed tests cover empty and rank-zero layouts. A backed-view test
+checks both observed transposed value order and equivalence of point access under reversed indices.
+
+Reverse-axes benchmark evidence for summing the same 128 by 128 `u64` data in logical row-major order:
+
+| implementation | layout | median |
+|---|---|---:|
+| Rust slice | contiguous | 1.322 µs |
+| `ndarray` 0.17.2 | contiguous | 1.301 µs |
+| `ndarray` 0.17.2 | reversed contiguous axes | 6.249 µs |
+| `ndarray` 0.17.2 | row-strided | 2.104 µs |
+| `ndarray` 0.17.2 | reversed row-strided axes | 8.624 µs |
+| `SliceView` | contiguous | 48.49 µs |
+| `SliceView` | reversed contiguous axes | 47.37 µs |
+| `SliceView` | row-strided | 47.87 µs |
+| `SliceView` | reversed row-strided axes | 47.37 µs |
+
+`SliceView` timing is essentially flat across these layouts because full affine offset computation and
+checked indexing dominate memory effects. Upstream `ndarray` slows substantially for transposed logical
+traversal, but remains much faster than `SliceView`; the gap narrows from roughly 37x contiguous to 7.6x
+for reversed contiguous axes and 5.5x for reversed row-strided axes. This is direct evidence that traversal
+specialization and incremental cursor state are more important than further micro-optimizing the current
+random-access path.

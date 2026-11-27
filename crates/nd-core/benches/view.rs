@@ -1,3 +1,5 @@
+//! Benchmarks for [`SliceView`] performance, mainly iteration.
+
 use divan::Bencher;
 use nd_core::SliceView;
 use nd_layout::{ShapeN, StridedLayout};
@@ -30,6 +32,35 @@ fn row_strided_data_sum(data: &[u64]) -> u64 {
         .filter(|(position, _)| position % ROW_STRIDE < COLS)
         .map(|(_, value)| *value)
         .sum()
+}
+
+fn reversed_axes_values(data: &[u64]) -> Vec<u64> {
+    let (rows, remainder) = data.as_chunks::<COLS>();
+    assert_eq!(remainder.len(), 0);
+
+    let mut values = Vec::new();
+    for column in 0..COLS {
+        for row in rows {
+            let Some(value) = row.get(column) else {
+                unreachable!()
+            };
+            values.push(*value);
+        }
+    }
+    values
+}
+
+fn reversed_row_strided_values(data: &[u64]) -> Vec<u64> {
+    let mut values = Vec::new();
+    for column in 0..COLS {
+        for row in 0..ROWS {
+            let Some(value) = data.get(row * ROW_STRIDE + column) else {
+                unreachable!()
+            };
+            values.push(*value);
+        }
+    }
+    values
 }
 
 fn row_strided_layout() -> StridedLayout<2> {
@@ -110,6 +141,70 @@ fn ndarray_row_strided_iter_sum(bencher: Bencher<'_, '_>) {
 
     bencher.bench_local(|| {
         divan::black_box(view.iter().copied().sum::<u64>());
+    });
+}
+
+#[divan::bench]
+fn slice_view_reversed_axes_iter_sum(bencher: Bencher<'_, '_>) {
+    let data = contiguous_data();
+    let Some(view) = SliceView::try_new(&data, contiguous_layout(), 0) else {
+        unreachable!()
+    };
+    let reversed = view.reverse_axes();
+    let expected = reversed_axes_values(&data);
+    assert_eq!(reversed.iter().copied().collect::<Vec<_>>(), expected);
+    let reversed = divan::black_box(reversed);
+
+    bencher.bench_local(|| {
+        divan::black_box(reversed.iter().copied().sum::<u64>());
+    });
+}
+
+#[divan::bench]
+fn ndarray_reversed_axes_iter_sum(bencher: Bencher<'_, '_>) {
+    let data = contiguous_data();
+    let expected = reversed_axes_values(&data);
+    let Ok(array) = Array2::from_shape_vec((ROWS, COLS), data) else {
+        unreachable!()
+    };
+    let reversed = array.view().reversed_axes();
+    assert_eq!(reversed.iter().copied().collect::<Vec<_>>(), expected);
+    let reversed = divan::black_box(reversed);
+
+    bencher.bench_local(|| {
+        divan::black_box(reversed.iter().copied().sum::<u64>());
+    });
+}
+
+#[divan::bench]
+fn slice_view_reversed_row_strided_iter_sum(bencher: Bencher<'_, '_>) {
+    let data = strided_data();
+    let Some(view) = SliceView::try_new(&data, row_strided_layout(), 0) else {
+        unreachable!()
+    };
+    let reversed = view.reverse_axes();
+    let expected = reversed_row_strided_values(&data);
+    assert_eq!(reversed.iter().copied().collect::<Vec<_>>(), expected);
+    let reversed = divan::black_box(reversed);
+
+    bencher.bench_local(|| {
+        divan::black_box(reversed.iter().copied().sum::<u64>());
+    });
+}
+
+#[divan::bench]
+fn ndarray_reversed_row_strided_iter_sum(bencher: Bencher<'_, '_>) {
+    let data = strided_data();
+    let expected = reversed_row_strided_values(&data);
+    let Ok(strided) = ArrayView2::from_shape((ROWS, COLS).strides((ROW_STRIDE, 1)), &data) else {
+        unreachable!()
+    };
+    let reversed = strided.reversed_axes();
+    assert_eq!(reversed.iter().copied().collect::<Vec<_>>(), expected);
+    let reversed = divan::black_box(reversed);
+
+    bencher.bench_local(|| {
+        divan::black_box(reversed.iter().copied().sum::<u64>());
     });
 }
 
