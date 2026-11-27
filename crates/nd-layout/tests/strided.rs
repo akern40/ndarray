@@ -13,6 +13,11 @@ fn small_strides(tc: &TestCase) -> [isize; 2] {
     ))
 }
 
+fn reversed<T, const N: usize>(mut values: [T; N]) -> [T; N] {
+    values.reverse();
+    values
+}
+
 #[hegel::test]
 fn offset_matches_affine_formula(tc: TestCase) {
     let shape = small_shape(&tc);
@@ -44,6 +49,35 @@ fn invalid_indices_have_no_offset(tc: TestCase) {
     if let Some(layout) = layout {
         tc.assume(!layout.contains(&index));
         assert_eq!(layout.offset(&index), None);
+    }
+}
+
+#[hegel::test]
+fn reverse_axes_preserves_layout_algebra(tc: TestCase) {
+    let shape = small_shape(&tc);
+    let strides = small_strides(&tc);
+    let layout = StridedLayout::try_new(shape, strides);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        let reversed_layout = layout.reverse_axes();
+
+        assert_eq!(
+            reversed_layout.shape().as_array(),
+            &reversed(shape.into_array())
+        );
+        assert_eq!(reversed_layout.strides(), &reversed(strides));
+        assert_eq!(reversed_layout.offset_bounds(), layout.offset_bounds());
+        assert_eq!(reversed_layout.is_unique(), layout.is_unique());
+        assert_eq!(reversed_layout.reverse_axes(), layout);
+
+        for index in reversed_layout.indices() {
+            let original_index = reversed(index);
+            assert_eq!(
+                reversed_layout.offset(&index),
+                layout.offset(&original_index)
+            );
+        }
     }
 }
 
@@ -165,5 +199,30 @@ fn construction_accepts_boundary_strides() {
     }
     if let Some(layout) = negative {
         assert_eq!(layout.offset_bounds(), Some((isize::MIN, 0)));
+    }
+}
+
+#[test]
+fn reverse_axes_reverses_empty_layout_geometry() {
+    let layout = StridedLayout::try_new(ShapeN::new([0, 3]), [5, 7]);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        let reversed_layout = layout.reverse_axes();
+        assert_eq!(reversed_layout.shape().as_array(), &[3, 0]);
+        assert_eq!(reversed_layout.strides(), &[7, 5]);
+        assert_eq!(reversed_layout.offset_bounds(), None);
+        assert_eq!(reversed_layout.indices().count(), 0);
+        assert_eq!(reversed_layout.reverse_axes(), layout);
+    }
+}
+
+#[test]
+fn reverse_axes_is_identity_for_rank_zero() {
+    let layout = StridedLayout::try_new(ShapeN::<0>::new([]), []);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        assert_eq!(layout.reverse_axes(), layout);
     }
 }

@@ -26,6 +26,20 @@ impl<const N: usize> StridedLayout<N> {
     pub const fn strides(&self) -> &[isize; N] {
         &self.strides
     }
+
+    #[must_use]
+    pub fn reverse_axes(self) -> Self {
+        let mut shape = self.shape.into_array();
+        let mut strides = self.strides;
+        shape.reverse();
+        strides.reverse();
+
+        Self {
+            shape: ShapeN::new(shape),
+            strides,
+            offset_bounds: self.offset_bounds,
+        }
+    }
 }
 
 fn compute_offset_bounds<const N: usize>(
