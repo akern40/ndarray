@@ -100,17 +100,14 @@ impl<'a, T, L: Layout> Iterator for SliceViewIter<'a, '_, T, L> {
     }
 }
 
-impl<'a, T, L: AxisOps + Layout> SliceView<'a, T, L> {
-    pub fn reverse_axes(self) -> Option<SliceView<'a, T, L::Transformed>> {
-        let transformed = self.layout.reverse_axes()?;
-        let (layout, translation) = transformed.into_parts();
-        let origin = offset_position(self.origin, translation)?;
-        self.storage.validate_layout(&layout, origin)?;
-        Some(SliceView {
+impl<'a, T, L: AxisOps> SliceView<'a, T, L> {
+    #[must_use]
+    pub fn reverse_axes(self) -> SliceView<'a, T, L::Reversed> {
+        SliceView {
             storage: self.storage,
-            layout,
-            origin,
-        })
+            layout: self.layout.reverse_axes(),
+            origin: self.origin,
+        }
     }
 
     pub fn axis(self, index: usize) -> Option<SliceViewAxis<'a, T, L>> {
@@ -120,15 +117,14 @@ impl<'a, T, L: AxisOps + Layout> SliceView<'a, T, L> {
 }
 
 #[derive(Debug)]
-pub struct SliceViewAxis<'a, T, L: AxisOps + Layout> {
+pub struct SliceViewAxis<'a, T, L: AxisOps> {
     view: SliceView<'a, T, L>,
     axis: Axis,
 }
 
-impl<'a, T, L: AxisOps + Layout> SliceViewAxis<'a, T, L> {
-    pub fn invert(self) -> Option<SliceView<'a, T, L::Transformed>> {
-        let transformed = self.view.layout.invert_axis(self.axis)?;
-        let (layout, translation) = transformed.into_parts();
+impl<'a, T, L: AxisOps> SliceViewAxis<'a, T, L> {
+    pub fn invert(self) -> Option<SliceView<'a, T, L::Inverted>> {
+        let (layout, translation) = self.view.layout.invert_axis(self.axis)?;
         let origin = offset_position(self.view.origin, translation)?;
         self.view.storage.validate_layout(&layout, origin)?;
 

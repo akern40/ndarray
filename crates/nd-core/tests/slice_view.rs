@@ -258,26 +258,17 @@ fn reversed_axes_view_iterates_transposed_values() {
     if let Some(layout) = layout {
         let view = SliceView::try_new(&data, layout, 0);
         assert!(view.is_some());
-        let reversed_layout = layout.reverse_axes();
-        assert!(reversed_layout.is_some());
-        if let Some(reversed_layout) = reversed_layout {
-            let (reversed_layout, translation) = reversed_layout.into_parts();
-            assert_eq!(translation, 0);
-            assert!(SliceView::try_new(&data, reversed_layout, 0).is_some());
-        }
+        assert!(SliceView::try_new(&data, layout.reverse_axes(), 0).is_some());
         if let Some(view) = view {
             let reversed_view = view.reverse_axes();
-            assert!(reversed_view.is_some());
-            if let Some(reversed_view) = reversed_view {
-                assert_eq!(reversed_view.shape().as_array(), &[3, 2]);
-                assert_eq!(reversed_view.layout().strides(), &[1, 3]);
-                let values: Vec<usize> = reversed_view.iter().copied().collect();
-                assert_eq!(values, [0, 3, 1, 4, 2, 5]);
+            assert_eq!(reversed_view.shape().as_array(), &[3, 2]);
+            assert_eq!(reversed_view.layout().strides(), &[1, 3]);
+            let values: Vec<usize> = reversed_view.iter().copied().collect();
+            assert_eq!(values, [0, 3, 1, 4, 2, 5]);
 
-                for index in reversed_view.indices() {
-                    let [first, second] = index;
-                    assert_eq!(reversed_view.get(&index), view.get(&[second, first]));
-                }
+            for index in reversed_view.indices() {
+                let [first, second] = index;
+                assert_eq!(reversed_view.get(&index), view.get(&[second, first]));
             }
         }
     }

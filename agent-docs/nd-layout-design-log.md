@@ -43,9 +43,9 @@ sections current; append significant session notes at the bottom.
   Logical zero is not generally the first storage position, even for positive strides. For nonempty
   rectangular layouts the zero index is valid, so origin must denote a valid storage element position;
   for empty layouts it may denote a slice boundary.
-- Rank-preserving axis operations are by-value. The current probe groups them in `AxisOps` behind one
-  required transformation method and one uniform associated output type. Rank-changing operations remain a
-  separate algebra. A single `WithRank` GAT was explored and rejected.
+- Rank-preserving axis operations are by-value. The current probe groups a closed operation set in
+  `AxisOps` with direct methods and per-operation associated output types. Rank-changing operations remain
+  a separate algebra. A single `WithRank` GAT was explored and rejected.
 - Runtime-axis operations erase static knowledge because the output type cannot depend on the runtime
   axis value. Constant-sized axes need a separate static-axis method set later.
 - Compile-time shapes and strides are important end-state representations, but they are not the first
@@ -463,3 +463,29 @@ stable Rust cannot provide one through a blanket implementation that coexists wi
 A useful next question is whether rank-preserving transformations can normalize into bounded per-axis data
 (permutation plus per-axis affine slicing/inversion state), which would matter for representation closure
 and `no_alloc` composition even if construction-time rewriting itself is cheap.
+
+Follow-up reversal, superseding the one-required-method experiment above: the `AxisTransform` enum and
+required `apply_axis_transform` dispatch were removed after review. The enum did not provide a primitive
+transformation from which the other operations were derived; implementors still wrote each operation inside
+a dispatch. It therefore bought neither expressivity nor speed, while forcing unrelated operations into a
+uniform fallible output signature and making reversal artificially awkward. The composition implementation
+for `TransformedLayout` was bookkeeping glue rather than a new layout representation, so it was removed as
+well.
+
+The retained parts are the validated runtime `Axis`, the grouped but closed `AxisOps` trait, per-operation
+associated output types, direct operation methods, the semantic reindexing equation, and algebraic property
+tests. `reverse_axes` is infallible again in the current probe: reversal is treated as a baseline capability
+of implementing the closed axis-operation trait. `invert_axis` remains fallible because a concrete strided
+representation can be unable to represent the inverted signed stride even though the logical transformation
+exists. Whether that asymmetry is the right contract should be tested against a non-strided layout rather
+than decided abstractly.
+
+Sequencing direction from design review: prioritize recovering ordinary CPU-array capability before GPU
+access traits, and use concrete counterexamples earlier rather than generalizing from `SliceView` alone.
+The next layout evidence should include at least one non-strided layout that can implement `AxisOps` and
+eventually one that cannot. A hierarchical blocked/tiled layout is a promising positive example because
+axis reversal permutes its metadata and inversion can negate both inner and outer strides with a uniform
+translation when shapes divide evenly into blocks. Morton order or gathered/permuted offsets are possible
+negative examples. Sparse formats should not be treated as merely exotic storage: their index-to-position
+map generally depends on sparsity-pattern data, so they entangle layout and storage rather than testing the
+storage boundary alone.

@@ -150,9 +150,7 @@ fn slice_view_reversed_axes_iter_sum(bencher: Bencher<'_, '_>) {
     let Some(view) = SliceView::try_new(&data, contiguous_layout(), 0) else {
         unreachable!()
     };
-    let Some(reversed) = view.reverse_axes() else {
-        unreachable!()
-    };
+    let reversed = view.reverse_axes();
     let expected = reversed_axes_values(&data);
     assert_eq!(reversed.iter().copied().collect::<Vec<_>>(), expected);
     let reversed = divan::black_box(reversed);
@@ -184,9 +182,7 @@ fn slice_view_reversed_row_strided_iter_sum(bencher: Bencher<'_, '_>) {
     let Some(view) = SliceView::try_new(&data, row_strided_layout(), 0) else {
         unreachable!()
     };
-    let Some(reversed) = view.reverse_axes() else {
-        unreachable!()
-    };
+    let reversed = view.reverse_axes();
     let expected = reversed_row_strided_values(&data);
     assert_eq!(reversed.iter().copied().collect::<Vec<_>>(), expected);
     let reversed = divan::black_box(reversed);
