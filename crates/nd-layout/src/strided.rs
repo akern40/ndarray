@@ -209,16 +209,43 @@ fn conservative_uniqueness<const N: usize>(shape: &ShapeN<N>, strides: &[isize; 
         return true;
     }
 
-    let mut effective_axes = 0_usize;
-    for (len, stride) in shape.as_array().iter().zip(strides.iter()) {
-        if *len > 1 {
-            effective_axes += 1;
-            if *stride == 0 {
-                return false;
-            }
+    let mut order = [0_usize; N];
+    for (axis, value) in order.iter_mut().enumerate() {
+        *value = axis;
+    }
+    for sorted in 1..N {
+        let mut axis = sorted;
+        while axis > 0
+            && strides[order[axis]].unsigned_abs() < strides[order[axis - 1]].unsigned_abs()
+        {
+            order.swap(axis, axis - 1);
+            axis -= 1;
         }
     }
-    effective_axes <= 1
+
+    let mut previous_offsets = 0_usize;
+    for axis in order {
+        let len = shape.as_array()[axis];
+        if len <= 1 {
+            continue;
+        }
+
+        let stride = strides[axis].unsigned_abs();
+        if stride <= previous_offsets {
+            return false;
+        }
+        let Some(axis_offsets) = len
+            .checked_sub(1)
+            .and_then(|steps| steps.checked_mul(stride))
+        else {
+            return false;
+        };
+        let Some(next_offsets) = previous_offsets.checked_add(axis_offsets) else {
+            return false;
+        };
+        previous_offsets = next_offsets;
+    }
+    true
 }
 
 impl<const N: usize> AxisOps for StridedLayout<N> {

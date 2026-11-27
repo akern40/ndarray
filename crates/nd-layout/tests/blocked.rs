@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use hegel::{TestCase, generators as gs};
 use nd_layout::{AxisOps, AxisSelection, BlockedLayout, IndexSpace, Layout, ShapeN};
 
@@ -65,6 +67,43 @@ fn row_major_tiles_have_hierarchical_offsets() {
         assert_eq!(layout.offset(&[3, 5]), Some(23));
         assert_eq!(layout.offset(&[4, 0]), None);
         assert_eq!(layout.offset_bounds(), Some((0, 23)));
+        assert!(layout.is_unique());
+    }
+}
+
+#[test]
+fn uniqueness_rejects_zero_or_colliding_level_strides() {
+    let shape = ShapeN::new([4, 6]);
+    let block_shape = ShapeN::new([2, 3]);
+    let zero_inner = BlockedLayout::try_new(shape, block_shape, [12, 6], [0, 1]);
+    let colliding = BlockedLayout::try_new(shape, block_shape, [3, 6], [3, 1]);
+
+    assert!(zero_inner.is_some());
+    if let Some(layout) = zero_inner {
+        assert!(!layout.is_unique());
+    }
+    assert!(colliding.is_some());
+    if let Some(layout) = colliding {
+        assert!(!layout.is_unique());
+    }
+}
+
+#[hegel::test]
+fn reported_uniqueness_implies_no_aliasing(tc: TestCase) {
+    let (shape, block_shape) = small_block_geometry(&tc);
+    let (outer_strides, inner_strides) = small_strides(&tc);
+    let layout = BlockedLayout::try_new(shape, block_shape, outer_strides, inner_strides);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout
+        && layout.is_unique()
+    {
+        let offsets: Vec<isize> = layout
+            .indices()
+            .filter_map(|index| layout.offset(&index))
+            .collect();
+        let unique: HashSet<isize> = offsets.iter().copied().collect();
+        assert_eq!(unique.len(), offsets.len());
     }
 }
 
@@ -72,12 +111,13 @@ fn row_major_tiles_have_hierarchical_offsets() {
 fn offset_matches_hierarchical_formula(tc: TestCase) {
     let (shape, block_shape) = small_block_geometry(&tc);
     let (outer_strides, inner_strides) = small_strides(&tc);
-    let index: [usize; 2] = tc.draw(gs::arrays(gs::integers::<usize>().max_value(8)));
+    let x = tc.draw(gs::integers::<usize>().max_value(shape.as_array()[0] - 1));
+    let y = tc.draw(gs::integers::<usize>().max_value(shape.as_array()[1] - 1));
+    let index = [x, y];
     let layout = BlockedLayout::try_new(shape, block_shape, outer_strides, inner_strides);
 
     assert!(layout.is_some());
     if let Some(layout) = layout {
-        tc.assume(layout.contains(&index));
         let [x, y] = index;
         let [x_block, y_block] = block_shape.into_array();
         let [x_outer, y_outer] = outer_strides;
@@ -195,6 +235,7 @@ fn invert_axis_preserves_absolute_positions(tc: TestCase) {
         if let Some((inverted, translation)) = inverted {
             assert_eq!(inverted.shape().as_array(), shape.as_array());
             assert_eq!(inverted.block_shape().as_array(), block_shape.as_array());
+            assert_eq!(inverted.is_unique(), layout.is_unique());
 
             let axis_len = shape.as_array()[axis];
             for index in inverted.indices() {

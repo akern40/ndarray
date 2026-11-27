@@ -161,6 +161,70 @@ fn reported_uniqueness_implies_no_aliasing(tc: TestCase) {
 }
 
 #[test]
+fn uniqueness_accepts_strictly_separated_strides() {
+    let cases = [
+        ([2, 3], [3, 1]),
+        ([2, 3], [1, 2]),
+        ([2, 3], [4, 1]),
+        ([2, 3], [5, 2]),
+        ([2, 3], [-3, -1]),
+        ([1, 3], [0, 1]),
+    ];
+
+    for (shape, strides) in cases {
+        let layout = StridedLayout::try_new(ShapeN::new(shape), strides);
+        assert!(layout.is_some());
+        if let Some(layout) = layout {
+            assert!(layout.is_unique());
+        }
+    }
+}
+
+#[test]
+fn uniqueness_rejects_overlapping_strides() {
+    let cases = [
+        ([2, 3], [0, 1]),
+        ([2, 3], [2, 1]),
+        ([2, 2], [1, 1]),
+        ([2, 3], [-2, 1]),
+    ];
+
+    for (shape, strides) in cases {
+        let layout = StridedLayout::try_new(ShapeN::new(shape), strides);
+        assert!(layout.is_some());
+        if let Some(layout) = layout {
+            assert!(!layout.is_unique());
+        }
+    }
+}
+
+#[test]
+fn uniqueness_can_be_conservative() {
+    let layout = StridedLayout::try_new(ShapeN::new([2, 3]), [3, 2]);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        assert!(!layout.is_unique());
+        let offsets: Vec<isize> = layout
+            .indices()
+            .filter_map(|index| layout.offset(&index))
+            .collect();
+        let unique: HashSet<isize> = offsets.iter().copied().collect();
+        assert_eq!(unique.len(), offsets.len());
+    }
+}
+
+#[test]
+fn uniqueness_handles_boundary_stride_magnitudes() {
+    let layout = StridedLayout::try_new(ShapeN::new([2, 2]), [isize::MIN, 1]);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        assert!(layout.is_unique());
+    }
+}
+
+#[test]
 fn empty_layout_has_no_bounds_or_indices() {
     let layout = StridedLayout::try_new(ShapeN::new([0, 3]), [isize::MIN, isize::MAX]);
 
@@ -359,6 +423,7 @@ fn invert_axis_preserves_absolute_positions(tc: TestCase) {
         if let Some(inverted) = inverted {
             let (inverted, translation) = inverted;
             assert_eq!(inverted.shape().as_array(), shape.as_array());
+            assert_eq!(inverted.is_unique(), layout.is_unique());
 
             let axis_len = shape.as_array()[axis];
             for index in inverted.indices() {

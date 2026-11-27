@@ -147,6 +147,69 @@ fn unchecked_offset<const N: usize>(layout: &BlockedLayout<N>, index: &[usize; N
     offset
 }
 
+fn conservative_uniqueness<const N: usize>(layout: &BlockedLayout<N>) -> bool {
+    if layout.shape.as_array().contains(&0) {
+        return true;
+    }
+
+    let mut inner_used = [false; N];
+    let mut outer_used = [false; N];
+    let mut previous_offsets = 0_usize;
+
+    for _ in 0..N {
+        for _ in 0..2 {
+            let mut next_axis = None;
+            for axis in 0..N {
+                if !inner_used[axis] {
+                    let magnitude = layout.inner_strides[axis].unsigned_abs();
+                    if next_axis.is_none_or(|(best, _, _)| magnitude < best) {
+                        next_axis = Some((magnitude, false, axis));
+                    }
+                }
+                if !outer_used[axis] {
+                    let magnitude = layout.outer_strides[axis].unsigned_abs();
+                    if next_axis.is_none_or(|(best, _, _)| magnitude < best) {
+                        next_axis = Some((magnitude, true, axis));
+                    }
+                }
+            }
+
+            let Some((stride, outer, axis)) = next_axis else {
+                return false;
+            };
+            if outer {
+                outer_used[axis] = true;
+            } else {
+                inner_used[axis] = true;
+            }
+
+            let len = if outer {
+                layout.shape.as_array()[axis] / layout.block_shape.as_array()[axis]
+            } else {
+                layout.block_shape.as_array()[axis]
+            };
+            if len <= 1 {
+                continue;
+            }
+            if stride <= previous_offsets {
+                return false;
+            }
+            let Some(axis_offsets) = len
+                .checked_sub(1)
+                .and_then(|steps| steps.checked_mul(stride))
+            else {
+                return false;
+            };
+            let Some(next_offsets) = previous_offsets.checked_add(axis_offsets) else {
+                return false;
+            };
+            previous_offsets = next_offsets;
+        }
+    }
+
+    true
+}
+
 impl<const N: usize> AxisOps for BlockedLayout<N> {
     type Reversed = Self;
     type Inverted = Self;
@@ -266,7 +329,7 @@ impl<const N: usize> Layout for BlockedLayout<N> {
     }
 
     fn is_unique(&self) -> bool {
-        matches!(self.shape.size(), Some(0 | 1))
+        conservative_uniqueness(self)
     }
 
     fn offsets(&self) -> Self::Offsets<'_> {
