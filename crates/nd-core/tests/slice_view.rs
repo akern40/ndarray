@@ -239,6 +239,30 @@ fn positive_stride_can_skip_backing_positions() {
 }
 
 #[test]
+fn reversed_axes_view_iterates_transposed_values() {
+    let data = [0, 1, 2, 3, 4, 5];
+    let layout = StridedLayout::try_new(ShapeN::new([2, 3]), [3, 1]);
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        let view = SliceView::try_new(&data, layout, 0);
+        assert!(view.is_some());
+        assert!(SliceView::try_new(&data, layout.reverse_axes(), 0).is_some());
+        if let Some(view) = view {
+            let reversed_view = view.reverse_axes();
+            assert_eq!(reversed_view.shape().as_array(), &[3, 2]);
+            assert_eq!(reversed_view.layout().strides(), &[1, 3]);
+            let values: Vec<usize> = reversed_view.iter().copied().collect();
+            assert_eq!(values, [0, 3, 1, 4, 2, 5]);
+
+            for index in reversed_view.indices() {
+                let [first, second] = index;
+                assert_eq!(reversed_view.get(&index), view.get(&[second, first]));
+            }
+        }
+    }
+}
+
+#[test]
 fn constructor_validates_explicit_origin() {
     let data = [10, 20, 30];
     let positive = StridedLayout::try_new(ShapeN::new([3]), [1]);

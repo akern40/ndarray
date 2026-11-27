@@ -1,4 +1,4 @@
-use nd_layout::{IndexSpace, Layout, Ranked};
+use nd_layout::{IndexSpace, Layout, Ranked, StridedLayout};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SliceView<'a, T, L: Layout> {
@@ -64,6 +64,17 @@ impl<'a, T, L: Layout> SliceView<'a, T, L> {
     #[must_use]
     pub const fn layout(&self) -> &L {
         &self.layout
+    }
+}
+
+impl<T, const N: usize> SliceView<'_, T, StridedLayout<N>> {
+    #[must_use]
+    pub fn reverse_axes(self) -> Self {
+        Self {
+            data: self.data,
+            layout: self.layout.reverse_axes(),
+            origin: self.origin,
+        }
     }
 }
 
