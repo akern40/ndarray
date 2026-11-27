@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use hegel::{TestCase, generators as gs};
-use nd_layout::{Axis, AxisOps, AxisSelection, IndexSpace, Layout, Shape, ShapeN, StridedLayout};
+use nd_layout::{AxisOps, AxisSelection, IndexSpace, Layout, Shape, ShapeN, StridedLayout};
 
 fn small_shape(tc: &TestCase) -> ShapeN<2> {
     ShapeN::new(tc.draw(gs::arrays(gs::integers::<usize>().max_value(3))))
@@ -429,10 +429,7 @@ fn invert_axis_uses_fluent_axis_selection() {
 }
 
 #[test]
-fn invalid_axes_cannot_be_constructed() {
-    assert_eq!(Axis::new(2, 2), None);
-    assert_eq!(Axis::new(0, 0), None);
-
+fn invalid_axes_cannot_be_selected() {
     let layout = StridedLayout::try_new(ShapeN::new([2, 3]), [3, 1]);
     assert!(layout.is_some());
     if let Some(layout) = layout {
@@ -441,14 +438,11 @@ fn invalid_axes_cannot_be_constructed() {
 }
 
 #[test]
-fn axis_rank_must_match_the_layout_rank() {
-    let axis = Axis::new(3, 1);
-    assert!(axis.is_some());
+fn invert_axis_rejects_out_of_range_axes() {
     let layout = StridedLayout::try_new(ShapeN::new([2, 3]), [3, 1]);
     assert!(layout.is_some());
-
-    if let (Some(axis), Some(layout)) = (axis, layout) {
-        assert!(layout.invert_axis(axis).is_none());
+    if let Some(layout) = layout {
+        assert!(layout.invert_axis(2).is_none());
     }
 }
 

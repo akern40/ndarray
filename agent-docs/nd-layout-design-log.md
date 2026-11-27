@@ -489,3 +489,11 @@ translation when shapes divide evenly into blocks. Morton order or gathered/perm
 negative examples. Sparse formats should not be treated as merely exotic storage: their index-to-position
 map generally depends on sparsity-pattern data, so they entangle layout and storage rather than testing the
 storage boundary alone.
+
+Follow-up on axis values: the public rank-carrying `Axis` type was removed. It did not actually prove that
+an axis was valid for a particular target; only the consuming selector established that, while direct
+operations still needed runtime validation. Axis-local operations therefore use `usize` internally, and
+`axis(index)` is the validating fluent boundary. A separate validated axis token can be reconsidered if a
+future consumer needs to reuse validation evidence across operations. This does not change the intended
+user-facing direction for axis-local operations: `axis(usize).slice(..)`, `axis(usize).collapse(..)`, and
+similar selectors rather than free-standing axis newtypes.

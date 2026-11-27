@@ -1,4 +1,4 @@
-use nd_layout::{Axis, AxisOps, IndexSpace, Layout, Ranked};
+use nd_layout::{AxisOps, IndexSpace, Layout, Ranked};
 
 use crate::storage::{SliceStorage, offset_position};
 
@@ -111,15 +111,17 @@ impl<'a, T, L: AxisOps> SliceView<'a, T, L> {
     }
 
     pub fn axis(self, index: usize) -> Option<SliceViewAxis<'a, T, L>> {
-        let axis = Axis::new(self.layout.shape().ndim(), index)?;
-        Some(SliceViewAxis { view: self, axis })
+        (index < self.layout.shape().ndim()).then(|| SliceViewAxis {
+            view: self,
+            axis: index,
+        })
     }
 }
 
 #[derive(Debug)]
 pub struct SliceViewAxis<'a, T, L: AxisOps> {
     view: SliceView<'a, T, L>,
-    axis: Axis,
+    axis: usize,
 }
 
 impl<'a, T, L: AxisOps> SliceViewAxis<'a, T, L> {

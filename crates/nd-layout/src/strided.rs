@@ -1,4 +1,4 @@
-use crate::{Axis, AxisOps, ConstRank, IndexSpace, Layout, Ranked, RowMajorIndices, Shape, ShapeN};
+use crate::{AxisOps, ConstRank, IndexSpace, Layout, Ranked, RowMajorIndices, Shape, ShapeN};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StridedLayout<const N: usize> {
@@ -238,25 +238,24 @@ impl<const N: usize> AxisOps for StridedLayout<N> {
         }
     }
 
-    fn invert_axis(self, axis: Axis) -> Option<(Self, isize)> {
-        if axis.ndim() != N {
+    fn invert_axis(self, axis: usize) -> Option<(Self, isize)> {
+        if axis >= N {
             return None;
         }
 
-        let axis_index = axis.index();
-        let len = self.shape.as_array()[axis_index];
+        let len = self.shape.as_array()[axis];
         if len <= 1 || self.shape.as_array().contains(&0) {
             return Some((self, 0));
         }
 
-        let stride = self.strides[axis_index];
+        let stride = self.strides[axis];
         let steps = len.checked_sub(1)?;
         let steps = isize::try_from(steps).ok()?;
         let translation = steps.checked_mul(stride)?;
         let inverted_stride = stride.checked_neg()?;
 
         let mut strides = self.strides;
-        strides[axis_index] = inverted_stride;
+        strides[axis] = inverted_stride;
         let offset_bounds = Some(compute_offset_bounds(&self.shape, &strides)?);
 
         Some((

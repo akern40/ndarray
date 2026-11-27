@@ -7,57 +7,29 @@ pub trait AxisOps: Layout {
     #[must_use]
     fn reverse_axes(self) -> Self::Reversed;
 
-    fn invert_axis(self, axis: Axis) -> Option<(Self::Inverted, isize)>;
+    fn invert_axis(self, axis: usize) -> Option<(Self::Inverted, isize)>;
 
     fn axis(self, index: usize) -> Option<AxisSelection<Self>>
     where
         Self: Sized,
     {
-        let axis = Axis::new(self.shape().ndim(), index)?;
-        Some(AxisSelection::new(self, axis))
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Axis {
-    ndim: usize,
-    index: usize,
-}
-
-impl Axis {
-    #[must_use]
-    pub const fn new(ndim: usize, index: usize) -> Option<Self> {
-        if index < ndim {
-            Some(Self { ndim, index })
-        } else {
-            None
-        }
-    }
-
-    #[must_use]
-    pub const fn ndim(self) -> usize {
-        self.ndim
-    }
-
-    #[must_use]
-    pub const fn index(self) -> usize {
-        self.index
+        (index < self.shape().ndim()).then(|| AxisSelection::new(self, index))
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct AxisSelection<T> {
     target: T,
-    axis: Axis,
+    axis: usize,
 }
 
 impl<T> AxisSelection<T> {
-    const fn new(target: T, axis: Axis) -> Self {
+    const fn new(target: T, axis: usize) -> Self {
         Self { target, axis }
     }
 
     #[must_use]
-    pub const fn axis(&self) -> Axis {
+    pub const fn axis(&self) -> usize {
         self.axis
     }
 }
