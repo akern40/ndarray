@@ -24,19 +24,3 @@ pub trait Ranked {
     #[must_use]
     fn ndim(&self) -> usize;
 }
-
-impl<const N: usize> Ranked for [usize; N] {
-    type NDim = ConstRank<N>;
-
-    fn ndim(&self) -> usize {
-        N
-    }
-}
-
-impl Ranked for [usize] {
-    type NDim = DynRank;
-
-    fn ndim(&self) -> usize {
-        self.len()
-    }
-}
