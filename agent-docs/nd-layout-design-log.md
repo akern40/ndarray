@@ -208,3 +208,39 @@ layout's associated index type now determines the index accepted by `get`, and t
 and `IndexSpace` to its layout. Generic `get` accepts `&L::Index`: passing the associated index by value is
 not generally appropriate because the core operation only borrows it and future index types may not be cheap
 to move or copy. Ergonomic fixed-rank value indexing can be layered on later.
+
+Follow-up: immutable logical iteration was added to `SliceView`. It traverses canonical row-major logical
+indices, recomputes checked offsets for each index, and uses checked slice access. The private `get_valid`
+helper is now the clearest future unchecked-access boundary: it represents access by an index already known
+to be valid. It is currently safe and checked; incorrect layout implementations can cause panics but not
+memory unsafety. Element references use the backing slice lifetime and can outlive the view object. The
+opaque `impl Iterator` return hides capabilities such as exact size or double-ended iteration, so named or
+associated iterator types may become necessary when those capabilities matter.
+
+Follow-up: `reverse_axes` remains the preferred first axis operation because it changes logical index order
+without changing storage, rank, offset bounds, uniqueness, or logical-zero origin. It is the smallest useful
+structural transformation of an array-like object and can now be validated through observed iteration order,
+not just layout algebra. It should expose how transformations compose with backed views before ownership,
+mutability, or more origin-sensitive operations are designed.
+
+Follow-up: benchmarking should be established incrementally alongside functionality. A benchmark should be
+small, compare equivalent logical semantics rather than implementation names, keep construction outside the
+measured region, assert correctness outside the measured region, and use `black_box` on benchmark inputs or
+views when the intended measurement is runtime-opaque access. Comparison against upstream `ndarray` is
+useful even when the new implementation is expected to lose; the purpose is to measure the size and shape of
+the gap, not to require parity at every step.
+
+Initial local wall-clock baseline for summing a 128 by 128 `u64` array in logical row-major order:
+
+| implementation | layout | median |
+|---|---|---:|
+| Rust slice | contiguous | 1.322 µs |
+| `ndarray` 0.17.2 | contiguous | 1.291 µs |
+| `ndarray` 0.17.2 | row-strided | 2.103 µs |
+| `SliceView` | contiguous | 50.08 µs |
+| `SliceView` | row-strided | 48.52 µs |
+
+The large gap is expected: `SliceView` performs complete checked affine offset calculation and checked
+slice access for every element, while `ndarray` uses specialized counted or slice-backed iterators. This is
+evidence for designing cursor/incremental traversal next rather than optimizing isolated random-access
+`get` calls.

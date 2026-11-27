@@ -12,6 +12,12 @@ nd-layout = { path = "../nd-layout" }
 
 [dev-dependencies]
 hegeltest.workspace = true
+divan.workspace = true
+ndarray = "=0.17.2"
+
+[[bench]]
+name = "view"
+harness = false
 
 [lints]
 workspace = true
