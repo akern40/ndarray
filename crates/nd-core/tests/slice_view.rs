@@ -1,6 +1,8 @@
 use hegel::{TestCase, generators as gs};
 use nd_core::SliceView;
-use nd_layout::{IndexSpace, Layout, Ranked, RowMajorIndices, Shape, ShapeN, StridedLayout};
+use nd_layout::{
+    IndexSpace, Layout, LogicalOffsets, Ranked, RowMajorIndices, Shape, ShapeN, StridedLayout,
+};
 
 fn small_shape(tc: &TestCase) -> ShapeN<2> {
     ShapeN::new(tc.draw(gs::arrays(gs::integers::<usize>().max_value(3))))
@@ -55,6 +57,11 @@ impl IndexSpace for SquaredLayout {
 }
 
 impl Layout for SquaredLayout {
+    type Offsets<'a>
+        = LogicalOffsets<'a, SquaredLayout>
+    where
+        Self: 'a;
+
     fn offset(&self, index: &Self::Index) -> Option<isize> {
         if !self.contains(index) {
             return None;
@@ -73,6 +80,10 @@ impl Layout for SquaredLayout {
 
     fn is_unique(&self) -> bool {
         true
+    }
+
+    fn offsets(&self) -> Self::Offsets<'_> {
+        LogicalOffsets::new(self)
     }
 }
 

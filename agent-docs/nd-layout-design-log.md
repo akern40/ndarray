@@ -274,3 +274,38 @@ traversal, but remains much faster than `SliceView`; the gap narrows from roughl
 for reversed contiguous axes and 5.5x for reversed row-strided axes. This is direct evidence that traversal
 specialization and incremental cursor state are more important than further micro-optimizing the current
 random-access path.
+
+Follow-up: upstream ndarray iteration provided two important reference points. First, logically contiguous
+arrays iterate through the backing slice directly. Second, otherwise iteration uses a counted cursor whose
+`fold` special-cases the innermost axis. Since operations such as `sum` are fold-driven, an iterator with
+only an efficient `next` implementation would miss much of the relevant performance.
+
+The first new traversal design therefore made offset iteration a layout-level counterpart to logical index
+iteration: `Layout` now has an associated `Offsets` iterator in logical order. `LogicalOffsets` is the dumb,
+obviously correct implementation for arbitrary layouts, checking the offset for every enumerated logical
+index. `StridedOffsets` is the fast strided implementation, advancing logical index and offset together.
+Its `fold` implementation consumes the innermost axis in a tight loop and only performs carry/reset work at
+row boundaries. `SliceView::iter` now consumes layout offsets rather than logical indices. Its internal
+valid-position path can use wrapping origin-plus-offset arithmetic because constructor validation has
+already established bounds for every valid offset; memory access itself remains checked. Incorrect layout
+implementations can still cause wrong values or panics, but not memory unsafety.
+
+Benchmarks after the strided cursor and innermost-axis fold, again for 128 by 128 `u64` logical summation:
+
+| implementation | layout | median |
+|---|---|---:|
+| Rust slice | contiguous | 1.322 µs |
+| `ndarray` 0.17.2 | contiguous | 1.343 µs |
+| `ndarray` 0.17.2 | reversed contiguous axes | 6.499 µs |
+| `ndarray` 0.17.2 | row-strided | 2.124 µs |
+| `ndarray` 0.17.2 | reversed row-strided axes | 8.749 µs |
+| `SliceView` | contiguous | 6.749 µs |
+| `SliceView` | reversed contiguous axes | 6.999 µs |
+| `SliceView` | row-strided | 6.958 µs |
+| `SliceView` | reversed row-strided axes | 8.874 µs |
+
+This reduced `SliceView` logical iteration from roughly 48 µs to 7-9 µs. The remaining contiguous gap is
+about 5x because upstream can use a backing-slice iterator, while `SliceView` still performs per-element
+offset-to-position conversion and checked access. In reversed layouts the implementations are nearly at
+parity because strided memory traversal dominates. The next clear capability is a layout-level contiguous
+forward-offset query so `nd-core` can safely select a backing-slice fast path without unsafe code.

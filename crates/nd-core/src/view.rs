@@ -39,17 +39,12 @@ impl<'a, T, L: Layout> SliceView<'a, T, L> {
     pub fn iter(&self) -> impl Iterator<Item = &'a T> + '_ {
         let view = self;
         self.layout
-            .indices()
-            .map(move |index| view.get_valid(&index))
+            .offsets()
+            .map(move |offset| view.get_valid_offset(offset))
     }
 
-    fn get_valid(&self, index: &L::Index) -> &'a T {
-        let Some(offset) = self.layout.offset(index) else {
-            unreachable!()
-        };
-        let Some(position) = offset_position(self.origin, offset) else {
-            unreachable!()
-        };
+    fn get_valid_offset(&self, offset: isize) -> &'a T {
+        let position = self.origin.wrapping_add_signed(offset);
         let Some(value) = self.data.get(position) else {
             unreachable!()
         };
