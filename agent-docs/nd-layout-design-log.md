@@ -533,3 +533,47 @@ complete-block restriction is also crucial to the current closure result: slicin
 partial blocks and is unlikely to remain closed without additional window metadata or a more general block
 representation. Thus this is a positive probe for reversal/inversion only, not evidence that the final
 blocked layout is closed under the broader structural algebra.
+
+Mutable borrowed-slice probe: `SliceViewMut<'a, T, L>` is now a concrete sibling of `SliceView`, not a
+generalization over access traits. This was deliberate. A slice supports every access capability, so it
+cannot discriminate the eventual `RefAccess`/`SliceAccess` boundary; mutable slices instead provide evidence
+about lifetimes, aliasing, ownership movement, and traversal. Public access traits should still wait for a
+second storage family such as paged storage.
+
+Mutable construction now rejects nonempty layouts unless `Layout::is_unique` reports uniqueness. Empty
+layouts remain constructible because they access no positions. Since uniqueness is conservative, this can
+reject some mathematically unique layouts; the constructor requirement is provable uniqueness, not a claim
+that the query is exact. Zero strides remain acceptable on unit axes because they cannot create aliasing
+between distinct valid indices.
+
+To make ordinary mutable arrays constructible, strided uniqueness now uses the upstream-inspired
+superincreasing-stride test: sort effective axes by unsigned stride magnitude and require each stride to be
+strictly greater than the sum of maximum contributions from all smaller-stride axes. This accepts ordinary
+contiguous and strictly separated strided layouts, rejects zero or colliding strides, uses unsigned magnitudes
+so `isize::MIN` does not overflow an absolute-value calculation, and remains conservative rather than exact.
+Blocked layouts use the same idea after decomposing each axis into quotient and remainder digit axes. That
+`2N` pseudo-axis analysis accepts the canonical complete-block example and still requires no allocation.
+This duplication suggests a possible future layout capability for exposing weighted digit decompositions,
+but it is too early to design that trait.
+
+`SliceViewMut` currently provides checked `get`, reborrowed `get_mut`, immutable logical iteration,
+forward-contiguous shared/mutable slice access, forward contiguous mutable iteration, reverse/invert axis
+operations, and consuming conversion into an immutable `SliceView`. Random mutable access is deliberately
+reborrowed from `&mut self`; it cannot return `&'a mut T`, because repeated calls through the same index
+could otherwise produce aliasing mutable references even when the layout is unique. Backing-lifetime mutable
+access must come from consuming or uniquely decomposing the view, not merely borrowing it.
+
+No unsafe code was needed for this slice of functionality. All random access is checked, and contiguous
+mutable traversal uses safe slice iterators. General non-contiguous mutable iteration remains deferred: it
+would either need unsafe reference construction that trusts layout bounds and uniqueness, or pay for runtime
+checking/reordering. That is now the clearest future demand-driven unsafe-boundary decision. If unsafe code
+trusts `is_unique`, correctness of that method becomes memory-safety evidence and probably requires an
+explicit trusted-layout contract rather than merely a safe conservative query.
+
+The implementation duplication between immutable and mutable views is useful evidence rather than an
+accident to hide immediately. Immutable slice storage can return backing-lifetime shared references because
+`&'a [T]` is copyable; mutable slice storage can only reborrow shared or mutable references through `&self`
+or `&mut self` unless the view is consumed. A lowest-common-denominator access trait could erase the stronger
+immutable lifetime, so access traits need evidence from ownership and consuming operations as well as storage
+capabilities. Structural transformations did not need access traits: moving the non-copy mutable storage
+through reverse/invert worked directly, and `nd-layout` remained unaware of mutability or storage.

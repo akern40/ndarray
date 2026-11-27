@@ -28,6 +28,43 @@ impl<'a, T> SliceStorage<'a, T> {
     }
 }
 
+#[derive(Debug)]
+pub(crate) struct SliceStorageMut<'a, T> {
+    data: &'a mut [T],
+}
+
+impl<'a, T> SliceStorageMut<'a, T> {
+    pub(crate) const fn new(data: &'a mut [T]) -> Self {
+        Self { data }
+    }
+
+    pub(crate) fn validate_layout<L: Layout>(&self, layout: &L, origin: usize) -> Option<()> {
+        validate_layout(self.data, layout, origin)
+    }
+
+    pub(crate) fn get(&self, position: usize) -> Option<&T> {
+        self.data.get(position)
+    }
+
+    pub(crate) fn get_mut(&mut self, position: usize) -> Option<&mut T> {
+        self.data.get_mut(position)
+    }
+
+    pub(crate) fn slice(&self, start: usize, len: usize) -> Option<&[T]> {
+        let end = start.checked_add(len)?;
+        self.data.get(start..end)
+    }
+
+    pub(crate) fn slice_mut(&mut self, start: usize, len: usize) -> Option<&mut [T]> {
+        let end = start.checked_add(len)?;
+        self.data.get_mut(start..end)
+    }
+
+    pub(crate) fn into_shared(self) -> SliceStorage<'a, T> {
+        SliceStorage::new(self.data)
+    }
+}
+
 fn validate_layout<T, L: Layout>(data: &[T], layout: &L, origin: usize) -> Option<()> {
     validate_nonzero_axis_product(layout.shape())?;
 
