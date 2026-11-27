@@ -17,12 +17,12 @@ pub trait IndexSpace {
 }
 
 #[derive(Debug, Clone)]
-pub struct ShapeNIndices<'a, const N: usize> {
+pub struct RowMajorIndices<'a, const N: usize> {
     shape: &'a ShapeN<N>,
     next: Option<[usize; N]>,
 }
 
-impl<'a, const N: usize> ShapeNIndices<'a, N> {
+impl<'a, const N: usize> RowMajorIndices<'a, N> {
     fn new(shape: &'a ShapeN<N>) -> Self {
         let next = shape
             .as_array()
@@ -33,7 +33,7 @@ impl<'a, const N: usize> ShapeNIndices<'a, N> {
     }
 }
 
-impl<const N: usize> Iterator for ShapeNIndices<'_, N> {
+impl<const N: usize> Iterator for RowMajorIndices<'_, N> {
     type Item = [usize; N];
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -61,7 +61,7 @@ impl<const N: usize> IndexSpace for ShapeN<N> {
     type Shape = Self;
     type Index = [usize; N];
     type Indices<'a>
-        = ShapeNIndices<'a, N>
+        = RowMajorIndices<'a, N>
     where
         Self: 'a;
 
@@ -77,6 +77,6 @@ impl<const N: usize> IndexSpace for ShapeN<N> {
     }
 
     fn indices(&self) -> Self::Indices<'_> {
-        ShapeNIndices::new(self)
+        RowMajorIndices::new(self)
     }
 }

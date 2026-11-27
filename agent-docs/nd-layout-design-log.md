@@ -7,8 +7,10 @@ sections current; append significant session notes at the bottom.
 
 - `nd-layout` owns the index-to-offset vocabulary. It does not name element types, storage types,
   pointers, or allocation-owning memory abstractions.
-- Unsafe is allowed. Extension points are unsafe traits with documented contracts. There is no separate
-  `ValidLayout` marker: users should write `L: Layout`, while implementors write `unsafe impl Layout`.
+- Unsafe extension points are allowed, but unsafe markers are demand-driven. Do not introduce `unsafe`
+  merely because a concept is expected to support unsafe consumers eventually. Introduce it at the first
+  concrete boundary where memory access or another unsafe operation must trust an invariant that cannot
+  be checked.
 - No panics. Safe APIs must be total and use `Option` or `Result` for invalid input.
 - Performance is a goal from the start, but optimization is incremental. Preferred mechanisms:
   construction-time validation, unsafe unchecked variants with explicit contracts, iterators that yield
@@ -61,20 +63,23 @@ from the shape.
 
 ## Initial trait direction
 
-Unsafe traits should be scarce. Mark a trait unsafe only when implementing it grants authority that unsafe
-code relies on to preserve a concrete memory-safety invariant, and the consumer cannot realistically
-validate or enforce that authority. Ordinary correctness bugs are not enough. Do not cascade unsafe into
-vocabulary traits merely because an unsafe composition uses them.
+Unsafe traits and functions should be scarce and demand-driven. Mark code unsafe only when a concrete
+consumer must rely on an invariant to preserve memory safety and cannot realistically validate or enforce
+that invariant. Ordinary correctness bugs are not enough. The existence of a likely future unsafe consumer
+is also not enough on its own in this ground-up rewrite: the exact proof obligation will be clearer when
+that consumer exists.
 
-`Rank`, `Ranked`, `Shape`, and probably `IndexSpace` are safe vocabulary/geometry traits. `Layout` is the
-first expected unsafe trait because its offset, offset-bounds, and uniqueness claims will be trusted for
-unchecked memory access. Evaluate `AxisOps` and `Strided` when their concrete uses are designed.
+`Rank`, `Ranked`, `Shape`, `IndexSpace`, and the initial `Layout` are safe traits. `Layout` still has
+memory-relevant correctness semantics, but until storage code exists there is no concrete unsafe proof
+boundary. When that boundary appears, choose deliberately between making `Layout` unsafe, adding an unsafe
+marker trait such as `TrustedLayout`, validating at the storage boundary, or a combination. Evaluate
+`AxisOps` and `Strided` when their concrete uses are designed.
 
 `Layout` initial surface, subject to iteration:
 
 - `IndexSpace` as a supertrait, providing shape access, canonical indices, validity, and logical iteration
 - `offset` as the safe checked form, returning `Option<isize>`
-- unsafe `offset_unchecked`
+- `offset_unchecked` as a safe arithmetic fast path; unchecked memory access remains a downstream concern
 - offset bounds, probably `Option<(isize, isize)>` with inclusive bounds and `None` for empty layouts
 - conservative uniqueness query
 
@@ -171,5 +176,11 @@ Follow-up: the user approved the `Shape`/`IndexSpace`/`Layout` split and emphasi
 blanket trait implementations; use semantic wrappers, role-specific traits, and cheap conversions instead.
 
 Follow-up: unsafe-trait marking was narrowed after discussing the difference between correctness bugs and
-memory-safety authority. `Shape` is safe; reserve unsafe traits for contracts such as `Layout` whose
-claims unchecked memory code will trust.
+memory-safety authority. `Shape` is safe.
+
+Follow-up: the initial `Layout` design briefly used an unsafe trait and unsafe `offset_unchecked`. The
+user then clarified the demand-driven process rule for this fresh rewrite: because no memory-accessing
+consumer exists yet, it is premature to guess which implementation invariants must become unsafe proof
+obligations. `Layout` and all its methods are therefore safe for now. Correctness invariants are still
+tested and proved; when concrete unsafe consumers arrive, the design can introduce exactly the needed
+unsafe trait, marker trait, or validation boundary.
