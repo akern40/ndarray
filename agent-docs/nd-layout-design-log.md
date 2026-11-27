@@ -344,3 +344,27 @@ faster because it can exploit contiguous innermost rows with a tight pointer loo
 converts and checks every individual offset. This suggests the next iteration-design question: whether
 layouts should expose offset runs or another innermost-run traversal capability, especially for fold-driven
 evaluation, rather than only whole-layout contiguity and per-element offsets.
+
+Follow-up: the first storage extraction is intentionally small and concrete. `SliceStorage<'a, T>` inside
+`nd-core` owns the borrowed slice abstraction: construction-time validation, checked element access, and
+checked contiguous range access. It does not know about layouts except in a validation method, and it does
+not know the logical origin. `SliceView` is now a composition of storage, layout, and explicit origin. This
+is not yet a general storage crate or trait hierarchy; those should wait for a second storage
+representation or mutable access to provide evidence.
+
+Construction validation now includes the upstream-inspired size invariants that can be checked at this
+boundary: the product of nonzero axis lengths must fit `isize`; the element-distance span of the layout
+must fit `isize`; and that span multiplied by `size_of::<T>()` must fit `isize` bytes. Byte validation is
+necessarily in `nd-core`, not `nd-layout`, because layouts do not know element types. ZSTs are supported
+under the same element-count and element-span caps even though their byte span is zero. This deliberately
+rejects some theoretically constructible huge ZST shapes, matching the chosen ndarray-like cap rather than
+redesigning offsets around ZST extremes.
+
+The extraction also clarifies empty-layout behavior: with no accessible offsets there is no layout span to
+validate, but the explicit origin must still be a valid slice boundary, including one-past-the-end. This is
+a deliberately generalized-layout interpretation rather than upstream ndarray's raw-pointer interpretation:
+movement is measured over valid indices, not over hypothetical axis movement in an empty index space. If
+future storage implementations perform pointer arithmetic even for empty arrays, they may need a stronger
+storage-specific invariant. Regression tests cover ordinary ZST iteration and rejection of a logically huge
+empty layout. Benchmarks show no meaningful iteration regression; validation is construction-time and the
+small storage methods inline away.

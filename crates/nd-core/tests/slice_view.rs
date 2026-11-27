@@ -290,6 +290,33 @@ fn forward_contiguous_iteration_starts_at_explicit_origin() {
 }
 
 #[test]
+fn zst_view_iterates_logical_elements() {
+    let data = [(); 4];
+    let layout = StridedLayout::try_new(ShapeN::new([2, 2]), [2, 1]);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        let view = SliceView::try_new(&data, layout, 0);
+        assert!(view.is_some());
+        if let Some(view) = view {
+            assert_eq!(view.iter().count(), 4);
+            assert!(view.get(&[1, 1]).is_some());
+        }
+    }
+}
+
+#[test]
+fn construction_rejects_oversized_logical_product() {
+    let data = [0_u8];
+    let layout = StridedLayout::try_new(ShapeN::new([usize::MAX, 0]), [0, 0]);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        assert!(SliceView::try_new(&data, layout, 0).is_none());
+    }
+}
+
+#[test]
 fn constructor_validates_explicit_origin() {
     let data = [10, 20, 30];
     let positive = StridedLayout::try_new(ShapeN::new([3]), [1]);

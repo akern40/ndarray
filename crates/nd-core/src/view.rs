@@ -1,8 +1,10 @@
 use nd_layout::{IndexSpace, Layout, Ranked, StridedLayout};
 
+use crate::storage::{SliceStorage, offset_position};
+
 #[derive(Debug, Clone, Copy)]
 pub struct SliceView<'a, T, L: Layout> {
-    data: &'a [T],
+    storage: SliceStorage<'a, T>,
     layout: L,
     origin: usize,
 }
@@ -10,20 +12,10 @@ pub struct SliceView<'a, T, L: Layout> {
 impl<'a, T, L: Layout> SliceView<'a, T, L> {
     #[must_use]
     pub fn try_new(data: &'a [T], layout: L, origin: usize) -> Option<Self> {
-        match layout.offset_bounds() {
-            Some((min, max)) => {
-                offset_position(origin, min)?;
-                let max_position = offset_position(origin, max)?;
-                if max_position >= data.len() {
-                    return None;
-                }
-            }
-            None if origin > data.len() => return None,
-            None => {}
-        }
-
+        let storage = SliceStorage::new(data);
+        storage.validate_layout(&layout, origin)?;
         Some(Self {
-            data,
+            storage,
             layout,
             origin,
         })
@@ -33,13 +25,12 @@ impl<'a, T, L: Layout> SliceView<'a, T, L> {
     pub fn get(&self, index: &L::Index) -> Option<&'a T> {
         let offset = self.layout.offset(index)?;
         let position = offset_position(self.origin, offset)?;
-        self.data.get(position)
+        self.storage.get(position)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &'a T> + '_ {
         if let Some(len) = self.layout.forward_contiguous_len()
-            && let Some(end) = self.origin.checked_add(len)
-            && let Some(slice) = self.data.get(self.origin..end)
+            && let Some(slice) = self.storage.slice(self.origin, len)
         {
             return SliceViewIter::Contiguous(slice.iter());
         }
@@ -52,7 +43,7 @@ impl<'a, T, L: Layout> SliceView<'a, T, L> {
 
     fn get_valid_offset(&self, offset: isize) -> &'a T {
         let position = self.origin.wrapping_add_signed(offset);
-        let Some(value) = self.data.get(position) else {
+        let Some(value) = self.storage.get(position) else {
             unreachable!()
         };
         value
@@ -113,7 +104,7 @@ impl<T, const N: usize> SliceView<'_, T, StridedLayout<N>> {
     #[must_use]
     pub fn reverse_axes(self) -> Self {
         Self {
-            data: self.data,
+            storage: self.storage,
             layout: self.layout.reverse_axes(),
             origin: self.origin,
         }
@@ -146,13 +137,5 @@ impl<T, L: Layout> IndexSpace for SliceView<'_, T, L> {
 
     fn indices(&self) -> Self::Indices<'_> {
         self.layout.indices()
-    }
-}
-
-fn offset_position(origin: usize, offset: isize) -> Option<usize> {
-    if offset >= 0 {
-        origin.checked_add(usize::try_from(offset).ok()?)
-    } else {
-        origin.checked_sub(offset.unsigned_abs())
     }
 }
