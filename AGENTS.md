@@ -27,7 +27,8 @@ in place and list it in your report so the human can write it.
 
 Agents never write documentation prose either: nothing under `docs/src/content/`, no READMEs, no
 design notes, no changelog text. Agents may draft comments and docs in the chat; the human writes
-them into files.
+them into files. The only exception to this is inside `agent-docs/`, which should be considered
+temporary, non-authoritative documentation that will be moved to a proper location or deleted later.
 
 ## Documentation
 
