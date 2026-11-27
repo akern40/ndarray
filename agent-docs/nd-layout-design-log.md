@@ -25,6 +25,8 @@ sections current; append significant session notes at the bottom.
 - Use the three-way split: `Shape` is axis-length geometry; `IndexSpace` is the object-level canonical
   index/validity/logical-iteration interface; `Layout` adds index-to-offset mapping. Lazy producers use
   `IndexSpace` plus evaluation rather than pretending to be layouts.
+- `IndexSpace` exposes logical iteration through Rust iterators rather than a manual first/next protocol.
+  This fits the iterator-first end state and integrates with the wider Rust ecosystem.
 - Integration with the wider Rust ecosystem is a design requirement, especially `Vec`, slices, and
   arrays. However, raw Rust arrays and slices are not inherently ranked. `[usize; N]` can represent an
   N-axis shape, but as element storage it is a one-dimensional container. Use semantic wrappers,
@@ -113,7 +115,7 @@ Deferred from initial `Layout`:
 2. `Shape` plus a semantic fixed-rank shape representation backed by `[usize; N]`, with inexpensive
    array/slice conversions. Hegel tests for axis access and checked size semantics.
 3. `IndexSpace` plus logical index iteration for the fixed-rank shape representation. Hegel tests for
-   validity, enumeration count, and round-tripping through first/next.
+   validity, uniqueness, enumeration count, and row-major logical order.
 4. Fixed-rank dynamic-extent `StridedLayout<N>` using semantic shape/stride representations backed by
    `[usize; N]` and `[isize; N]`, with checked construction and affine offset computation. Hegel tests
    for bounds, offsets, iteration, and offset bounds. Kani proofs for arithmetic-overflow invariants.
