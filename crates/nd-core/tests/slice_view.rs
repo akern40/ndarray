@@ -1,7 +1,8 @@
 use hegel::{TestCase, generators as gs};
 use nd_core::SliceView;
 use nd_layout::{
-    IndexSpace, Layout, LogicalOffsets, Ranked, RowMajorIndices, Shape, ShapeN, StridedLayout,
+    AxisOps, IndexSpace, Layout, LogicalOffsets, Ranked, RowMajorIndices, Shape, ShapeN,
+    StridedLayout,
 };
 
 fn small_shape(tc: &TestCase) -> ShapeN<2> {
@@ -413,5 +414,70 @@ fn non_strided_layout_uses_associated_index_space() {
         assert_eq!(view.get(&[3]), None);
         let values: Vec<usize> = view.iter().copied().collect();
         assert_eq!(values, [10, 11, 14]);
+    }
+}
+
+#[hegel::test]
+fn inverted_axis_view_preserves_backing_positions(tc: TestCase) {
+    let shape = small_shape(&tc);
+    tc.assume(shape.iter().all(|len| len > 0));
+    let strides = small_strides(&tc);
+    let len = tc.draw(gs::integers::<usize>().min_value(1).max_value(24));
+    let origin = tc.draw(gs::integers::<usize>().max_value(len));
+    let axis = tc.draw(gs::integers::<usize>().max_value(1));
+    let data: Vec<usize> = (0..len).collect();
+    let layout = StridedLayout::try_new(shape, strides);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        let view = SliceView::try_new(&data, layout, origin);
+        tc.assume(view.is_some());
+        if let Some(view) = view {
+            let inverted_view = view.axis(axis).invert();
+            assert!(inverted_view.is_some());
+            if let Some(inverted_view) = inverted_view {
+                let axis_len = shape.as_array()[axis];
+                for index in inverted_view.indices() {
+                    let mut original_index = index;
+                    original_index[axis] = axis_len - 1 - index[axis];
+                    assert_eq!(inverted_view.get(&index), view.get(&original_index));
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn inverted_axis_view_iterates_reversed_innermost_values() {
+    let data = [0, 1, 2, 3, 4, 5];
+    let layout = StridedLayout::try_new(ShapeN::new([2, 3]), [3, 1]);
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        let view = SliceView::try_new(&data, layout, 0);
+        assert!(view.is_some());
+        if let Some(view) = view {
+            let inverted = view.axis(1).invert();
+            assert!(inverted.is_some());
+            if let Some(inverted) = inverted {
+                let values: Vec<usize> = inverted.iter().copied().collect();
+                assert_eq!(values, [2, 1, 0, 5, 4, 3]);
+                assert_eq!(inverted.get(&[0, 0]), Some(&2));
+                assert_eq!(inverted.get(&[1, 2]), Some(&3));
+            }
+        }
+    }
+}
+
+#[test]
+fn inverted_axis_view_rejects_invalid_axes() {
+    let data = [0, 1, 2, 3];
+    let layout = StridedLayout::try_new(ShapeN::new([2, 2]), [2, 1]);
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        let view = SliceView::try_new(&data, layout, 0);
+        assert!(view.is_some());
+        if let Some(view) = view {
+            assert!(view.axis(2).invert().is_none());
+        }
     }
 }

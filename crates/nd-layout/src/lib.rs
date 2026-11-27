@@ -1,11 +1,13 @@
 #![no_std]
 
+mod axis;
 mod index_space;
 mod layout;
 mod rank;
 mod shape;
 mod strided;
 
+pub use axis::{Axis, AxisOps};
 pub use index_space::{IndexSpace, RowMajorIndices};
 pub use layout::{Layout, LogicalOffsets};
 pub use rank::{ConstRank, DynRank, Rank, Ranked};

@@ -3,4 +3,4 @@
 mod storage;
 mod view;
 
-pub use view::SliceView;
+pub use view::{SliceView, SliceViewAxis};

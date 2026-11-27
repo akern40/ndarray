@@ -1,4 +1,4 @@
-use crate::{ConstRank, IndexSpace, Layout, Ranked, RowMajorIndices, Shape, ShapeN};
+use crate::{AxisOps, ConstRank, IndexSpace, Layout, Ranked, RowMajorIndices, Shape, ShapeN};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StridedLayout<const N: usize> {
@@ -25,20 +25,6 @@ impl<const N: usize> StridedLayout<N> {
     #[must_use]
     pub const fn strides(&self) -> &[isize; N] {
         &self.strides
-    }
-
-    #[must_use]
-    pub fn reverse_axes(self) -> Self {
-        let mut shape = self.shape.into_array();
-        let mut strides = self.strides;
-        shape.reverse();
-        strides.reverse();
-
-        Self {
-            shape: ShapeN::new(shape),
-            strides,
-            offset_bounds: self.offset_bounds,
-        }
     }
 }
 
@@ -233,6 +219,54 @@ fn conservative_uniqueness<const N: usize>(shape: &ShapeN<N>, strides: &[isize; 
         }
     }
     effective_axes <= 1
+}
+
+impl<const N: usize> AxisOps for StridedLayout<N> {
+    type Reversed = Self;
+    type Inverted = Self;
+
+    fn reverse_axes(self) -> Self {
+        let mut shape = self.shape.into_array();
+        let mut strides = self.strides;
+        shape.reverse();
+        strides.reverse();
+
+        Self {
+            shape: ShapeN::new(shape),
+            strides,
+            offset_bounds: self.offset_bounds,
+        }
+    }
+
+    fn invert_axis(self, axis: usize) -> Option<(Self, isize)> {
+        if axis >= N {
+            return None;
+        }
+
+        let len = self.shape.as_array()[axis];
+        if len <= 1 || self.shape.as_array().contains(&0) {
+            return Some((self, 0));
+        }
+
+        let stride = self.strides[axis];
+        let steps = len.checked_sub(1)?;
+        let steps = isize::try_from(steps).ok()?;
+        let translation = steps.checked_mul(stride)?;
+        let inverted_stride = stride.checked_neg()?;
+
+        let mut strides = self.strides;
+        strides[axis] = inverted_stride;
+        let offset_bounds = Some(compute_offset_bounds(&self.shape, &strides)?);
+
+        Some((
+            Self {
+                shape: self.shape,
+                strides,
+                offset_bounds,
+            },
+            translation,
+        ))
+    }
 }
 
 impl<const N: usize> Ranked for StridedLayout<N> {

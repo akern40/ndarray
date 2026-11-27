@@ -368,3 +368,49 @@ future storage implementations perform pointer arithmetic even for empty arrays,
 storage-specific invariant. Regression tests cover ordinary ZST iteration and rejection of a logically huge
 empty layout. Benchmarks show no meaningful iteration regression; validation is construction-time and the
 small storage methods inline away.
+
+### 2026-11-27
+
+Design discussion before trait formulation: a structural operation is storage-independent when its result
+can be represented entirely as a transformation of index-space, layout, and placement metadata over the
+same virtual storage-offset space. Such an operation preserves backing-storage identity, inspects no
+elements, allocates or copies no storage, requires no host element access, and requires no device
+synchronization. Examples should include slicing, transposing, reversing axes, broadcasting, inserting or
+removing length-one axes, splitting, and metadata-only reshapes when representable.
+
+Operations outside that definition are not structural view operations. Allocation, copying, compaction,
+concatenation, format conversion, or production of a new storage identity belongs to explicit
+materialization or adaptation operations so costs remain visible. An operation may be storage-independent
+in principle even when a concrete layout type cannot represent the result; composing layouts, reporting
+that the operation is unsupported for that layout, and explicit materialization are distinguishable
+outcomes rather than hidden copies behind a nominally zero-copy operation.
+
+This is currently a guideline, not a formulated trait boundary. No storage, handle, or access traits have
+been designed from it yet.
+
+Follow-up: the first grouped axis-algebra probe is now implemented. `AxisOps` is one layout trait with
+per-operation associated output types rather than one trait per operation. It currently contains only
+`reverse_axes` and `invert_axis`. `invert_axis` returns both the transformed layout and a signed uniform
+translation of the view's base position. For strided layouts, inversion negates the axis stride and shifts
+the base by `(len - 1) * old_stride`; relative offset bounds are recomputed because the position set is
+preserved only after applying the translation. Unit-length axes and globally empty layouts currently treat
+inversion as the identity because reversal is observationally trivial over their valid index spaces. This
+avoids giving meaning to arbitrary inert strides, but it is a semantic choice worth revisiting if empty
+or unit-axis metadata should transform even when no observed positions change.
+
+The probe also tests the fluent axis selector discussed with the user: `layout.axis(axis).invert()` and
+`view.axis(axis).invert()`. The layout-level `Axis<L>` value owns the target layout plus the selected axis.
+It is deliberately unchecked at selection time; invalid axes make the eventual operation return `None`.
+This preserves the desired chaining shape, but it means `Axis` is really an operation builder/selection,
+not a proof that the axis is valid, and invalid operations consume their target just as current fallible
+constructors consume invalid inputs. Whether axis validity should instead be established earlier is still
+open.
+
+`SliceView::reverse_axes` is now generic over `L: AxisOps` and returns the associated reversed layout type.
+`SliceView::axis(..).invert()` applies the layout translation to the explicit origin, leaves storage
+untouched, and revalidates the resulting composition before returning it. The revalidation uses only
+storage extent/type metadata, not element access. It is protective because `AxisOps` is still a safe trait;
+if later trusted contracts make transformation preservation a proof obligation, this validation may become
+redundant for trusted implementations. The duplication between layout-level `Axis` and view-level
+`SliceViewAxis` is intentional probe scaffolding, not a final API shape. A unified selector may need a more
+general target algebra, or array-level selectors may remain a thin adaptation of layout algebra.

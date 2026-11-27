@@ -1,4 +1,4 @@
-use nd_layout::{IndexSpace, Layout, Ranked, StridedLayout};
+use nd_layout::{AxisOps, IndexSpace, Layout, Ranked};
 
 use crate::storage::{SliceStorage, offset_position};
 
@@ -100,14 +100,38 @@ impl<'a, T, L: Layout> Iterator for SliceViewIter<'a, '_, T, L> {
     }
 }
 
-impl<T, const N: usize> SliceView<'_, T, StridedLayout<N>> {
+impl<'a, T, L: AxisOps> SliceView<'a, T, L> {
     #[must_use]
-    pub fn reverse_axes(self) -> Self {
-        Self {
+    pub fn reverse_axes(self) -> SliceView<'a, T, L::Reversed> {
+        SliceView {
             storage: self.storage,
             layout: self.layout.reverse_axes(),
             origin: self.origin,
         }
+    }
+
+    pub fn axis(self, axis: usize) -> SliceViewAxis<'a, T, L> {
+        SliceViewAxis { view: self, axis }
+    }
+}
+
+#[derive(Debug)]
+pub struct SliceViewAxis<'a, T, L: AxisOps> {
+    view: SliceView<'a, T, L>,
+    axis: usize,
+}
+
+impl<'a, T, L: AxisOps> SliceViewAxis<'a, T, L> {
+    pub fn invert(self) -> Option<SliceView<'a, T, L::Inverted>> {
+        let (layout, translation) = self.view.layout.axis(self.axis).invert()?;
+        let origin = offset_position(self.view.origin, translation)?;
+        self.view.storage.validate_layout(&layout, origin)?;
+
+        Some(SliceView {
+            storage: self.view.storage,
+            layout,
+            origin,
+        })
     }
 }
 
