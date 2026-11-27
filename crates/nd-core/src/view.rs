@@ -36,6 +36,26 @@ impl<'a, T, L: Layout> SliceView<'a, T, L> {
         self.data.get(position)
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = &'a T> + '_ {
+        let view = self;
+        self.layout
+            .indices()
+            .map(move |index| view.get_valid(&index))
+    }
+
+    fn get_valid(&self, index: &L::Index) -> &'a T {
+        let Some(offset) = self.layout.offset(index) else {
+            unreachable!()
+        };
+        let Some(position) = offset_position(self.origin, offset) else {
+            unreachable!()
+        };
+        let Some(value) = self.data.get(position) else {
+            unreachable!()
+        };
+        value
+    }
+
     #[must_use]
     pub const fn origin(&self) -> usize {
         self.origin

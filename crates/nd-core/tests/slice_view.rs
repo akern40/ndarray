@@ -107,6 +107,72 @@ fn valid_indices_read_expected_positions(tc: TestCase) {
 }
 
 #[hegel::test]
+fn iter_matches_enumerated_positions(tc: TestCase) {
+    let shape = small_shape(&tc);
+    tc.assume(shape.iter().all(|len| len > 0));
+    let strides = small_strides(&tc);
+    let len = tc.draw(gs::integers::<usize>().min_value(1).max_value(24));
+    let origin = tc.draw(gs::integers::<usize>().max_value(len));
+    let data: Vec<usize> = (0..len).collect();
+    let layout = StridedLayout::try_new(shape, strides);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        let view = SliceView::try_new(&data, layout, origin);
+        tc.assume(view.is_some());
+        if let Some(view) = view {
+            let mut expected = Vec::new();
+            for index in layout.indices() {
+                let offset = layout.offset(&index);
+                assert!(offset.is_some());
+                if let Some(offset) = offset {
+                    let expected_position = position(origin, offset);
+                    assert!(expected_position.is_some());
+                    if let Some(expected_position) = expected_position {
+                        assert!(expected_position < data.len());
+                        expected.push(data[expected_position]);
+                    }
+                }
+            }
+            let actual: Vec<usize> = view.iter().copied().collect();
+
+            assert_eq!(actual, expected);
+        }
+    }
+}
+
+#[test]
+fn iter_uses_row_major_logical_order() {
+    let data = [10, 11, 12, 13];
+    let layout = StridedLayout::try_new(ShapeN::new([2, 2]), [1, 2]);
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        let view = SliceView::try_new(&data, layout, 0);
+        assert!(view.is_some());
+        if let Some(view) = view {
+            let values: Vec<usize> = view.iter().copied().collect();
+            assert_eq!(values, [10, 12, 11, 13]);
+        }
+    }
+}
+
+#[test]
+fn iter_items_can_outlive_the_view() {
+    let data = [10, 20, 30];
+    let layout = StridedLayout::try_new(ShapeN::new([3]), [-1]);
+    assert!(layout.is_some());
+    let first = if let Some(layout) = layout {
+        let view = SliceView::try_new(&data, layout, 2);
+        assert!(view.is_some());
+        view.and_then(|view| view.iter().next())
+    } else {
+        None
+    };
+
+    assert_eq!(first, Some(&30));
+}
+
+#[hegel::test]
 fn construction_matches_enumerated_positions(tc: TestCase) {
     let shape = small_shape(&tc);
     let strides = small_strides(&tc);
@@ -150,6 +216,8 @@ fn negative_stride_reads_reverse_order() {
             assert_eq!(view.get(&[1]), Some(&20));
             assert_eq!(view.get(&[2]), Some(&10));
             assert_eq!(view.get(&[3]), None);
+            let values: Vec<usize> = view.iter().copied().collect();
+            assert_eq!(values, [30, 20, 10]);
         }
     }
 }
@@ -200,6 +268,8 @@ fn zero_stride_indices_may_alias_for_shared_access() {
             assert_eq!(view.get(&[0]), Some(&42));
             assert_eq!(view.get(&[1]), Some(&42));
             assert_eq!(view.get(&[2]), Some(&42));
+            assert_eq!(view.iter().count(), 3);
+            assert!(view.iter().all(|value| *value == 42));
         }
     }
 }
@@ -214,6 +284,7 @@ fn empty_layout_has_no_accessible_indices() {
         assert!(view.is_some());
         if let Some(view) = view {
             assert_eq!(view.get(&[0, 0]), None);
+            assert_eq!(view.iter().count(), 0);
         }
         assert!(SliceView::try_new(&data, layout, 1).is_none());
     }
@@ -240,6 +311,8 @@ fn rank_zero_view_reads_one_element() {
         assert!(view.is_some());
         if let Some(view) = view {
             assert_eq!(view.get(&[]), Some(&7));
+            let values: Vec<usize> = view.iter().copied().collect();
+            assert_eq!(values, [7]);
         }
     }
 }
@@ -260,5 +333,7 @@ fn non_strided_layout_uses_associated_index_space() {
         assert_eq!(view.get(&[1]), Some(&11));
         assert_eq!(view.get(&[2]), Some(&14));
         assert_eq!(view.get(&[3]), None);
+        let values: Vec<usize> = view.iter().copied().collect();
+        assert_eq!(values, [10, 11, 14]);
     }
 }
