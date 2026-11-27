@@ -17,6 +17,11 @@ pub trait Layout: IndexSpace {
     #[must_use]
     fn is_unique(&self) -> bool;
 
+    #[must_use]
+    fn forward_contiguous_len(&self) -> Option<usize> {
+        None
+    }
+
     fn offsets(&self) -> Self::Offsets<'_>;
 }
 

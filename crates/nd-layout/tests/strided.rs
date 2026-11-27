@@ -229,6 +229,56 @@ fn construction_accepts_boundary_strides() {
     }
 }
 
+#[hegel::test]
+fn forward_contiguous_len_means_offsets_are_ordinals(tc: TestCase) {
+    let shape = small_shape(&tc);
+    let strides = small_strides(&tc);
+    let layout = StridedLayout::try_new(shape, strides);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout
+        && let Some(len) = layout.forward_contiguous_len()
+    {
+        assert_eq!(len, layout.indices().count());
+        let expected: Vec<isize> = (0..len).map(usize::cast_signed).collect();
+        assert_eq!(layout.offsets().collect::<Vec<_>>(), expected);
+    }
+}
+
+#[test]
+fn forward_contiguous_len_handles_inert_unit_axes() {
+    let cases: [([usize; 2], [isize; 2], Option<usize>); 6] = [
+        ([1, 3], [99, 1], Some(3)),
+        ([2, 1], [1, 99], Some(2)),
+        ([1, 1], [99, -99], Some(1)),
+        ([2, 3], [3, 1], Some(6)),
+        ([2, 3], [256, 1], None),
+        ([2, 3], [-3, -1], None),
+    ];
+
+    for (shape, strides, expected) in cases {
+        let Some(layout) = StridedLayout::try_new(ShapeN::new(shape), strides) else {
+            unreachable!()
+        };
+        assert_eq!(layout.forward_contiguous_len(), expected);
+    }
+}
+
+#[test]
+fn forward_contiguous_len_handles_empty_and_rank_zero_layouts() {
+    let empty = StridedLayout::try_new(ShapeN::new([0, 3]), [5, 7]);
+    assert!(empty.is_some());
+    if let Some(empty) = empty {
+        assert_eq!(empty.forward_contiguous_len(), Some(0));
+    }
+
+    let rank_zero = StridedLayout::try_new(ShapeN::<0>::new([]), []);
+    assert!(rank_zero.is_some());
+    if let Some(rank_zero) = rank_zero {
+        assert_eq!(rank_zero.forward_contiguous_len(), Some(1));
+    }
+}
+
 #[test]
 fn offsets_fold_after_partial_iteration() {
     let cases = [

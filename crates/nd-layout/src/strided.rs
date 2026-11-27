@@ -1,4 +1,4 @@
-use crate::{ConstRank, IndexSpace, Layout, Ranked, RowMajorIndices, ShapeN};
+use crate::{ConstRank, IndexSpace, Layout, Ranked, RowMajorIndices, Shape, ShapeN};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StridedLayout<const N: usize> {
@@ -195,6 +195,29 @@ fn unchecked_offset<const N: usize>(strides: &[isize; N], index: &[usize; N]) ->
     offset
 }
 
+fn forward_contiguous_len<const N: usize>(
+    shape: &ShapeN<N>,
+    strides: &[isize; N],
+) -> Option<usize> {
+    let len = shape.size()?;
+    if len == 0 || N == 0 {
+        return Some(len);
+    }
+
+    let mut inner_len = 1_usize;
+    for axis in (0..N).rev() {
+        let axis_len = shape.as_array()[axis];
+        if axis_len > 1 {
+            let expected = isize::try_from(inner_len).ok()?;
+            if strides[axis] != expected {
+                return None;
+            }
+        }
+        inner_len = inner_len.checked_mul(axis_len)?;
+    }
+    Some(len)
+}
+
 fn conservative_uniqueness<const N: usize>(shape: &ShapeN<N>, strides: &[isize; N]) -> bool {
     if shape.as_array().contains(&0) {
         return true;
@@ -261,6 +284,10 @@ impl<const N: usize> Layout for StridedLayout<N> {
 
     fn is_unique(&self) -> bool {
         conservative_uniqueness(&self.shape, &self.strides)
+    }
+
+    fn forward_contiguous_len(&self) -> Option<usize> {
+        forward_contiguous_len(&self.shape, &self.strides)
     }
 
     fn offsets(&self) -> Self::Offsets<'_> {
