@@ -1,6 +1,6 @@
 use hegel::{TestCase, generators as gs};
-use nd_core::StridedView;
-use nd_layout::{IndexSpace, Layout, Shape, ShapeN, StridedLayout};
+use nd_core::SliceView;
+use nd_layout::{IndexSpace, Layout, Ranked, RowMajorIndices, Shape, ShapeN, StridedLayout};
 
 fn small_shape(tc: &TestCase) -> ShapeN<2> {
     ShapeN::new(tc.draw(gs::arrays(gs::integers::<usize>().max_value(3))))
@@ -20,6 +20,62 @@ fn position(origin: usize, offset: isize) -> Option<usize> {
     }
 }
 
+#[derive(Debug)]
+struct SquaredLayout {
+    shape: ShapeN<1>,
+}
+
+impl SquaredLayout {
+    fn three() -> Self {
+        Self {
+            shape: ShapeN::new([3]),
+        }
+    }
+}
+
+impl IndexSpace for SquaredLayout {
+    type Shape = ShapeN<1>;
+    type Index = [usize; 1];
+    type Indices<'a>
+        = RowMajorIndices<'a, 1>
+    where
+        Self: 'a;
+
+    fn shape(&self) -> &Self::Shape {
+        &self.shape
+    }
+
+    fn contains(&self, index: &Self::Index) -> bool {
+        self.shape.contains(index)
+    }
+
+    fn indices(&self) -> Self::Indices<'_> {
+        self.shape.indices()
+    }
+}
+
+impl Layout for SquaredLayout {
+    fn offset(&self, index: &Self::Index) -> Option<isize> {
+        if !self.contains(index) {
+            return None;
+        }
+        let position = isize::try_from(index[0]).ok()?;
+        position.checked_mul(position)
+    }
+
+    fn offset_unchecked(&self, index: &Self::Index) -> isize {
+        index[0].cast_signed().wrapping_mul(index[0].cast_signed())
+    }
+
+    fn offset_bounds(&self) -> Option<(isize, isize)> {
+        Some((0, 4))
+    }
+
+    fn is_unique(&self) -> bool {
+        true
+    }
+}
+
 #[hegel::test]
 fn valid_indices_read_expected_positions(tc: TestCase) {
     let shape = small_shape(&tc);
@@ -32,7 +88,7 @@ fn valid_indices_read_expected_positions(tc: TestCase) {
 
     assert!(layout.is_some());
     if let Some(layout) = layout {
-        let view = StridedView::try_new(&data, layout, origin);
+        let view = SliceView::try_new(&data, layout, origin);
         tc.assume(view.is_some());
         if let Some(view) = view {
             for index in layout.indices() {
@@ -42,7 +98,7 @@ fn valid_indices_read_expected_positions(tc: TestCase) {
                     let expected_position = position(origin, offset);
                     assert!(expected_position.is_some());
                     if let Some(expected_position) = expected_position {
-                        assert_eq!(view.get(index), data.get(expected_position));
+                        assert_eq!(view.get(&index), data.get(expected_position));
                     }
                 }
             }
@@ -61,7 +117,7 @@ fn construction_matches_enumerated_positions(tc: TestCase) {
 
     assert!(layout.is_some());
     if let Some(layout) = layout {
-        let view = StridedView::try_new(&data, layout, origin);
+        let view = SliceView::try_new(&data, layout, origin);
         let mut indexed_positions_are_valid = true;
         for index in layout.indices() {
             let offset = layout.offset(&index);
@@ -87,13 +143,13 @@ fn negative_stride_reads_reverse_order() {
     let layout = StridedLayout::try_new(ShapeN::new([3]), [-1]);
     assert!(layout.is_some());
     if let Some(layout) = layout {
-        let view = StridedView::try_new(&data, layout, 2);
+        let view = SliceView::try_new(&data, layout, 2);
         assert!(view.is_some());
         if let Some(view) = view {
-            assert_eq!(view.get([0]), Some(&30));
-            assert_eq!(view.get([1]), Some(&20));
-            assert_eq!(view.get([2]), Some(&10));
-            assert_eq!(view.get([3]), None);
+            assert_eq!(view.get(&[0]), Some(&30));
+            assert_eq!(view.get(&[1]), Some(&20));
+            assert_eq!(view.get(&[2]), Some(&10));
+            assert_eq!(view.get(&[3]), None);
         }
     }
 }
@@ -104,12 +160,12 @@ fn positive_stride_can_skip_backing_positions() {
     let layout = StridedLayout::try_new(ShapeN::new([3]), [2]);
     assert!(layout.is_some());
     if let Some(layout) = layout {
-        let view = StridedView::try_new(&data, layout, 0);
+        let view = SliceView::try_new(&data, layout, 0);
         assert!(view.is_some());
         if let Some(view) = view {
-            assert_eq!(view.get([0]), Some(&10));
-            assert_eq!(view.get([1]), Some(&12));
-            assert_eq!(view.get([2]), Some(&14));
+            assert_eq!(view.get(&[0]), Some(&10));
+            assert_eq!(view.get(&[1]), Some(&12));
+            assert_eq!(view.get(&[2]), Some(&14));
         }
     }
 }
@@ -123,12 +179,12 @@ fn constructor_validates_explicit_origin() {
     assert!(positive.is_some());
     assert!(negative.is_some());
     if let Some(layout) = positive {
-        assert!(StridedView::try_new(&data, layout, 0).is_some());
-        assert!(StridedView::try_new(&data, layout, 1).is_none());
+        assert!(SliceView::try_new(&data, layout, 0).is_some());
+        assert!(SliceView::try_new(&data, layout, 1).is_none());
     }
     if let Some(layout) = negative {
-        assert!(StridedView::try_new(&data, layout, 2).is_some());
-        assert!(StridedView::try_new(&data, layout, 1).is_none());
+        assert!(SliceView::try_new(&data, layout, 2).is_some());
+        assert!(SliceView::try_new(&data, layout, 1).is_none());
     }
 }
 
@@ -138,12 +194,12 @@ fn zero_stride_indices_may_alias_for_shared_access() {
     let layout = StridedLayout::try_new(ShapeN::new([3]), [0]);
     assert!(layout.is_some());
     if let Some(layout) = layout {
-        let view = StridedView::try_new(&data, layout, 0);
+        let view = SliceView::try_new(&data, layout, 0);
         assert!(view.is_some());
         if let Some(view) = view {
-            assert_eq!(view.get([0]), Some(&42));
-            assert_eq!(view.get([1]), Some(&42));
-            assert_eq!(view.get([2]), Some(&42));
+            assert_eq!(view.get(&[0]), Some(&42));
+            assert_eq!(view.get(&[1]), Some(&42));
+            assert_eq!(view.get(&[2]), Some(&42));
         }
     }
 }
@@ -154,12 +210,12 @@ fn empty_layout_has_no_accessible_indices() {
     let layout = StridedLayout::try_new(ShapeN::new([0, 3]), [1, 1]);
     assert!(layout.is_some());
     if let Some(layout) = layout {
-        let view = StridedView::try_new(&data, layout, 0);
+        let view = SliceView::try_new(&data, layout, 0);
         assert!(view.is_some());
         if let Some(view) = view {
-            assert_eq!(view.get([0, 0]), None);
+            assert_eq!(view.get(&[0, 0]), None);
         }
-        assert!(StridedView::try_new(&data, layout, 1).is_none());
+        assert!(SliceView::try_new(&data, layout, 1).is_none());
     }
 }
 
@@ -169,8 +225,8 @@ fn empty_layout_permits_one_past_end_origin() {
     let layout = StridedLayout::try_new(ShapeN::new([0, 3]), [1, 1]);
     assert!(layout.is_some());
     if let Some(layout) = layout {
-        assert!(StridedView::try_new(&data, layout, 1).is_some());
-        assert!(StridedView::try_new(&data, layout, 2).is_none());
+        assert!(SliceView::try_new(&data, layout, 1).is_some());
+        assert!(SliceView::try_new(&data, layout, 2).is_none());
     }
 }
 
@@ -180,10 +236,29 @@ fn rank_zero_view_reads_one_element() {
     let layout = StridedLayout::try_new(ShapeN::<0>::new([]), []);
     assert!(layout.is_some());
     if let Some(layout) = layout {
-        let view = StridedView::try_new(&data, layout, 0);
+        let view = SliceView::try_new(&data, layout, 0);
         assert!(view.is_some());
         if let Some(view) = view {
-            assert_eq!(view.get([]), Some(&7));
+            assert_eq!(view.get(&[]), Some(&7));
         }
+    }
+}
+
+#[test]
+fn non_strided_layout_uses_associated_index_space() {
+    let data = [10, 11, 12, 13, 14];
+    let view = SliceView::try_new(&data, SquaredLayout::three(), 0);
+
+    assert!(view.is_some());
+    if let Some(view) = view {
+        assert_eq!(view.ndim(), 1);
+        assert_eq!(view.shape().as_array(), &[3]);
+        assert!(view.contains(&[2]));
+        assert!(!view.contains(&[3]));
+        assert_eq!(view.indices().count(), 3);
+        assert_eq!(view.get(&[0]), Some(&10));
+        assert_eq!(view.get(&[1]), Some(&11));
+        assert_eq!(view.get(&[2]), Some(&14));
+        assert_eq!(view.get(&[3]), None);
     }
 }

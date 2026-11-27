@@ -2,4 +2,4 @@
 
 mod view;
 
-pub use view::StridedView;
+pub use view::SliceView;

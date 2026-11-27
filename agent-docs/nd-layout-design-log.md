@@ -133,9 +133,10 @@ Deferred from initial `Layout`:
    `[usize; N]` and `[isize; N]`, with checked construction and affine offset computation. Hegel tests
    for bounds, offsets, iteration, and offset bounds. Kani proofs for arithmetic-overflow invariants.
 5. Offset bounds and conservative uniqueness, with enumerated small-layout tests and Kani where feasible.
-6. Minimal read-only backed consumer in `nd-core`: a fixed-rank `StridedView` over a slice with explicit
-   origin and checked value access. Use it to pressure-test offset bounds, negative strides, zero strides,
-   empty layouts, and the origin model before designing axis operations.
+6. Minimal read-only backed consumer in `nd-core`: a `SliceView` over a slice, generic in `Layout`, with
+   explicit origin and checked value access. Use it to pressure-test associated index types, offset
+   bounds, negative strides, zero strides, empty layouts, non-strided layouts, and the origin model before
+   designing axis operations.
 7. First axis operation, probably `reverse_axes`, now tested through backed views as well as layout algebra;
    then one operation at a time: collapse, slice, invert, insert/remove, permute, merge.
 8. A non-strided layout such as a tiled/block layout to pressure-test generality before optimizing.
@@ -201,3 +202,9 @@ Follow-up: the first consumer slice was reprioritized ahead of axis operations. 
 checked value access. This is intended to ground layout semantics in real value extraction before further
 layout algebra. The discussion also clarified that logical row-major iteration is only one traversal order;
 memory/evaluation-order abstractions remain deferred.
+
+Follow-up: the spike was generalized from `StridedView` to `SliceView<'a, T, L>` where `L: Layout`. The
+layout's associated index type now determines the index accepted by `get`, and the view delegates `Ranked`
+and `IndexSpace` to its layout. Generic `get` accepts `&L::Index`: passing the associated index by value is
+not generally appropriate because the core operation only borrows it and future index types may not be cheap
+to move or copy. Ergonomic fixed-rank value indexing can be layered on later.
