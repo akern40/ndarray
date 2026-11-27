@@ -89,3 +89,5 @@ Clippy must show no warnings other than the documentation lints listed above.
 - No sealed traits; extension points are `unsafe trait`s with documented contracts.
 - No dependency without the human's approval.
 - Push to `akern40/*` forks freely. Never open PRs, comment or push in the `rust-ndarray` org.
+- Before writing any code, I want a design discussion. Treat me as a design partner: present the design space, the options with real trade-offs, and your recommendation — but expect to iterate. Don't jump to implementation in the first pass.
+
