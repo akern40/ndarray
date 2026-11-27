@@ -86,7 +86,5 @@ Clippy must show no warnings other than the documentation lints listed above.
 
 - Stable Rust only, pinned in `rust-toolchain.toml`. Edition 2024.
 - No sealed traits; extension points are `unsafe trait`s with documented contracts.
-- `nd-layout` is `no_std`, has no `alloc` and no `unsafe`. It maps index to offset and never
-  mentions memory, elements or storage.
 - No dependency without the human's approval.
 - Push to `akern40/*` forks freely. Never open PRs, comment or push in the `rust-ndarray` org.
