@@ -1,8 +1,8 @@
 use hegel::{TestCase, generators as gs};
 use nd_core::{SliceView, SliceViewAxis};
 use nd_layout::{
-    AxisOps, IndexSpace, Layout, LogicalOffsets, Ranked, RowMajorIndices, Shape, ShapeN,
-    StridedLayout,
+    AxisOps, BlockedLayout, IndexSpace, Layout, LogicalOffsets, Ranked, RowMajorIndices, Shape,
+    ShapeN, StridedLayout,
 };
 
 fn small_shape(tc: &TestCase) -> ShapeN<2> {
@@ -478,6 +478,73 @@ fn inverted_axis_view_rejects_invalid_axes() {
         assert!(view.is_some());
         if let Some(view) = view {
             assert!(view.axis(2).is_none());
+        }
+    }
+}
+
+#[test]
+fn blocked_layout_views_read_hierarchical_positions() {
+    let data: Vec<usize> = (0..24).collect();
+    let layout = BlockedLayout::try_new(ShapeN::new([4, 6]), ShapeN::new([2, 3]), [12, 6], [3, 1]);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        let view = SliceView::try_new(&data, layout, 0);
+        assert!(view.is_some());
+        if let Some(view) = view {
+            assert_eq!(view.get(&[0, 0]), Some(&0));
+            assert_eq!(view.get(&[1, 0]), Some(&3));
+            assert_eq!(view.get(&[0, 3]), Some(&6));
+            assert_eq!(view.get(&[2, 0]), Some(&12));
+            assert_eq!(view.get(&[3, 5]), Some(&23));
+            assert_eq!(view.get(&[4, 0]), None);
+
+            let values: Vec<usize> = view.iter().take(9).copied().collect();
+            assert_eq!(values, [0, 1, 2, 6, 7, 8, 3, 4, 5]);
+        }
+    }
+}
+
+#[test]
+fn reversed_blocked_layout_view_uses_same_storage_positions() {
+    let data: Vec<usize> = (0..24).collect();
+    let layout = BlockedLayout::try_new(ShapeN::new([4, 6]), ShapeN::new([2, 3]), [12, 6], [3, 1]);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        let view = SliceView::try_new(&data, layout, 0);
+        assert!(view.is_some());
+        if let Some(view) = view {
+            let reversed = view.reverse_axes();
+            assert_eq!(reversed.shape().as_array(), &[6, 4]);
+            assert_eq!(reversed.get(&[0, 0]), view.get(&[0, 0]));
+            assert_eq!(reversed.get(&[3, 1]), view.get(&[1, 3]));
+            assert_eq!(reversed.get(&[5, 3]), view.get(&[3, 5]));
+        }
+    }
+}
+
+#[test]
+fn inverted_blocked_layout_view_uses_same_storage_positions() {
+    let data: Vec<usize> = (0..24).collect();
+    let layout = BlockedLayout::try_new(ShapeN::new([4, 6]), ShapeN::new([2, 3]), [12, 6], [3, 1]);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        let view = SliceView::try_new(&data, layout, 0);
+        assert!(view.is_some());
+        if let Some(view) = view {
+            let inverted = view.axis(0).and_then(SliceViewAxis::invert);
+            assert!(inverted.is_some());
+            if let Some(inverted) = inverted {
+                assert_eq!(inverted.shape().as_array(), &[4, 6]);
+                assert_eq!(inverted.get(&[0, 0]), view.get(&[3, 0]));
+                assert_eq!(inverted.get(&[1, 4]), view.get(&[2, 4]));
+                assert_eq!(inverted.get(&[3, 5]), view.get(&[0, 5]));
+
+                let values: Vec<usize> = inverted.iter().take(9).copied().collect();
+                assert_eq!(values, [15, 16, 17, 21, 22, 23, 12, 13, 14]);
+            }
         }
     }
 }

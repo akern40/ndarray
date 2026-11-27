@@ -497,3 +497,39 @@ operations still needed runtime validation. Axis-local operations therefore use 
 future consumer needs to reuse validation evidence across operations. This does not change the intended
 user-facing direction for axis-local operations: `axis(usize).slice(..)`, `axis(usize).collapse(..)`, and
 similar selectors rather than free-standing axis newtypes.
+
+Blocked-layout positive probe: `BlockedLayout<N>` is the first non-strided layout in the rewrite. It uses
+the restricted hierarchical formula `offset(x) = sum((x_a / block_len_a) outer_stride_a + (x_a %
+block_len_a) inner_stride_a)` and requires every nonzero axis length to divide evenly into complete blocks.
+That divisibility is a representation invariant even when another axis makes the overall index space empty;
+zero-length axes themselves are divisible by any nonzero block length. The representation is deliberately
+much simpler than the spike's windowed/permuted block layout.
+
+The probe supports the current direct `AxisOps` shape. Reversal remains total and merely reverses shape,
+block shape, inner strides, and outer strides. Inversion also remains representation-closed: it negates both
+stride levels and returns one uniform translation equal to the outer-block endpoint contribution plus the
+within-block endpoint contribution. Its fallibility is still arithmetic representability rather than a
+structural blocked-layout failure. Rank-two property tests reuse the same permutation/inversion algebra as
+strided layouts, supporting the decision to keep semantic algebraic laws without reifying a transformation
+enum.
+
+Exact complete-block geometry makes offset bounds exact: quotient and remainder digits vary independently
+within each axis, so inner and outer signed stride ranges can be summed per axis. The constructor rejects
+metadata whose checked bounds cannot be represented. Offsets currently iterate through the generic logical
+index fallback and therefore pay division/remainder work per element. That is adequate for semantics but
+should not be treated as a performance design; a specialized blocked-offset iterator is an obvious later
+optimization.
+
+`nd-core` required no implementation change for the new layout. `SliceView` construction, indexed access,
+iteration, reversal, and inversion all worked through the existing `Layout`/`AxisOps` bounds and storage
+validation. This is positive evidence for the layout/storage split: the storage layer only consumes offset
+bounds and per-index offsets, while layout-specific hierarchy remains invisible to it.
+
+The probe also exposes unfinished capability questions. `BlockedLayout::is_unique` is currently extremely
+conservative and `forward_contiguous_len` remains the default `None`, even though some blocked layouts are
+unique or contain contiguous tiles. This is consistent with the existing conservative strided uniqueness
+analysis, but mutable-access work will need a clearer contract for conservative capability queries. The
+complete-block restriction is also crucial to the current closure result: slicing or windowing can create
+partial blocks and is unlikely to remain closed without additional window metadata or a more general block
+representation. Thus this is a positive probe for reversal/inversion only, not evidence that the final
+blocked layout is closed under the broader structural algebra.
