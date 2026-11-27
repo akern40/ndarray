@@ -59,8 +59,14 @@ from the shape.
 
 ## Initial trait direction
 
-Unsafe traits whose correctness can affect downstream memory safety: `Shape`, `Layout`, `AxisOps`, and
-`Strided`. `Rank` and `Ranked` can remain safe vocabulary traits.
+Unsafe traits should be scarce. Mark a trait unsafe only when implementing it grants authority that unsafe
+code relies on to preserve a concrete memory-safety invariant, and the consumer cannot realistically
+validate or enforce that authority. Ordinary correctness bugs are not enough. Do not cascade unsafe into
+vocabulary traits merely because an unsafe composition uses them.
+
+`Rank`, `Ranked`, `Shape`, and probably `IndexSpace` are safe vocabulary/geometry traits. `Layout` is the
+first expected unsafe trait because its offset, offset-bounds, and uniqueness claims will be trusted for
+unchecked memory access. Evaluate `AxisOps` and `Strided` when their concrete uses are designed.
 
 `Layout` initial surface, subject to iteration:
 
@@ -161,3 +167,7 @@ allocating or eagerly applying.
 Follow-up: the user approved the `Shape`/`IndexSpace`/`Layout` split and emphasized integration with
 `Vec`, slices, and arrays. Raw arrays and slices must not acquire conflicting semantic meanings through
 blanket trait implementations; use semantic wrappers, role-specific traits, and cheap conversions instead.
+
+Follow-up: unsafe-trait marking was narrowed after discussing the difference between correctness bugs and
+memory-safety authority. `Shape` is safe; reserve unsafe traits for contracts such as `Layout` whose
+claims unchecked memory code will trust.
