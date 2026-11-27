@@ -82,6 +82,33 @@ fn reverse_axes_preserves_layout_algebra(tc: TestCase) {
 }
 
 #[hegel::test]
+fn offsets_match_checked_index_offsets(tc: TestCase) {
+    let shape = small_shape(&tc);
+    let strides = small_strides(&tc);
+    let layout = StridedLayout::try_new(shape, strides);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        let mut expected = Vec::new();
+        for index in layout.indices() {
+            let Some(offset) = layout.offset(&index) else {
+                unreachable!()
+            };
+            expected.push(offset);
+        }
+
+        let collected: Vec<isize> = layout.offsets().collect();
+        assert_eq!(collected, expected);
+
+        let folded = layout.offsets().fold(Vec::new(), |mut offsets, offset| {
+            offsets.push(offset);
+            offsets
+        });
+        assert_eq!(folded, expected);
+    }
+}
+
+#[hegel::test]
 fn offset_bounds_match_enumerated_offsets(tc: TestCase) {
     let shape = small_shape(&tc);
     tc.assume(shape.iter().all(|len| len > 0));
@@ -199,6 +226,47 @@ fn construction_accepts_boundary_strides() {
     }
     if let Some(layout) = negative {
         assert_eq!(layout.offset_bounds(), Some((isize::MIN, 0)));
+    }
+}
+
+#[test]
+fn offsets_fold_after_partial_iteration() {
+    let cases = [
+        ([2, 3], [3, 1]),
+        ([2, 3], [1, 3]),
+        ([2, 3], [-3, -1]),
+        ([2, 3], [0, 1]),
+        ([2, 3], [5, 0]),
+    ];
+
+    for (shape, strides) in cases {
+        let Some(layout) = StridedLayout::try_new(ShapeN::new(shape), strides) else {
+            unreachable!()
+        };
+        let all: Vec<isize> = layout.offsets().collect();
+        for skip in 0..=all.len() {
+            let mut offsets = layout.offsets();
+            for _ in 0..skip {
+                offsets.next();
+            }
+            let folded = offsets.fold(Vec::new(), |mut remaining, offset| {
+                remaining.push(offset);
+                remaining
+            });
+            let expected: Vec<isize> = all.iter().skip(skip).copied().collect();
+            assert_eq!(folded, expected);
+        }
+    }
+}
+
+#[test]
+fn rank_zero_offsets_iterate_once() {
+    let layout = StridedLayout::try_new(ShapeN::<0>::new([]), []);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        assert_eq!(layout.offsets().collect::<Vec<_>>(), [0]);
+        assert_eq!(layout.offsets().fold(0, |count, _| count + 1), 1);
     }
 }
 

@@ -42,6 +42,110 @@ impl<const N: usize> StridedLayout<N> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct StridedOffsets<'a, const N: usize> {
+    shape: &'a ShapeN<N>,
+    strides: &'a [isize; N],
+    index: Option<[usize; N]>,
+    offset: isize,
+}
+
+impl<'a, const N: usize> StridedOffsets<'a, N> {
+    fn new(layout: &'a StridedLayout<N>) -> Self {
+        let index = layout
+            .shape
+            .as_array()
+            .iter()
+            .all(|len| *len > 0)
+            .then_some([0; N]);
+        Self {
+            shape: &layout.shape,
+            strides: &layout.strides,
+            index,
+            offset: 0,
+        }
+    }
+}
+
+impl<const N: usize> Iterator for StridedOffsets<'_, N> {
+    type Item = isize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut index = self.index?;
+        let current = self.offset;
+        self.index = advance_offsets(self.shape, self.strides, &mut index, &mut self.offset)
+            .then_some(index);
+        Some(current)
+    }
+
+    fn fold<Acc, G>(mut self, init: Acc, mut f: G) -> Acc
+    where
+        G: FnMut(Acc, Self::Item) -> Acc,
+    {
+        let mut accum = init;
+        if N == 0 {
+            if self.index.is_some() {
+                accum = f(accum, self.offset);
+            }
+            return accum;
+        }
+
+        while let Some(mut index) = self.index {
+            let Some(len) = self.shape.as_array().last().copied() else {
+                unreachable!()
+            };
+            let Some(stride) = self.strides.last().copied() else {
+                unreachable!()
+            };
+            let Some(element_index) = index.last().copied() else {
+                unreachable!()
+            };
+
+            let mut remaining = len - element_index;
+            while remaining > 0 {
+                accum = f(accum, self.offset);
+                self.offset = self.offset.wrapping_add(stride);
+                remaining -= 1;
+            }
+
+            self.offset = self.offset.wrapping_sub(stride);
+            let Some(last) = index.last_mut() else {
+                unreachable!()
+            };
+            *last = len - 1;
+            self.index = advance_offsets(self.shape, self.strides, &mut index, &mut self.offset)
+                .then_some(index);
+        }
+        accum
+    }
+}
+
+fn advance_offsets<const N: usize>(
+    shape: &ShapeN<N>,
+    strides: &[isize; N],
+    index: &mut [usize; N],
+    offset: &mut isize,
+) -> bool {
+    for ((value, len), stride) in index
+        .iter_mut()
+        .rev()
+        .zip(shape.as_array().iter().rev())
+        .zip(strides.iter().rev())
+    {
+        if let Some(incremented) = value.checked_add(1)
+            && incremented < *len
+        {
+            *value = incremented;
+            *offset = offset.wrapping_add(*stride);
+            return true;
+        }
+        let reset = (*value).cast_signed().wrapping_mul(*stride);
+        *offset = offset.wrapping_sub(reset);
+        *value = 0;
+    }
+    false
+}
+
 fn compute_offset_bounds<const N: usize>(
     shape: &ShapeN<N>,
     strides: &[isize; N],
@@ -138,6 +242,11 @@ impl<const N: usize> IndexSpace for StridedLayout<N> {
 }
 
 impl<const N: usize> Layout for StridedLayout<N> {
+    type Offsets<'a>
+        = StridedOffsets<'a, N>
+    where
+        Self: 'a;
+
     fn offset(&self, index: &Self::Index) -> Option<isize> {
         checked_offset(self, index)
     }
@@ -152,6 +261,10 @@ impl<const N: usize> Layout for StridedLayout<N> {
 
     fn is_unique(&self) -> bool {
         conservative_uniqueness(&self.shape, &self.strides)
+    }
+
+    fn offsets(&self) -> Self::Offsets<'_> {
+        StridedOffsets::new(self)
     }
 }
 
