@@ -1,4 +1,7 @@
-use crate::{AxisOps, ConstRank, IndexSpace, Layout, Ranked, RowMajorIndices, Shape, ShapeN};
+use crate::{
+    AxisOps, AxisTransform, ConstRank, IndexSpace, Layout, Ranked, RowMajorIndices, Shape, ShapeN,
+    TransformedLayout,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StridedLayout<const N: usize> {
@@ -222,50 +225,59 @@ fn conservative_uniqueness<const N: usize>(shape: &ShapeN<N>, strides: &[isize; 
 }
 
 impl<const N: usize> AxisOps for StridedLayout<N> {
-    type Reversed = Self;
-    type Inverted = Self;
+    type Transformed = Self;
 
-    fn reverse_axes(self) -> Self {
-        let mut shape = self.shape.into_array();
-        let mut strides = self.strides;
-        shape.reverse();
-        strides.reverse();
+    fn apply_axis_transform(
+        self,
+        transform: AxisTransform,
+    ) -> Option<TransformedLayout<Self::Transformed>> {
+        match transform {
+            AxisTransform::ReverseAxes => {
+                let mut shape = self.shape.into_array();
+                let mut strides = self.strides;
+                shape.reverse();
+                strides.reverse();
 
-        Self {
-            shape: ShapeN::new(shape),
-            strides,
-            offset_bounds: self.offset_bounds,
+                Some(TransformedLayout::new(
+                    Self {
+                        shape: ShapeN::new(shape),
+                        strides,
+                        offset_bounds: self.offset_bounds,
+                    },
+                    0,
+                ))
+            }
+            AxisTransform::InvertAxis(axis) => {
+                if axis.ndim() != N {
+                    return None;
+                }
+
+                let axis_index = axis.index();
+                let len = self.shape.as_array()[axis_index];
+                if len <= 1 || self.shape.as_array().contains(&0) {
+                    return Some(TransformedLayout::new(self, 0));
+                }
+
+                let stride = self.strides[axis_index];
+                let steps = len.checked_sub(1)?;
+                let steps = isize::try_from(steps).ok()?;
+                let translation = steps.checked_mul(stride)?;
+                let inverted_stride = stride.checked_neg()?;
+
+                let mut strides = self.strides;
+                strides[axis_index] = inverted_stride;
+                let offset_bounds = Some(compute_offset_bounds(&self.shape, &strides)?);
+
+                Some(TransformedLayout::new(
+                    Self {
+                        shape: self.shape,
+                        strides,
+                        offset_bounds,
+                    },
+                    translation,
+                ))
+            }
         }
-    }
-
-    fn invert_axis(self, axis: usize) -> Option<(Self, isize)> {
-        if axis >= N {
-            return None;
-        }
-
-        let len = self.shape.as_array()[axis];
-        if len <= 1 || self.shape.as_array().contains(&0) {
-            return Some((self, 0));
-        }
-
-        let stride = self.strides[axis];
-        let steps = len.checked_sub(1)?;
-        let steps = isize::try_from(steps).ok()?;
-        let translation = steps.checked_mul(stride)?;
-        let inverted_stride = stride.checked_neg()?;
-
-        let mut strides = self.strides;
-        strides[axis] = inverted_stride;
-        let offset_bounds = Some(compute_offset_bounds(&self.shape, &strides)?);
-
-        Some((
-            Self {
-                shape: self.shape,
-                strides,
-                offset_bounds,
-            },
-            translation,
-        ))
     }
 }
 

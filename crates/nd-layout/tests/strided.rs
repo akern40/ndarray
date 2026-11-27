@@ -1,7 +1,10 @@
 use std::collections::HashSet;
 
 use hegel::{TestCase, generators as gs};
-use nd_layout::{AxisOps, IndexSpace, Layout, Shape, ShapeN, StridedLayout};
+use nd_layout::{
+    Axis, AxisOps, AxisSelection, IndexSpace, Layout, Shape, ShapeN, StridedLayout,
+    TransformedLayout,
+};
 
 fn small_shape(tc: &TestCase) -> ShapeN<2> {
     ShapeN::new(tc.draw(gs::arrays(gs::integers::<usize>().max_value(3))))
@@ -61,22 +64,29 @@ fn reverse_axes_preserves_layout_algebra(tc: TestCase) {
     assert!(layout.is_some());
     if let Some(layout) = layout {
         let reversed_layout = layout.reverse_axes();
-
-        assert_eq!(
-            reversed_layout.shape().as_array(),
-            &reversed(shape.into_array())
-        );
-        assert_eq!(reversed_layout.strides(), &reversed(strides));
-        assert_eq!(reversed_layout.offset_bounds(), layout.offset_bounds());
-        assert_eq!(reversed_layout.is_unique(), layout.is_unique());
-        assert_eq!(reversed_layout.reverse_axes(), layout);
-
-        for index in reversed_layout.indices() {
-            let original_index = reversed(index);
+        assert!(reversed_layout.is_some());
+        if let Some(reversed_layout) = reversed_layout {
+            let (reversed_layout, translation) = reversed_layout.into_parts();
+            assert_eq!(translation, 0);
             assert_eq!(
-                reversed_layout.offset(&index),
-                layout.offset(&original_index)
+                reversed_layout.shape().as_array(),
+                &reversed(shape.into_array())
             );
+            assert_eq!(reversed_layout.strides(), &reversed(strides));
+            assert_eq!(reversed_layout.offset_bounds(), layout.offset_bounds());
+            assert_eq!(reversed_layout.is_unique(), layout.is_unique());
+            assert_eq!(
+                reversed_layout.reverse_axes(),
+                Some(TransformedLayout::new(layout, 0))
+            );
+
+            for index in reversed_layout.indices() {
+                let original_index = reversed(index);
+                assert_eq!(
+                    reversed_layout.offset(&index),
+                    layout.offset(&original_index)
+                );
+            }
         }
     }
 }
@@ -327,11 +337,19 @@ fn reverse_axes_reverses_empty_layout_geometry() {
     assert!(layout.is_some());
     if let Some(layout) = layout {
         let reversed_layout = layout.reverse_axes();
-        assert_eq!(reversed_layout.shape().as_array(), &[3, 0]);
-        assert_eq!(reversed_layout.strides(), &[7, 5]);
-        assert_eq!(reversed_layout.offset_bounds(), None);
-        assert_eq!(reversed_layout.indices().count(), 0);
-        assert_eq!(reversed_layout.reverse_axes(), layout);
+        assert!(reversed_layout.is_some());
+        if let Some(reversed_layout) = reversed_layout {
+            let (reversed_layout, translation) = reversed_layout.into_parts();
+            assert_eq!(translation, 0);
+            assert_eq!(reversed_layout.shape().as_array(), &[3, 0]);
+            assert_eq!(reversed_layout.strides(), &[7, 5]);
+            assert_eq!(reversed_layout.offset_bounds(), None);
+            assert_eq!(reversed_layout.indices().count(), 0);
+            assert_eq!(
+                reversed_layout.reverse_axes(),
+                Some(TransformedLayout::new(layout, 0))
+            );
+        }
     }
 }
 
@@ -341,7 +359,10 @@ fn reverse_axes_is_identity_for_rank_zero() {
 
     assert!(layout.is_some());
     if let Some(layout) = layout {
-        assert_eq!(layout.reverse_axes(), layout);
+        assert_eq!(
+            layout.reverse_axes(),
+            Some(TransformedLayout::new(layout, 0))
+        );
     }
 }
 
@@ -355,9 +376,10 @@ fn invert_axis_preserves_absolute_positions(tc: TestCase) {
 
     assert!(layout.is_some());
     if let Some(layout) = layout {
-        let inverted = layout.axis(axis).invert();
+        let inverted = layout.axis(axis).and_then(AxisSelection::invert);
         assert!(inverted.is_some());
-        if let Some((inverted, translation)) = inverted {
+        if let Some(inverted) = inverted {
+            let (inverted, translation) = inverted.into_parts();
             assert_eq!(inverted.shape().as_array(), shape.as_array());
 
             let axis_len = shape.as_array()[axis];
@@ -376,13 +398,37 @@ fn invert_axis_preserves_absolute_positions(tc: TestCase) {
                 }
             }
 
-            let twice = inverted.axis(axis).invert();
-            assert!(twice.is_some());
-            if let Some((twice, reverse_translation)) = twice {
-                assert_eq!(twice, layout);
-                assert_eq!(translation + reverse_translation, 0);
-            }
+            let twice = layout
+                .axis(axis)
+                .and_then(AxisSelection::invert)
+                .and_then(|transformed| transformed.axis(axis))
+                .and_then(AxisSelection::invert);
+            assert_eq!(twice, Some(TransformedLayout::new(layout, 0)));
         }
+    }
+}
+
+#[hegel::test]
+fn reverse_and_invert_obey_permutation_algebra(tc: TestCase) {
+    let shape = small_shape(&tc);
+    tc.assume(shape.iter().all(|len| len > 0));
+    let strides = small_strides(&tc);
+    let axis = tc.draw(gs::integers::<usize>().max_value(1));
+    let layout = StridedLayout::try_new(shape, strides);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        let invert_after_reverse = layout
+            .reverse_axes()
+            .and_then(|reversed| reversed.axis(axis))
+            .and_then(AxisSelection::invert);
+
+        let invert_before_reverse = layout
+            .axis(1 - axis)
+            .and_then(AxisSelection::invert)
+            .and_then(TransformedLayout::reverse_axes);
+
+        assert_eq!(invert_after_reverse, invert_before_reverse);
     }
 }
 
@@ -391,9 +437,10 @@ fn invert_axis_uses_fluent_axis_selection() {
     let layout = StridedLayout::try_new(ShapeN::new([2, 3]), [3, 1]);
     assert!(layout.is_some());
     if let Some(layout) = layout {
-        let inverted = layout.axis(1).invert();
+        let inverted = layout.axis(1).and_then(AxisSelection::invert);
         assert!(inverted.is_some());
-        if let Some((inverted, translation)) = inverted {
+        if let Some(inverted) = inverted {
+            let (inverted, translation) = inverted.into_parts();
             assert_eq!(translation, 2);
             assert_eq!(inverted.strides(), &[3, -1]);
             assert_eq!(inverted.offset_bounds(), Some((-2, 3)));
@@ -404,11 +451,26 @@ fn invert_axis_uses_fluent_axis_selection() {
 }
 
 #[test]
-fn invert_axis_rejects_invalid_axes() {
+fn invalid_axes_cannot_be_constructed() {
+    assert_eq!(Axis::new(2, 2), None);
+    assert_eq!(Axis::new(0, 0), None);
+
     let layout = StridedLayout::try_new(ShapeN::new([2, 3]), [3, 1]);
     assert!(layout.is_some());
     if let Some(layout) = layout {
-        assert!(layout.axis(2).invert().is_none());
+        assert!(layout.axis(2).is_none());
+    }
+}
+
+#[test]
+fn axis_rank_must_match_the_layout_rank() {
+    let axis = Axis::new(3, 1);
+    assert!(axis.is_some());
+    let layout = StridedLayout::try_new(ShapeN::new([2, 3]), [3, 1]);
+    assert!(layout.is_some());
+
+    if let (Some(axis), Some(layout)) = (axis, layout) {
+        assert!(layout.invert_axis(axis).is_none());
     }
 }
 
@@ -417,7 +479,11 @@ fn invert_axis_is_identity_for_unit_axes() {
     let layout = StridedLayout::try_new(ShapeN::new([1, 3]), [99, 1]);
     assert!(layout.is_some());
     if let Some(layout) = layout {
-        assert_eq!(layout.axis(0).invert(), Some((layout, 0)));
+        let inverted = layout.axis(0).and_then(AxisSelection::invert);
+        assert!(inverted.is_some());
+        if let Some(inverted) = inverted {
+            assert_eq!(inverted.into_parts(), (layout, 0));
+        }
     }
 }
 
@@ -426,6 +492,10 @@ fn invert_axis_is_identity_for_empty_layouts() {
     let layout = StridedLayout::try_new(ShapeN::new([0, 3]), [isize::MIN, isize::MAX]);
     assert!(layout.is_some());
     if let Some(layout) = layout {
-        assert_eq!(layout.axis(1).invert(), Some((layout, 0)));
+        let inverted = layout.axis(1).and_then(AxisSelection::invert);
+        assert!(inverted.is_some());
+        if let Some(inverted) = inverted {
+            assert_eq!(inverted.into_parts(), (layout, 0));
+        }
     }
 }

@@ -43,8 +43,9 @@ sections current; append significant session notes at the bottom.
   Logical zero is not generally the first storage position, even for positive strides. For nonempty
   rectangular layouts the zero index is valid, so origin must denote a valid storage element position;
   for empty layouts it may denote a slice boundary.
-- Axis operations are by-value and use per-operation associated output types. A single `WithRank` GAT was
-  explored and rejected.
+- Rank-preserving axis operations are by-value. The current probe groups them in `AxisOps` behind one
+  required transformation method and one uniform associated output type. Rank-changing operations remain a
+  separate algebra. A single `WithRank` GAT was explored and rejected.
 - Runtime-axis operations erase static knowledge because the output type cannot depend on the runtime
   axis value. Constant-sized axes need a separate static-axis method set later.
 - Compile-time shapes and strides are important end-state representations, but they are not the first
@@ -414,3 +415,51 @@ if later trusted contracts make transformation preservation a proof obligation, 
 redundant for trusted implementations. The duplication between layout-level `Axis` and view-level
 `SliceViewAxis` is intentional probe scaffolding, not a final API shape. A unified selector may need a more
 general target algebra, or array-level selectors may remain a thin adaptation of layout algebra.
+
+Follow-up revision, superseding the unchecked-selector description above: the axis probe now uses validated
+value-level transformations. `Axis` is finite-index
+evidence containing both the rank for which it is valid and the selected coordinate; invalid coordinates
+cannot be constructed through its checked constructor. Axis transformations are currently the closed enum
+`AxisTransform::{ReverseAxes, InvertAxis}` and are restricted to rank-preserving operations. `AxisOps` has
+one required method, `apply_axis_transform`; `reverse_axes` and `invert_axis` are convenience wrappers that
+forward to it. Implementors can still override those wrappers, although the initial `StridedLayout`
+implementation does all specialization inside the required method.
+
+All convenience transformations now return `TransformedLayout`, the pair of transformed layout and signed
+placement translation. Reversal no longer strips or assumes a zero translation. For strided layouts reversal
+does produce zero translation because permutation fixes logical zero, but translation is representation
+normalization rather than part of the mathematical reindexing map, so the generic algebra should not discard
+it. The intended semantic equation remains `translation + output.offset(x') = input.offset(phi(x'))` for
+the transformation's logical reindexing `phi`. When transformations compose, translations add. A rank-two
+property test now checks the permutation/inversion commutation law by composing reverse and inversion in
+both orders and comparing both layout and accumulated translation.
+
+`TransformedLayout` is itself an axis-transformable target but is not itself a `Layout`. This is why
+`AxisOps` now extends `Ranked` rather than `Layout`: layouts are the initial transformation targets, while
+the transformation envelope carries pending placement metadata during a chain. Its associated output type
+still must be a layout. Applying another transformation to the envelope transforms the inner layout and
+checked-adds the translations, so chains such as invert-then-reverse do not accidentally drop placement
+metadata. The inverse-involution property test now exercises this composition path directly and expects the
+round trip to reproduce the original layout with zero accumulated translation.
+
+The fluent selector validates before constructing a selection: `layout.axis(index)` and `view.axis(index)`
+return `None` rather than an invalid `AxisSelection`. In ordinary fallible code the intended shape is
+`layout.axis(1)?.invert()?`; tests often use `.and_then(AxisSelection::invert)` because they do not return
+`Option`. Selection still consumes its target before validation, so failed runtime-axis selection drops the
+target. That is acceptable for the current small copyable layouts and views but is not a settled ownership
+design for future owned arrays.
+
+`SliceView` now treats reversal and inversion uniformly: apply the layout transformation, add its
+translation to the explicit origin, revalidate the composition, and preserve the storage unchanged. The
+revalidation uses storage metadata rather than element access. `StridedLayout` absorbs both operations
+directly into shape and stride metadata, so no transformation chain or indexing wrapper is constructed for
+these cases.
+
+This is still only a probe of the one-required-method shape. Its visible costs are that reversal is
+nominally fallible even though it is total for strided layouts, transformation inputs can still be
+rank-mismatched when constructed outside the selector, and transformation values represent individual atomic
+operations rather than a normalized composite transformation. There is no composed-fallback layout yet, and
+stable Rust cannot provide one through a blanket implementation that coexists with optimized implementors.
+A useful next question is whether rank-preserving transformations can normalize into bounded per-axis data
+(permutation plus per-axis affine slicing/inversion state), which would matter for representation closure
+and `no_alloc` composition even if construction-time rewriting itself is cheap.

@@ -1,4 +1,4 @@
-use nd_layout::{AxisOps, IndexSpace, Layout, Ranked};
+use nd_layout::{Axis, AxisOps, IndexSpace, Layout, Ranked};
 
 use crate::storage::{SliceStorage, offset_position};
 
@@ -100,30 +100,35 @@ impl<'a, T, L: Layout> Iterator for SliceViewIter<'a, '_, T, L> {
     }
 }
 
-impl<'a, T, L: AxisOps> SliceView<'a, T, L> {
-    #[must_use]
-    pub fn reverse_axes(self) -> SliceView<'a, T, L::Reversed> {
-        SliceView {
+impl<'a, T, L: AxisOps + Layout> SliceView<'a, T, L> {
+    pub fn reverse_axes(self) -> Option<SliceView<'a, T, L::Transformed>> {
+        let transformed = self.layout.reverse_axes()?;
+        let (layout, translation) = transformed.into_parts();
+        let origin = offset_position(self.origin, translation)?;
+        self.storage.validate_layout(&layout, origin)?;
+        Some(SliceView {
             storage: self.storage,
-            layout: self.layout.reverse_axes(),
-            origin: self.origin,
-        }
+            layout,
+            origin,
+        })
     }
 
-    pub fn axis(self, axis: usize) -> SliceViewAxis<'a, T, L> {
-        SliceViewAxis { view: self, axis }
+    pub fn axis(self, index: usize) -> Option<SliceViewAxis<'a, T, L>> {
+        let axis = Axis::new(self.layout.shape().ndim(), index)?;
+        Some(SliceViewAxis { view: self, axis })
     }
 }
 
 #[derive(Debug)]
-pub struct SliceViewAxis<'a, T, L: AxisOps> {
+pub struct SliceViewAxis<'a, T, L: AxisOps + Layout> {
     view: SliceView<'a, T, L>,
-    axis: usize,
+    axis: Axis,
 }
 
-impl<'a, T, L: AxisOps> SliceViewAxis<'a, T, L> {
-    pub fn invert(self) -> Option<SliceView<'a, T, L::Inverted>> {
-        let (layout, translation) = self.view.layout.axis(self.axis).invert()?;
+impl<'a, T, L: AxisOps + Layout> SliceViewAxis<'a, T, L> {
+    pub fn invert(self) -> Option<SliceView<'a, T, L::Transformed>> {
+        let transformed = self.view.layout.invert_axis(self.axis)?;
+        let (layout, translation) = transformed.into_parts();
         let origin = offset_position(self.view.origin, translation)?;
         self.view.storage.validate_layout(&layout, origin)?;
 

@@ -7,7 +7,7 @@ mod rank;
 mod shape;
 mod strided;
 
-pub use axis::{Axis, AxisOps};
+pub use axis::{Axis, AxisOps, AxisSelection, AxisTransform, TransformedLayout};
 pub use index_space::{IndexSpace, RowMajorIndices};
 pub use layout::{Layout, LogicalOffsets};
 pub use rank::{ConstRank, DynRank, Rank, Ranked};

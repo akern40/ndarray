@@ -1,5 +1,5 @@
 use hegel::{TestCase, generators as gs};
-use nd_core::SliceView;
+use nd_core::{SliceView, SliceViewAxis};
 use nd_layout::{
     AxisOps, IndexSpace, Layout, LogicalOffsets, Ranked, RowMajorIndices, Shape, ShapeN,
     StridedLayout,
@@ -258,17 +258,26 @@ fn reversed_axes_view_iterates_transposed_values() {
     if let Some(layout) = layout {
         let view = SliceView::try_new(&data, layout, 0);
         assert!(view.is_some());
-        assert!(SliceView::try_new(&data, layout.reverse_axes(), 0).is_some());
+        let reversed_layout = layout.reverse_axes();
+        assert!(reversed_layout.is_some());
+        if let Some(reversed_layout) = reversed_layout {
+            let (reversed_layout, translation) = reversed_layout.into_parts();
+            assert_eq!(translation, 0);
+            assert!(SliceView::try_new(&data, reversed_layout, 0).is_some());
+        }
         if let Some(view) = view {
             let reversed_view = view.reverse_axes();
-            assert_eq!(reversed_view.shape().as_array(), &[3, 2]);
-            assert_eq!(reversed_view.layout().strides(), &[1, 3]);
-            let values: Vec<usize> = reversed_view.iter().copied().collect();
-            assert_eq!(values, [0, 3, 1, 4, 2, 5]);
+            assert!(reversed_view.is_some());
+            if let Some(reversed_view) = reversed_view {
+                assert_eq!(reversed_view.shape().as_array(), &[3, 2]);
+                assert_eq!(reversed_view.layout().strides(), &[1, 3]);
+                let values: Vec<usize> = reversed_view.iter().copied().collect();
+                assert_eq!(values, [0, 3, 1, 4, 2, 5]);
 
-            for index in reversed_view.indices() {
-                let [first, second] = index;
-                assert_eq!(reversed_view.get(&index), view.get(&[second, first]));
+                for index in reversed_view.indices() {
+                    let [first, second] = index;
+                    assert_eq!(reversed_view.get(&index), view.get(&[second, first]));
+                }
             }
         }
     }
@@ -433,7 +442,7 @@ fn inverted_axis_view_preserves_backing_positions(tc: TestCase) {
         let view = SliceView::try_new(&data, layout, origin);
         tc.assume(view.is_some());
         if let Some(view) = view {
-            let inverted_view = view.axis(axis).invert();
+            let inverted_view = view.axis(axis).and_then(SliceViewAxis::invert);
             assert!(inverted_view.is_some());
             if let Some(inverted_view) = inverted_view {
                 let axis_len = shape.as_array()[axis];
@@ -456,7 +465,7 @@ fn inverted_axis_view_iterates_reversed_innermost_values() {
         let view = SliceView::try_new(&data, layout, 0);
         assert!(view.is_some());
         if let Some(view) = view {
-            let inverted = view.axis(1).invert();
+            let inverted = view.axis(1).and_then(SliceViewAxis::invert);
             assert!(inverted.is_some());
             if let Some(inverted) = inverted {
                 let values: Vec<usize> = inverted.iter().copied().collect();
@@ -477,7 +486,7 @@ fn inverted_axis_view_rejects_invalid_axes() {
         let view = SliceView::try_new(&data, layout, 0);
         assert!(view.is_some());
         if let Some(view) = view {
-            assert!(view.axis(2).invert().is_none());
+            assert!(view.axis(2).is_none());
         }
     }
 }
