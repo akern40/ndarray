@@ -309,3 +309,38 @@ about 5x because upstream can use a backing-slice iterator, while `SliceView` st
 offset-to-position conversion and checked access. In reversed layouts the implementations are nearly at
 parity because strided memory traversal dominates. The next clear capability is a layout-level contiguous
 forward-offset query so `nd-core` can safely select a backing-slice fast path without unsafe code.
+
+Follow-up: `Layout::forward_contiguous_len` now provides that capability query. `Some(len)` is intended to
+mean that logical iteration produces exactly the offsets `0..len` in order. The default is conservative
+`None`. `StridedLayout` computes the query exactly for positive-forward affine contiguity. The important
+edge case is unit-length axes: their strides are inert because coordinate zero is the only valid coordinate,
+so they must not prevent a layout from being contiguous. Empty layouts report length zero and rank-zero
+layouts report length one.
+
+`SliceView::iter` uses the query to select a backing-slice iterator when the corresponding storage range is
+available. This is safe: an incorrect layout implementation can produce wrong values or fall back to the
+generic path, but slicing still cannot access memory outside the backing slice. The opaque iterator return
+now hides a small enum with backing-slice and layout-offset variants. Its `fold` forwards to the backing
+slice's own `fold` in the contiguous case, preserving vectorization-friendly behavior.
+
+Benchmarks after the contiguous fast path:
+
+| implementation | layout | median |
+|---|---|---:|
+| Rust slice | contiguous | 1.332 µs |
+| `ndarray` 0.17.2 | contiguous | 1.197 µs |
+| `ndarray` 0.17.2 | reversed contiguous axes | 6.041 µs |
+| `ndarray` 0.17.2 | row-strided | 2.103 µs |
+| `ndarray` 0.17.2 | reversed row-strided axes | 8.707 µs |
+| `SliceView` | contiguous | 1.307 µs |
+| `SliceView` | reversed contiguous axes | 6.958 µs |
+| `SliceView` | row-strided | 6.999 µs |
+| `SliceView` | reversed row-strided axes | 8.916 µs |
+
+Contiguous logical iteration is now at parity with raw slice and upstream ndarray iteration. Reversed
+contiguous and reversed row-strided layouts are also close to upstream because their memory access patterns
+dominate. The largest remaining gap is ordinary row-strided logical iteration: upstream remains about 3.3x
+faster because it can exploit contiguous innermost rows with a tight pointer loop, while `SliceView` still
+converts and checks every individual offset. This suggests the next iteration-design question: whether
+layouts should expose offset runs or another innermost-run traversal capability, especially for fold-driven
+evaluation, rather than only whole-layout contiguity and per-element offsets.

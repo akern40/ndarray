@@ -37,10 +37,17 @@ impl<'a, T, L: Layout> SliceView<'a, T, L> {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &'a T> + '_ {
-        let view = self;
-        self.layout
-            .offsets()
-            .map(move |offset| view.get_valid_offset(offset))
+        if let Some(len) = self.layout.forward_contiguous_len()
+            && let Some(end) = self.origin.checked_add(len)
+            && let Some(slice) = self.data.get(self.origin..end)
+        {
+            return SliceViewIter::Contiguous(slice.iter());
+        }
+
+        SliceViewIter::Offsets {
+            view: self,
+            offsets: self.layout.offsets(),
+        }
     }
 
     fn get_valid_offset(&self, offset: isize) -> &'a T {
@@ -59,6 +66,46 @@ impl<'a, T, L: Layout> SliceView<'a, T, L> {
     #[must_use]
     pub const fn layout(&self) -> &L {
         &self.layout
+    }
+}
+
+enum SliceViewIter<'a, 'view, T, L: Layout> {
+    Contiguous(core::slice::Iter<'a, T>),
+    Offsets {
+        view: &'view SliceView<'a, T, L>,
+        offsets: L::Offsets<'view>,
+    },
+}
+
+impl<'a, T, L: Layout> Iterator for SliceViewIter<'a, '_, T, L> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Contiguous(iter) => iter.next(),
+            Self::Offsets { view, offsets } => {
+                offsets.next().map(|offset| view.get_valid_offset(offset))
+            }
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            Self::Contiguous(iter) => iter.size_hint(),
+            Self::Offsets { offsets, .. } => offsets.size_hint(),
+        }
+    }
+
+    fn fold<Acc, F>(self, init: Acc, mut f: F) -> Acc
+    where
+        F: FnMut(Acc, Self::Item) -> Acc,
+    {
+        match self {
+            Self::Contiguous(iter) => iter.fold(init, f),
+            Self::Offsets { view, offsets } => offsets.fold(init, |accum, offset| {
+                f(accum, view.get_valid_offset(offset))
+            }),
+        }
     }
 }
 

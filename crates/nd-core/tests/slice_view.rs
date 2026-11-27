@@ -274,6 +274,22 @@ fn reversed_axes_view_iterates_transposed_values() {
 }
 
 #[test]
+fn forward_contiguous_iteration_starts_at_explicit_origin() {
+    let data = [9, 0, 1, 2, 3];
+    let layout = StridedLayout::try_new(ShapeN::new([2, 2]), [2, 1]);
+
+    assert!(layout.is_some());
+    if let Some(layout) = layout {
+        assert_eq!(layout.forward_contiguous_len(), Some(4));
+        let view = SliceView::try_new(&data, layout, 1);
+        assert!(view.is_some());
+        if let Some(view) = view {
+            assert_eq!(view.iter().copied().collect::<Vec<_>>(), [0, 1, 2, 3]);
+        }
+    }
+}
+
+#[test]
 fn constructor_validates_explicit_origin() {
     let data = [10, 20, 30];
     let positive = StridedLayout::try_new(ShapeN::new([3]), [1]);
