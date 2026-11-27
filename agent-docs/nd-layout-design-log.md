@@ -6,7 +6,8 @@ sections current; append significant session notes at the bottom.
 ## Current working decisions
 
 - `nd-layout` owns the index-to-offset vocabulary. It does not name element types, storage types,
-  pointers, or allocation-owning memory abstractions.
+  pointers, or allocation-owning memory abstractions. `nd-core` is the first consumer layer and owns
+  backed views, storage access, and eventually ownership/memory-relevant invariants.
 - Unsafe extension points are allowed, but unsafe markers are demand-driven. Do not introduce `unsafe`
   merely because a concept is expected to support unsafe consumers eventually. Introduce it at the first
   concrete boundary where memory access or another unsafe operation must trust an invariant that cannot
@@ -28,13 +29,20 @@ sections current; append significant session notes at the bottom.
   index/validity/logical-iteration interface; `Layout` adds index-to-offset mapping. Lazy producers use
   `IndexSpace` plus evaluation rather than pretending to be layouts.
 - `IndexSpace` exposes logical iteration through Rust iterators rather than a manual first/next protocol.
-  This fits the iterator-first end state and integrates with the wider Rust ecosystem.
+  This fits the iterator-first end state and integrates with the wider Rust ecosystem. This is canonical
+  logical row-major traversal only; memory-order, stride-order, fusion-compatible, and parallel evaluation
+  schedules are deliberately deferred because they require layout/producer information unavailable to
+  `IndexSpace`.
 - Integration with the wider Rust ecosystem is a design requirement, especially `Vec`, slices, and
   arrays. However, raw Rust arrays and slices are not inherently ranked. `[usize; N]` can represent an
   N-axis shape, but as element storage it is a one-dimensional container. Use semantic wrappers,
   role-specific traits, and inexpensive conversions at boundaries rather than trait implementations that
   give one raw container conflicting meanings.
 - Structural transformations should be lazy metadata/layout transformations, not data operations.
+- Backed storage needs an explicit origin: the storage position corresponding to layout offset zero.
+  Logical zero is not generally the first storage position, even for positive strides. For nonempty
+  rectangular layouts the zero index is valid, so origin must denote a valid storage element position;
+  for empty layouts it may denote a slice boundary.
 - Axis operations are by-value and use per-operation associated output types. A single `WithRank` GAT was
   explored and rejected.
 - Runtime-axis operations erase static knowledge because the output type cannot depend on the runtime
@@ -125,14 +133,17 @@ Deferred from initial `Layout`:
    `[usize; N]` and `[isize; N]`, with checked construction and affine offset computation. Hegel tests
    for bounds, offsets, iteration, and offset bounds. Kani proofs for arithmetic-overflow invariants.
 5. Offset bounds and conservative uniqueness, with enumerated small-layout tests and Kani where feasible.
-6. First axis operation, probably `reverse_axes`, then one operation at a time: collapse, slice, invert,
-   insert/remove, permute, merge.
-7. A non-strided layout such as a tiled/block layout to pressure-test generality before optimizing.
-8. Dynamic-rank owned representation using allocation, kept simple initially, with `Vec`/slice conversion
+6. Minimal read-only backed consumer in `nd-core`: a fixed-rank `StridedView` over a slice with explicit
+   origin and checked value access. Use it to pressure-test offset bounds, negative strides, zero strides,
+   empty layouts, and the origin model before designing axis operations.
+7. First axis operation, probably `reverse_axes`, now tested through backed views as well as layout algebra;
+   then one operation at a time: collapse, slice, invert, insert/remove, permute, merge.
+8. A non-strided layout such as a tiled/block layout to pressure-test generality before optimizing.
+9. Dynamic-rank owned representation using allocation, kept simple initially, with `Vec`/slice conversion
    boundaries considered explicitly.
-9. `Strided` trait, contiguity queries, and explicit fast-path capabilities.
-10. Const-extent/const-stride families and static-axis operation traits.
-11. Iteration-order/evaluation-schedule abstractions needed by the lazy producer layer.
+10. `Strided` trait, contiguity queries, and explicit fast-path capabilities.
+11. Const-extent/const-stride families and static-axis operation traits.
+12. Iteration-order/evaluation-schedule abstractions needed by the lazy producer layer.
 
 ## Reference findings worth preserving
 
@@ -184,3 +195,9 @@ consumer exists yet, it is premature to guess which implementation invariants mu
 obligations. `Layout` and all its methods are therefore safe for now. Correctness invariants are still
 tested and proved; when concrete unsafe consumers arrive, the design can introduce exactly the needed
 unsafe trait, marker trait, or validation boundary.
+
+Follow-up: the first consumer slice was reprioritized ahead of axis operations. The user approved a minimal
+`nd-core` spike: a read-only fixed-rank `StridedView` over a slice, with explicit storage origin and safe
+checked value access. This is intended to ground layout semantics in real value extraction before further
+layout algebra. The discussion also clarified that logical row-major iteration is only one traversal order;
+memory/evaluation-order abstractions remain deferred.

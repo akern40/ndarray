@@ -363,6 +363,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "nd-core"
+version = "0.0.0"
+dependencies = [
+ "hegeltest",
+ "nd-layout",
+]
+
+[[package]]
 name = "nd-layout"
 version = "0.0.0"
 dependencies = [
