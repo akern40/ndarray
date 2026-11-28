@@ -590,3 +590,18 @@ is expected to be storage-related somehow, but its exact representation remains 
 question is therefore not necessarily access: position/extent/offset mechanics may be more primitive than
 element references or contiguous slices. Access traits should be designed only after that lower boundary
 is clear.
+
+First position-centric `Storage` probe: `nd-storage::Storage` now has associated element and position
+types, checked displacement of positions by signed element offsets, and storage-local validation of an
+optional offset-bound interval. Shared and mutable slice storage both use `usize` positions. `nd-core` no
+longer performs slice arithmetic directly for logical access or inversion translations; it asks storage to
+displace the zero position and delegates extent/element-size validation to storage. `nd-core` retains only
+layout-side logical-size validation and the composition step of passing layout offset bounds to storage.
+
+This is deliberately not an access trait. It tests the more primitive claim that position arithmetic and
+validity are storage concerns while logical geometry remains layout concerns. The current probe does not
+yet generalize the view types: public slice views still store `usize` origins directly. Its main structural
+effect is to move byte/extent validation into `nd-storage` and make the zero-position/background arithmetic
+storage-mediated. The `Option<(isize, isize)>` validation shape mirrors the current layout boundary and is
+convenient, but its empty-layout meaning and endpoint-based validation contract need evidence from a second
+storage family before they should be considered settled.

@@ -1,6 +1,6 @@
 use nd_layout::{AxisOps, IndexSpace, Layout, Ranked};
 
-use crate::storage::{SliceStorage, SliceStorageMut, offset_position, validate_slice_layout};
+use crate::storage::{SliceStorage, SliceStorageMut, Storage, validate_layout};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SliceView<'a, T, L: Layout> {
@@ -13,7 +13,7 @@ impl<'a, T, L: Layout> SliceView<'a, T, L> {
     #[must_use]
     pub fn try_new(data: &'a [T], layout: L, origin: usize) -> Option<Self> {
         let storage = SliceStorage::new(data);
-        validate_slice_layout::<T, L>(storage.len(), &layout, origin)?;
+        validate_layout(&storage, &layout, &origin)?;
         Some(Self {
             storage,
             layout,
@@ -24,7 +24,7 @@ impl<'a, T, L: Layout> SliceView<'a, T, L> {
     #[must_use]
     pub fn get(&self, index: &L::Index) -> Option<&'a T> {
         let offset = self.layout.offset(index)?;
-        let position = offset_position(self.origin, offset)?;
+        let position = self.storage.displace(&self.origin, offset)?;
         self.storage.get(position)
     }
 
@@ -42,7 +42,9 @@ impl<'a, T, L: Layout> SliceView<'a, T, L> {
     }
 
     fn get_valid_offset(&self, offset: isize) -> &'a T {
-        let position = self.origin.wrapping_add_signed(offset);
+        let Some(position) = self.storage.displace(&self.origin, offset) else {
+            unreachable!()
+        };
         let Some(value) = self.storage.get(position) else {
             unreachable!()
         };
@@ -127,8 +129,8 @@ pub struct SliceViewAxis<'a, T, L: AxisOps> {
 impl<'a, T, L: AxisOps> SliceViewAxis<'a, T, L> {
     pub fn invert(self) -> Option<SliceView<'a, T, L::Inverted>> {
         let (layout, translation) = self.view.layout.invert_axis(self.axis)?;
-        let origin = offset_position(self.view.origin, translation)?;
-        validate_slice_layout::<T, L::Inverted>(self.view.storage.len(), &layout, origin)?;
+        let origin = self.view.storage.displace(&self.view.origin, translation)?;
+        validate_layout(&self.view.storage, &layout, &origin)?;
 
         Some(SliceView {
             storage: self.view.storage,
@@ -178,7 +180,7 @@ impl<'a, T, L: Layout> SliceViewMut<'a, T, L> {
     #[must_use]
     pub fn try_new(data: &'a mut [T], layout: L, origin: usize) -> Option<Self> {
         let storage = SliceStorageMut::new(data);
-        validate_slice_layout::<T, L>(storage.len(), &layout, origin)?;
+        validate_layout(&storage, &layout, &origin)?;
         if layout.offset_bounds().is_some() && !layout.is_unique() {
             return None;
         }
@@ -192,14 +194,14 @@ impl<'a, T, L: Layout> SliceViewMut<'a, T, L> {
     #[must_use]
     pub fn get(&self, index: &L::Index) -> Option<&T> {
         let offset = self.layout.offset(index)?;
-        let position = offset_position(self.origin, offset)?;
+        let position = self.storage.displace(&self.origin, offset)?;
         self.storage.get(position)
     }
 
     #[must_use]
     pub fn get_mut(&mut self, index: &L::Index) -> Option<&mut T> {
         let offset = self.layout.offset(index)?;
-        let position = offset_position(self.origin, offset)?;
+        let position = self.storage.displace(&self.origin, offset)?;
         self.storage.get_mut(position)
     }
 
@@ -234,7 +236,9 @@ impl<'a, T, L: Layout> SliceViewMut<'a, T, L> {
     }
 
     fn get_valid_offset(&self, offset: isize) -> &T {
-        let position = self.origin.wrapping_add_signed(offset);
+        let Some(position) = self.storage.displace(&self.origin, offset) else {
+            unreachable!()
+        };
         let Some(value) = self.storage.get(position) else {
             unreachable!()
         };
@@ -344,8 +348,8 @@ impl<'a, T, L: AxisOps> SliceViewMutAxis<'a, T, L> {
             origin: original_origin,
         } = view;
         let (layout, translation) = original_layout.invert_axis(axis)?;
-        let origin = offset_position(original_origin, translation)?;
-        validate_slice_layout::<T, L::Inverted>(storage.len(), &layout, origin)?;
+        let origin = storage.displace(&original_origin, translation)?;
+        validate_layout(&storage, &layout, &origin)?;
 
         Some(SliceViewMut {
             storage,

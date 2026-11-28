@@ -1,3 +1,7 @@
+use core::mem::size_of;
+
+use crate::Storage;
+
 #[derive(Debug, Clone, Copy)]
 pub struct SliceStorage<'a, T> {
     data: &'a [T],
@@ -30,6 +34,23 @@ impl<'a, T> SliceStorage<'a, T> {
         let end = start.checked_add(len)?;
         let data = self.data;
         data.get(start..end)
+    }
+}
+
+impl<T> Storage for SliceStorage<'_, T> {
+    type Elem = T;
+    type Position = usize;
+
+    fn displace(&self, position: &Self::Position, offset: isize) -> Option<Self::Position> {
+        displace_position(*position, offset)
+    }
+
+    fn validate_offset_bounds(
+        &self,
+        zero: &Self::Position,
+        bounds: Option<(isize, isize)>,
+    ) -> Option<()> {
+        validate_slice_offset_bounds::<T>(self.len(), *zero, bounds)
     }
 }
 
@@ -82,9 +103,102 @@ impl<'a, T> SliceStorageMut<'a, T> {
     }
 }
 
+impl<T> Storage for SliceStorageMut<'_, T> {
+    type Elem = T;
+    type Position = usize;
+
+    fn displace(&self, position: &Self::Position, offset: isize) -> Option<Self::Position> {
+        displace_position(*position, offset)
+    }
+
+    fn validate_offset_bounds(
+        &self,
+        zero: &Self::Position,
+        bounds: Option<(isize, isize)>,
+    ) -> Option<()> {
+        validate_slice_offset_bounds::<T>(self.len(), *zero, bounds)
+    }
+}
+
+fn displace_position(position: usize, offset: isize) -> Option<usize> {
+    if offset >= 0 {
+        position.checked_add(usize::try_from(offset).ok()?)
+    } else {
+        position.checked_sub(offset.unsigned_abs())
+    }
+}
+
+fn validate_slice_offset_bounds<T>(
+    len: usize,
+    zero: usize,
+    bounds: Option<(isize, isize)>,
+) -> Option<()> {
+    match bounds {
+        Some((min, max)) => {
+            let span = element_span(min, max)?;
+            validate_byte_span::<T>(span)?;
+
+            displace_position(zero, min)?;
+            let max_position = displace_position(zero, max)?;
+            (max_position < len).then_some(())
+        }
+        None => (zero <= len).then_some(()),
+    }
+}
+
+fn element_span(min: isize, max: isize) -> Option<usize> {
+    let span = max.checked_sub(min)?;
+    usize::try_from(span).ok()
+}
+
+fn validate_byte_span<T>(element_span: usize) -> Option<()> {
+    let byte_span = element_span.checked_mul(size_of::<T>())?;
+    (byte_span <= isize::MAX.unsigned_abs()).then_some(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{SliceStorage, SliceStorageMut};
+    use super::{SliceStorage, SliceStorageMut, element_span, validate_byte_span};
+    use crate::Storage;
+
+    #[test]
+    fn displacement_is_checked() {
+        let data = [10, 20, 30];
+        let storage = SliceStorage::new(&data);
+
+        assert_eq!(storage.displace(&1, 1), Some(2));
+        assert_eq!(storage.displace(&1, -1), Some(0));
+        assert_eq!(storage.displace(&0, -1), None);
+        assert_eq!(storage.displace(&usize::MAX, 1), None);
+    }
+
+    #[test]
+    fn offset_bound_validation_uses_storage_extent() {
+        let data = [10, 20, 30, 40];
+        let storage = SliceStorage::new(&data);
+
+        assert!(storage.validate_offset_bounds(&1, Some((-1, 2))).is_some());
+        assert!(storage.validate_offset_bounds(&1, Some((-1, 3))).is_none());
+        assert!(storage.validate_offset_bounds(&4, None).is_some());
+        assert!(storage.validate_offset_bounds(&5, None).is_none());
+    }
+
+    #[test]
+    fn element_span_must_fit_isize() {
+        assert_eq!(
+            element_span(isize::MIN + 1, 0),
+            Some(isize::MAX.unsigned_abs())
+        );
+        assert_eq!(element_span(isize::MIN, 0), None);
+        assert_eq!(element_span(isize::MIN, isize::MAX), None);
+    }
+
+    #[test]
+    fn byte_span_must_fit_isize() {
+        assert!(validate_byte_span::<u8>(isize::MAX.unsigned_abs()).is_some());
+        assert!(validate_byte_span::<u16>(isize::MAX.unsigned_abs()).is_none());
+        assert!(validate_byte_span::<()>(usize::MAX).is_some());
+    }
 
     #[test]
     fn shared_slice_access_is_position_based() {
