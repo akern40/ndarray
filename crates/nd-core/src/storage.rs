@@ -2,28 +2,28 @@ use core::mem::size_of;
 
 use nd_layout::{Layout, Shape};
 
-pub(crate) use nd_storage::{MutAccess, PositionSpace, RefAccess, SliceStorage, SliceStorageMut};
+pub(crate) use nd_storage::{PositionSpace, RefAccess, SliceStorage, SliceStorageMut};
 
-pub(crate) fn validate_slice_layout<T, L: Layout>(
-    len: usize,
+pub(crate) fn validate_storage_layout<S: RefAccess, L: Layout>(
+    storage: &S,
     layout: &L,
-    origin: usize,
+    zero_position: &S::Position,
 ) -> Option<()> {
     validate_nonzero_axis_product(layout.shape())?;
 
     match layout.offset_bounds() {
         Some((min, max)) => {
             let element_span = element_span(min, max)?;
-            validate_byte_span::<T>(element_span)?;
+            validate_byte_span::<S::Elem>(element_span)?;
 
-            offset_position(origin, min)?;
-            let max_position = offset_position(origin, max)?;
-            if max_position >= len {
-                return None;
-            }
+            let min_position = storage.displace(zero_position, min)?;
+            let max_position = storage.displace(zero_position, max)?;
+            storage.get(&min_position)?;
+            storage.get(&max_position)?;
         }
-        None if origin > len => return None,
-        None => {}
+        None => {
+            storage.displace(zero_position, 0)?;
+        }
     }
 
     Some(())
@@ -50,14 +50,6 @@ fn element_span(min: isize, max: isize) -> Option<usize> {
 fn validate_byte_span<T>(element_span: usize) -> Option<()> {
     let byte_span = element_span.checked_mul(size_of::<T>())?;
     (byte_span <= isize::MAX.unsigned_abs()).then_some(())
-}
-
-fn offset_position(origin: usize, offset: isize) -> Option<usize> {
-    if offset >= 0 {
-        origin.checked_add(usize::try_from(offset).ok()?)
-    } else {
-        origin.checked_sub(offset.unsigned_abs())
-    }
 }
 
 #[cfg(test)]

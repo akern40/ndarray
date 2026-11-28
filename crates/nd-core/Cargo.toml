@@ -12,6 +12,7 @@ nd-layout = { path = "../nd-layout" }
 nd-storage = { path = "../nd-storage" }
 
 [dev-dependencies]
+nd-alloc = { path = "../nd-alloc" }
 hegeltest.workspace = true
 divan.workspace = true
 ndarray = "=0.17.2"
