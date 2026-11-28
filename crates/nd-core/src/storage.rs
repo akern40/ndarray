@@ -2,7 +2,7 @@ use core::mem::size_of;
 
 use nd_layout::{Layout, Shape};
 
-pub(crate) use nd_storage::{PositionSpace, RefAccess, SliceStorage, SliceStorageMut};
+pub(crate) use nd_storage::{MutAccess, PositionSpace, RefAccess, SliceStorage, SliceStorageMut};
 
 pub(crate) fn validate_slice_layout<T, L: Layout>(
     len: usize,

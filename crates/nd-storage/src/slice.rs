@@ -1,4 +1,4 @@
-use crate::{PositionSpace, RefAccess, position_space::displace_in_linear_space};
+use crate::{MutAccess, PositionSpace, RefAccess, position_space::displace_in_linear_space};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SliceStorage<'a, T> {
@@ -72,11 +72,6 @@ impl<'a, T> SliceStorageMut<'a, T> {
     }
 
     #[must_use]
-    pub fn get_mut(&mut self, position: usize) -> Option<&mut T> {
-        self.data.get_mut(position)
-    }
-
-    #[must_use]
     pub fn slice(&self, start: usize, len: usize) -> Option<&[T]> {
         let end = start.checked_add(len)?;
         self.data.get(start..end)
@@ -106,6 +101,17 @@ impl<T> RefAccess for SliceStorageMut<'_, T> {
     }
 }
 
+impl<T> MutAccess for SliceStorageMut<'_, T> {
+    type Mut<'s>
+        = &'s mut T
+    where
+        Self: 's;
+
+    fn get_mut(&mut self, position: &Self::Position) -> Option<Self::Mut<'_>> {
+        self.data.get_mut(*position)
+    }
+}
+
 impl<T> PositionSpace for SliceStorageMut<'_, T> {
     type Position = usize;
 
@@ -117,7 +123,7 @@ impl<T> PositionSpace for SliceStorageMut<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::{SliceStorage, SliceStorageMut};
-    use crate::{PositionSpace, RefAccess, position_space::displace_position};
+    use crate::{MutAccess, PositionSpace, RefAccess, position_space::displace_position};
 
     #[test]
     fn displacement_is_checked() {
@@ -152,11 +158,11 @@ mod tests {
 
         assert_eq!(storage.len(), 3);
         assert_eq!(storage.get(&1), Some(&20));
-        if let Some(value) = storage.get_mut(1) {
+        if let Some(value) = storage.get_mut(&1) {
             *value = 40;
         }
         assert_eq!(storage.get(&1), Some(&40));
-        assert!(storage.get_mut(3).is_none());
+        assert!(storage.get_mut(&3).is_none());
     }
 
     #[test]

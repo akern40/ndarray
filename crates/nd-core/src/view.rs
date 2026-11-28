@@ -1,7 +1,7 @@
 use nd_layout::{AxisOps, IndexSpace, Layout, Ranked};
 
 use crate::storage::{
-    PositionSpace, RefAccess, SliceStorage, SliceStorageMut, validate_slice_layout,
+    MutAccess, PositionSpace, RefAccess, SliceStorage, SliceStorageMut, validate_slice_layout,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -204,7 +204,7 @@ impl<'a, T, L: Layout> SliceViewMut<'a, T, L> {
     pub fn get_mut(&mut self, index: &L::Index) -> Option<&mut T> {
         let offset = self.layout.offset(index)?;
         let position = self.storage.displace(&self.origin, offset)?;
-        self.storage.get_mut(position)
+        self.storage.get_mut(&position)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &T> + '_ {

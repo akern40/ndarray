@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::{PositionSpace, RefAccess, position_space::displace_in_linear_space};
+use crate::{MutAccess, PositionSpace, RefAccess, position_space::displace_in_linear_space};
 
 #[derive(Debug)]
 pub struct PagedStorage<T> {
@@ -28,12 +28,6 @@ impl<T> PagedStorage<T> {
     #[must_use]
     pub fn page_count(&self) -> usize {
         self.pages.len()
-    }
-
-    #[must_use]
-    pub fn get_mut(&mut self, position: usize) -> Option<&mut T> {
-        let (page, offset) = self.page_index(position)?;
-        self.pages.get_mut(page)?.get_mut(offset)
     }
 
     #[must_use]
@@ -136,6 +130,18 @@ impl<T> RefAccess for PagedStorage<T> {
     }
 }
 
+impl<T> MutAccess for PagedStorage<T> {
+    type Mut<'s>
+        = &'s mut T
+    where
+        Self: 's;
+
+    fn get_mut(&mut self, position: &Self::Position) -> Option<Self::Mut<'_>> {
+        let (page, offset) = self.page_index(*position)?;
+        self.pages.get_mut(page)?.get_mut(offset)
+    }
+}
+
 impl<T> PositionSpace for PagedStorage<T> {
     type Position = usize;
 
@@ -146,7 +152,7 @@ impl<T> PositionSpace for PagedStorage<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{PagedStorage, PositionSpace, RefAccess};
+    use crate::{MutAccess, PagedStorage, PositionSpace, RefAccess};
 
     #[test]
     fn construction_rejects_zero_page_length() {
@@ -170,12 +176,12 @@ mod tests {
     fn mutable_positions_resolve_across_pages() {
         let mut storage = PagedStorage::new_filled(7, 3, 10).unwrap();
 
-        if let Some(value) = storage.get_mut(4) {
+        if let Some(value) = storage.get_mut(&4) {
             *value = 40;
         }
 
         assert_eq!(storage.get(&4), Some(&40));
-        assert!(storage.get_mut(7).is_none());
+        assert!(storage.get_mut(&7).is_none());
     }
 
     #[test]
