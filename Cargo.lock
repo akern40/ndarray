@@ -379,6 +379,7 @@ dependencies = [
  "codspeed-divan-compat",
  "hegeltest",
  "nd-layout",
+ "nd-storage",
  "ndarray",
 ]
 
@@ -389,6 +390,10 @@ dependencies = [
  "codspeed-divan-compat",
  "hegeltest",
 ]
+
+[[package]]
+name = "nd-storage"
+version = "0.0.0"
 
 [[package]]
 name = "ndarray"

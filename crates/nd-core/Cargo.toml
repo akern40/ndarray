@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 nd-layout = { path = "../nd-layout" }
+nd-storage = { path = "../nd-storage" }
 
 [dev-dependencies]
 hegeltest.workspace = true

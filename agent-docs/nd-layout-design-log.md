@@ -577,3 +577,16 @@ or `&mut self` unless the view is consumed. A lowest-common-denominator access t
 immutable lifetime, so access traits need evidence from ownership and consuming operations as well as storage
 capabilities. Structural transformations did not need access traits: moving the non-copy mutable storage
 through reverse/invert worked directly, and `nd-layout` remained unaware of mutability or storage.
+
+Storage-layer extraction: `nd-storage` now exists as an independent sibling of `nd-layout`; `nd-core`
+depends on both, and neither lower crate depends on the other. Borrowed shared and mutable slice storage
+moved into `nd-storage` as concrete position-based resources. They expose lengths, position access, and
+contiguous ranges, but no layout validation. Layout-aware validation remains in `nd-core` because it is a
+composition invariant involving storage extent, layout offset bounds, and placement. This is intended to
+lock the dependency direction before designing storage traits.
+
+The design discussion rejected a dedicated layout-plus-placement struct for now. The scalar zero position
+is expected to be storage-related somehow, but its exact representation remains open. The first trait
+question is therefore not necessarily access: position/extent/offset mechanics may be more primitive than
+element references or contiguous slices. Access traits should be designed only after that lower boundary
+is clear.

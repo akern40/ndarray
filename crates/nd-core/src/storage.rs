@@ -2,70 +2,13 @@ use core::mem::size_of;
 
 use nd_layout::{Layout, Shape};
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct SliceStorage<'a, T> {
-    data: &'a [T],
-}
+pub(crate) use nd_storage::{SliceStorage, SliceStorageMut};
 
-impl<'a, T> SliceStorage<'a, T> {
-    pub(crate) const fn new(data: &'a [T]) -> Self {
-        Self { data }
-    }
-
-    pub(crate) fn validate_layout<L: Layout>(&self, layout: &L, origin: usize) -> Option<()> {
-        validate_layout(self.data, layout, origin)
-    }
-
-    pub(crate) fn get(&self, position: usize) -> Option<&'a T> {
-        let data = self.data;
-        data.get(position)
-    }
-
-    pub(crate) fn slice(&self, start: usize, len: usize) -> Option<&'a [T]> {
-        let end = start.checked_add(len)?;
-        let data = self.data;
-        data.get(start..end)
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct SliceStorageMut<'a, T> {
-    data: &'a mut [T],
-}
-
-impl<'a, T> SliceStorageMut<'a, T> {
-    pub(crate) const fn new(data: &'a mut [T]) -> Self {
-        Self { data }
-    }
-
-    pub(crate) fn validate_layout<L: Layout>(&self, layout: &L, origin: usize) -> Option<()> {
-        validate_layout(self.data, layout, origin)
-    }
-
-    pub(crate) fn get(&self, position: usize) -> Option<&T> {
-        self.data.get(position)
-    }
-
-    pub(crate) fn get_mut(&mut self, position: usize) -> Option<&mut T> {
-        self.data.get_mut(position)
-    }
-
-    pub(crate) fn slice(&self, start: usize, len: usize) -> Option<&[T]> {
-        let end = start.checked_add(len)?;
-        self.data.get(start..end)
-    }
-
-    pub(crate) fn slice_mut(&mut self, start: usize, len: usize) -> Option<&mut [T]> {
-        let end = start.checked_add(len)?;
-        self.data.get_mut(start..end)
-    }
-
-    pub(crate) fn into_shared(self) -> SliceStorage<'a, T> {
-        SliceStorage::new(self.data)
-    }
-}
-
-fn validate_layout<T, L: Layout>(data: &[T], layout: &L, origin: usize) -> Option<()> {
+pub(crate) fn validate_slice_layout<T, L: Layout>(
+    len: usize,
+    layout: &L,
+    origin: usize,
+) -> Option<()> {
     validate_nonzero_axis_product(layout.shape())?;
 
     match layout.offset_bounds() {
@@ -75,11 +18,11 @@ fn validate_layout<T, L: Layout>(data: &[T], layout: &L, origin: usize) -> Optio
 
             offset_position(origin, min)?;
             let max_position = offset_position(origin, max)?;
-            if max_position >= data.len() {
+            if max_position >= len {
                 return None;
             }
         }
-        None if origin > data.len() => return None,
+        None if origin > len => return None,
         None => {}
     }
 
