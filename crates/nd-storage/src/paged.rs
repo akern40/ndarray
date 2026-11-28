@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::{PositionSpace, position_space::displace_position};
+use crate::{PositionSpace, position_space::displace_in_linear_space};
 
 #[derive(Debug)]
 pub struct PagedStorage<T> {
@@ -133,7 +133,7 @@ impl<T> PositionSpace for PagedStorage<T> {
     type Position = usize;
 
     fn displace(&self, position: &Self::Position, offset: isize) -> Option<Self::Position> {
-        displace_position(*position, offset)
+        displace_in_linear_space(*position, offset, self.len())
     }
 }
 
@@ -172,12 +172,14 @@ mod tests {
     }
 
     #[test]
-    fn displacement_is_position_space_arithmetic_not_access_validation() {
+    fn displacement_tracks_positions_including_the_boundary() {
         let storage = PagedStorage::new_filled(7, 3, 10).unwrap();
 
         assert_eq!(storage.displace(&2, 2), Some(4));
-        assert_eq!(storage.displace(&2, 10), Some(12));
-        assert_eq!(storage.get(12), None);
+        assert_eq!(storage.displace(&2, 5), Some(7));
+        assert_eq!(storage.displace(&2, 6), None);
+        assert_eq!(storage.displace(&8, 0), None);
+        assert_eq!(storage.get(7), None);
     }
 
     #[test]

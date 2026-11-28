@@ -1,4 +1,4 @@
-use crate::{PositionSpace, position_space::displace_position};
+use crate::{PositionSpace, position_space::displace_in_linear_space};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SliceStorage<'a, T> {
@@ -39,7 +39,7 @@ impl<T> PositionSpace for SliceStorage<'_, T> {
     type Position = usize;
 
     fn displace(&self, position: &Self::Position, offset: isize) -> Option<Self::Position> {
-        displace_position(*position, offset)
+        displace_in_linear_space(*position, offset, self.len())
     }
 }
 
@@ -96,7 +96,7 @@ impl<T> PositionSpace for SliceStorageMut<'_, T> {
     type Position = usize;
 
     fn displace(&self, position: &Self::Position, offset: isize) -> Option<Self::Position> {
-        displace_position(*position, offset)
+        displace_in_linear_space(*position, offset, self.len())
     }
 }
 
@@ -112,6 +112,9 @@ mod tests {
 
         assert_eq!(storage.displace(&1, 1), Some(2));
         assert_eq!(storage.displace(&1, -1), Some(0));
+        assert_eq!(storage.displace(&2, 1), Some(3));
+        assert_eq!(storage.displace(&2, 2), None);
+        assert_eq!(storage.displace(&4, 0), None);
         assert_eq!(storage.displace(&0, -1), None);
         assert_eq!(storage.displace(&usize::MAX, 1), None);
     }
@@ -172,17 +175,35 @@ mod tests {
 
     struct Pages {
         page_len: usize,
+        page_count: usize,
+    }
+
+    impl Pages {
+        fn len(&self) -> Option<usize> {
+            self.page_len.checked_mul(self.page_count)
+        }
+
+        fn linear(&self, position: &PagePosition) -> Option<usize> {
+            if self.page_len == 0 || position.offset >= self.page_len {
+                return None;
+            }
+            let linear = position
+                .page
+                .checked_mul(self.page_len)?
+                .checked_add(position.offset)?;
+            (linear <= self.len()?).then_some(linear)
+        }
     }
 
     impl PositionSpace for Pages {
         type Position = PagePosition;
 
         fn displace(&self, position: &Self::Position, offset: isize) -> Option<Self::Position> {
-            let linear = position
-                .page
-                .checked_mul(self.page_len)?
-                .checked_add(position.offset)?;
-            let linear = super::displace_position(linear, offset)?;
+            let linear = self.linear(position)?;
+            let linear = displace_position(linear, offset)?;
+            if linear > self.len()? {
+                return None;
+            }
             Some(PagePosition {
                 page: linear.checked_div(self.page_len)?,
                 offset: linear.checked_rem(self.page_len)?,
@@ -192,7 +213,10 @@ mod tests {
 
     #[test]
     fn position_spaces_control_position_representation() {
-        let pages = Pages { page_len: 4 };
+        let pages = Pages {
+            page_len: 4,
+            page_count: 3,
+        };
         let position = PagePosition { page: 1, offset: 3 };
 
         assert_eq!(
@@ -203,6 +227,15 @@ mod tests {
             pages.displace(&position, -7),
             Some(PagePosition { page: 0, offset: 0 })
         );
+        assert_eq!(
+            pages.displace(&position, 5),
+            Some(PagePosition { page: 3, offset: 0 })
+        );
+        assert_eq!(pages.displace(&position, 6), None);
         assert_eq!(pages.displace(&position, -8), None);
+        assert_eq!(
+            pages.displace(&PagePosition { page: 1, offset: 4 }, 0),
+            None
+        );
     }
 }

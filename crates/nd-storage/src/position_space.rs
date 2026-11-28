@@ -11,3 +11,15 @@ pub(crate) fn displace_position(position: usize, offset: isize) -> Option<usize>
         position.checked_sub(offset.unsigned_abs())
     }
 }
+
+pub(crate) fn displace_in_linear_space(
+    position: usize,
+    offset: isize,
+    len: usize,
+) -> Option<usize> {
+    if position > len {
+        return None;
+    }
+    let position = displace_position(position, offset)?;
+    (position <= len).then_some(position)
+}
