@@ -1,4 +1,4 @@
-use crate::PositionSpace;
+use crate::{PositionSpace, position_space::displace_position};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SliceStorage<'a, T> {
@@ -100,18 +100,10 @@ impl<T> PositionSpace for SliceStorageMut<'_, T> {
     }
 }
 
-fn displace_position(position: usize, offset: isize) -> Option<usize> {
-    if offset >= 0 {
-        position.checked_add(usize::try_from(offset).ok()?)
-    } else {
-        position.checked_sub(offset.unsigned_abs())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{SliceStorage, SliceStorageMut};
-    use crate::PositionSpace;
+    use crate::{PositionSpace, position_space::displace_position};
 
     #[test]
     fn displacement_is_checked() {
