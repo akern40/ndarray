@@ -1,6 +1,8 @@
 use alloc::vec::Vec;
 
-use crate::{MutAccess, PositionSpace, RefAccess, position_space::displace_in_linear_space};
+use nd_storage::{IntoElements, MutAccess, PositionSpace, RefAccess, Storage};
+
+use crate::linear::displace_in_linear_space;
 
 #[derive(Debug)]
 pub struct PagedStorage<T> {
@@ -117,8 +119,11 @@ impl<T: Clone> PagedStorage<T> {
     }
 }
 
-impl<T> RefAccess for PagedStorage<T> {
+impl<T> Storage for PagedStorage<T> {
     type Elem = T;
+}
+
+impl<T> RefAccess for PagedStorage<T> {
     type Ref<'s>
         = &'s T
     where
@@ -142,6 +147,14 @@ impl<T> MutAccess for PagedStorage<T> {
     }
 }
 
+impl<T> IntoElements for PagedStorage<T> {
+    type Elements = core::iter::Flatten<alloc::vec::IntoIter<Vec<T>>>;
+
+    fn into_elements(self) -> Self::Elements {
+        self.pages.into_iter().flatten()
+    }
+}
+
 impl<T> PositionSpace for PagedStorage<T> {
     type Position = usize;
 
@@ -152,7 +165,9 @@ impl<T> PositionSpace for PagedStorage<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{MutAccess, PagedStorage, PositionSpace, RefAccess};
+    use nd_storage::{IntoElements, MutAccess, PositionSpace, RefAccess};
+
+    use crate::PagedStorage;
 
     #[test]
     fn construction_rejects_zero_page_length() {
@@ -253,5 +268,16 @@ mod tests {
         assert_eq!(storage.contiguous_len(0), Some(0));
         assert_eq!(storage.slice(0, 0), Some(&[][..]));
         assert_eq!(storage.contiguous_len(1), None);
+    }
+    #[test]
+    fn consumption_yields_each_element_in_storage_order() {
+        let mut storage = PagedStorage::new_filled(7, 3, 0).unwrap();
+        for position in 0..7 {
+            if let Some(value) = storage.get_mut(&position) {
+                *value = position * 10;
+            }
+        }
+
+        assert!(storage.into_elements().eq([0, 10, 20, 30, 40, 50, 60]));
     }
 }

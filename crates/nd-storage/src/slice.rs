@@ -1,4 +1,6 @@
-use crate::{MutAccess, PositionSpace, RefAccess, position_space::displace_in_linear_space};
+use crate::{
+    MutAccess, PositionSpace, RefAccess, Storage, position_space::displace_in_linear_space,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SliceStorage<'a, T> {
@@ -29,8 +31,11 @@ impl<'a, T> SliceStorage<'a, T> {
     }
 }
 
-impl<'a, T> RefAccess for SliceStorage<'a, T> {
+impl<T> Storage for SliceStorage<'_, T> {
     type Elem = T;
+}
+
+impl<'a, T> RefAccess for SliceStorage<'a, T> {
     type Ref<'s>
         = &'a T
     where
@@ -89,8 +94,11 @@ impl<'a, T> SliceStorageMut<'a, T> {
     }
 }
 
-impl<T> RefAccess for SliceStorageMut<'_, T> {
+impl<T> Storage for SliceStorageMut<'_, T> {
     type Elem = T;
+}
+
+impl<T> RefAccess for SliceStorageMut<'_, T> {
     type Ref<'s>
         = &'s T
     where

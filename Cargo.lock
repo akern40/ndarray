@@ -373,6 +373,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "nd-alloc"
+version = "0.0.0"
+dependencies = [
+ "nd-storage",
+]
+
+[[package]]
 name = "nd-core"
 version = "0.0.0"
 dependencies = [

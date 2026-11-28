@@ -1,9 +1,8 @@
 use core::ops::Deref;
 
-use crate::PositionSpace;
+use crate::Storage;
 
-pub trait RefAccess: PositionSpace {
-    type Elem;
+pub trait RefAccess: Storage {
     type Ref<'a>: Deref<Target = Self::Elem>
     where
         Self: 'a;
@@ -13,7 +12,7 @@ pub trait RefAccess: PositionSpace {
 
 #[cfg(test)]
 mod tests {
-    use crate::{PagedStorage, RefAccess, SliceStorage, SliceStorageMut};
+    use crate::{RefAccess, SliceStorage, SliceStorageMut};
 
     fn cloned_at<S>(storage: &S, position: usize) -> Option<S::Elem>
     where
@@ -35,7 +34,7 @@ mod tests {
     }
 
     #[test]
-    fn generic_access_works_for_all_current_storage_types() {
+    fn generic_access_works_for_borrowed_slice_storage() {
         let data = [10, 20, 30];
         let shared = SliceStorage::new(&data);
         assert_eq!(cloned_at(&shared, 1), Some(20));
@@ -44,9 +43,5 @@ mod tests {
         let mut mutable_data = [10, 20, 30];
         let mutable = SliceStorageMut::new(&mut mutable_data);
         assert_eq!(cloned_at(&mutable, 2), Some(30));
-
-        let paged = PagedStorage::new_filled(5, 2, 40).unwrap();
-        assert_eq!(cloned_at(&paged, 3), Some(40));
-        assert_eq!(cloned_at(&paged, 5), None);
     }
 }

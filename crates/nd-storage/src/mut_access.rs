@@ -12,7 +12,7 @@ pub trait MutAccess: RefAccess {
 
 #[cfg(test)]
 mod tests {
-    use crate::{MutAccess, PagedStorage, RefAccess, SliceStorageMut};
+    use crate::{MutAccess, RefAccess, SliceStorageMut};
 
     fn replace_at<S>(storage: &mut S, position: usize, value: S::Elem) -> bool
     where
@@ -34,14 +34,5 @@ mod tests {
         assert!(replace_at(&mut storage, 1, 40));
         assert!(!replace_at(&mut storage, 3, 50));
         assert_eq!(storage.get(&1).copied(), Some(40));
-    }
-
-    #[test]
-    fn generic_mutable_access_works_across_pages() {
-        let mut storage = PagedStorage::new_filled(7, 3, 10).unwrap();
-
-        assert!(replace_at(&mut storage, 4, 40));
-        assert!(!replace_at(&mut storage, 7, 50));
-        assert_eq!(storage.get(&4).copied(), Some(40));
     }
 }
