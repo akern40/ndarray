@@ -1,7 +1,7 @@
 #![no_std]
 
+mod position_space;
 mod slice;
-mod storage;
 
+pub use position_space::PositionSpace;
 pub use slice::{SliceStorage, SliceStorageMut};
-pub use storage::Storage;

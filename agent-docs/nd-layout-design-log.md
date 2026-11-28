@@ -605,3 +605,21 @@ effect is to move byte/extent validation into `nd-storage` and make the zero-pos
 storage-mediated. The `Option<(isize, isize)>` validation shape mirrors the current layout boundary and is
 convenient, but its empty-layout meaning and endpoint-based validation contract need evidence from a second
 storage family before they should be considered settled.
+
+`PositionSpace` revision, superseding the first `Storage` probe: composition validation did not belong in
+the storage trait. `validate_offset_bounds` mirrored layout metadata and made storage responsible for a
+layout/storage invariant, so it was removed. The remaining trait is deliberately small: an associated
+position type plus checked displacement by signed element offsets. Element types and access capabilities
+are absent. Composition validation moved back into `nd-core`'s concrete slice-view construction path.
+
+This makes `PositionSpace` analogous in spirit to `IndexSpace`: logical indices form the space in which
+layouts operate, while positions form the space in which storage operates. Layouts produce signed
+displacements; position spaces interpret those displacements. A test-only paged-position representation
+shows that positions need not be bare `usize` values and that displacement arithmetic can be
+representation-dependent.
+
+Open semantics: it is not yet clear whether `displace` merely performs representable arithmetic or whether
+it must prove membership in the position space. The current slice implementation can produce out-of-extent
+but representable `usize` positions; access remains checked separately. It is also unresolved whether empty
+arrays require boundary positions or whether element positions and boundary positions are distinct notions.
+Those questions should be answered before composition validation is generalized.

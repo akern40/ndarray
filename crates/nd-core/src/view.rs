@@ -1,6 +1,6 @@
 use nd_layout::{AxisOps, IndexSpace, Layout, Ranked};
 
-use crate::storage::{SliceStorage, SliceStorageMut, Storage, validate_layout};
+use crate::storage::{PositionSpace, SliceStorage, SliceStorageMut, validate_slice_layout};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SliceView<'a, T, L: Layout> {
@@ -13,7 +13,7 @@ impl<'a, T, L: Layout> SliceView<'a, T, L> {
     #[must_use]
     pub fn try_new(data: &'a [T], layout: L, origin: usize) -> Option<Self> {
         let storage = SliceStorage::new(data);
-        validate_layout(&storage, &layout, &origin)?;
+        validate_slice_layout::<T, L>(storage.len(), &layout, origin)?;
         Some(Self {
             storage,
             layout,
@@ -130,7 +130,7 @@ impl<'a, T, L: AxisOps> SliceViewAxis<'a, T, L> {
     pub fn invert(self) -> Option<SliceView<'a, T, L::Inverted>> {
         let (layout, translation) = self.view.layout.invert_axis(self.axis)?;
         let origin = self.view.storage.displace(&self.view.origin, translation)?;
-        validate_layout(&self.view.storage, &layout, &origin)?;
+        validate_slice_layout::<T, L::Inverted>(self.view.storage.len(), &layout, origin)?;
 
         Some(SliceView {
             storage: self.view.storage,
@@ -180,7 +180,7 @@ impl<'a, T, L: Layout> SliceViewMut<'a, T, L> {
     #[must_use]
     pub fn try_new(data: &'a mut [T], layout: L, origin: usize) -> Option<Self> {
         let storage = SliceStorageMut::new(data);
-        validate_layout(&storage, &layout, &origin)?;
+        validate_slice_layout::<T, L>(storage.len(), &layout, origin)?;
         if layout.offset_bounds().is_some() && !layout.is_unique() {
             return None;
         }
@@ -349,7 +349,7 @@ impl<'a, T, L: AxisOps> SliceViewMutAxis<'a, T, L> {
         } = view;
         let (layout, translation) = original_layout.invert_axis(axis)?;
         let origin = storage.displace(&original_origin, translation)?;
-        validate_layout(&storage, &layout, &origin)?;
+        validate_slice_layout::<T, L::Inverted>(storage.len(), &layout, origin)?;
 
         Some(SliceViewMut {
             storage,
