@@ -1,4 +1,4 @@
-use crate::{PositionSpace, position_space::displace_in_linear_space};
+use crate::{PositionSpace, RefAccess, position_space::displace_in_linear_space};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SliceStorage<'a, T> {
@@ -22,16 +22,23 @@ impl<'a, T> SliceStorage<'a, T> {
     }
 
     #[must_use]
-    pub fn get(&self, position: usize) -> Option<&'a T> {
-        let data = self.data;
-        data.get(position)
-    }
-
-    #[must_use]
     pub fn slice(&self, start: usize, len: usize) -> Option<&'a [T]> {
         let end = start.checked_add(len)?;
         let data = self.data;
         data.get(start..end)
+    }
+}
+
+impl<'a, T> RefAccess for SliceStorage<'a, T> {
+    type Elem = T;
+    type Ref<'s>
+        = &'a T
+    where
+        Self: 's;
+
+    fn get(&self, position: &Self::Position) -> Option<Self::Ref<'_>> {
+        let data = self.data;
+        data.get(*position)
     }
 }
 
@@ -65,11 +72,6 @@ impl<'a, T> SliceStorageMut<'a, T> {
     }
 
     #[must_use]
-    pub fn get(&self, position: usize) -> Option<&T> {
-        self.data.get(position)
-    }
-
-    #[must_use]
     pub fn get_mut(&mut self, position: usize) -> Option<&mut T> {
         self.data.get_mut(position)
     }
@@ -92,6 +94,18 @@ impl<'a, T> SliceStorageMut<'a, T> {
     }
 }
 
+impl<T> RefAccess for SliceStorageMut<'_, T> {
+    type Elem = T;
+    type Ref<'s>
+        = &'s T
+    where
+        Self: 's;
+
+    fn get(&self, position: &Self::Position) -> Option<Self::Ref<'_>> {
+        self.data.get(*position)
+    }
+}
+
 impl<T> PositionSpace for SliceStorageMut<'_, T> {
     type Position = usize;
 
@@ -103,7 +117,7 @@ impl<T> PositionSpace for SliceStorageMut<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::{SliceStorage, SliceStorageMut};
-    use crate::{PositionSpace, position_space::displace_position};
+    use crate::{PositionSpace, RefAccess, position_space::displace_position};
 
     #[test]
     fn displacement_is_checked() {
@@ -125,8 +139,8 @@ mod tests {
         let storage = SliceStorage::new(&data);
 
         assert_eq!(storage.len(), 3);
-        assert_eq!(storage.get(1), Some(&20));
-        assert_eq!(storage.get(3), None);
+        assert_eq!(storage.get(&1), Some(&20));
+        assert_eq!(storage.get(&3), None);
         assert_eq!(storage.slice(1, 2), Some(&data[1..3]));
         assert_eq!(storage.slice(2, 2), None);
     }
@@ -137,11 +151,11 @@ mod tests {
         let mut storage = SliceStorageMut::new(&mut data);
 
         assert_eq!(storage.len(), 3);
-        assert_eq!(storage.get(1), Some(&20));
+        assert_eq!(storage.get(&1), Some(&20));
         if let Some(value) = storage.get_mut(1) {
             *value = 40;
         }
-        assert_eq!(storage.get(1), Some(&40));
+        assert_eq!(storage.get(&1), Some(&40));
         assert!(storage.get_mut(3).is_none());
     }
 
@@ -164,7 +178,7 @@ mod tests {
         let storage = SliceStorageMut::new(&mut data).into_shared();
 
         assert_eq!(storage.len(), 3);
-        assert_eq!(storage.get(2), Some(&30));
+        assert_eq!(storage.get(&2), Some(&30));
     }
 
     #[derive(Debug, PartialEq, Eq)]

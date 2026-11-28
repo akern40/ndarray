@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::{PositionSpace, position_space::displace_in_linear_space};
+use crate::{PositionSpace, RefAccess, position_space::displace_in_linear_space};
 
 #[derive(Debug)]
 pub struct PagedStorage<T> {
@@ -28,12 +28,6 @@ impl<T> PagedStorage<T> {
     #[must_use]
     pub fn page_count(&self) -> usize {
         self.pages.len()
-    }
-
-    #[must_use]
-    pub fn get(&self, position: usize) -> Option<&T> {
-        let (page, offset) = self.page_index(position)?;
-        self.pages.get(page)?.get(offset)
     }
 
     #[must_use]
@@ -129,6 +123,19 @@ impl<T: Clone> PagedStorage<T> {
     }
 }
 
+impl<T> RefAccess for PagedStorage<T> {
+    type Elem = T;
+    type Ref<'s>
+        = &'s T
+    where
+        Self: 's;
+
+    fn get(&self, position: &Self::Position) -> Option<Self::Ref<'_>> {
+        let (page, offset) = self.page_index(*position)?;
+        self.pages.get(page)?.get(offset)
+    }
+}
+
 impl<T> PositionSpace for PagedStorage<T> {
     type Position = usize;
 
@@ -139,7 +146,7 @@ impl<T> PositionSpace for PagedStorage<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{PagedStorage, PositionSpace};
+    use crate::{PagedStorage, PositionSpace, RefAccess};
 
     #[test]
     fn construction_rejects_zero_page_length() {
@@ -152,11 +159,11 @@ mod tests {
 
         assert_eq!(storage.len(), 7);
         assert_eq!(storage.page_count(), 3);
-        assert_eq!(storage.get(0), Some(&10));
-        assert_eq!(storage.get(2), Some(&10));
-        assert_eq!(storage.get(3), Some(&10));
-        assert_eq!(storage.get(6), Some(&10));
-        assert_eq!(storage.get(7), None);
+        assert_eq!(storage.get(&0), Some(&10));
+        assert_eq!(storage.get(&2), Some(&10));
+        assert_eq!(storage.get(&3), Some(&10));
+        assert_eq!(storage.get(&6), Some(&10));
+        assert_eq!(storage.get(&7), None);
     }
 
     #[test]
@@ -167,7 +174,7 @@ mod tests {
             *value = 40;
         }
 
-        assert_eq!(storage.get(4), Some(&40));
+        assert_eq!(storage.get(&4), Some(&40));
         assert!(storage.get_mut(7).is_none());
     }
 
@@ -179,7 +186,7 @@ mod tests {
         assert_eq!(storage.displace(&2, 5), Some(7));
         assert_eq!(storage.displace(&2, 6), None);
         assert_eq!(storage.displace(&8, 0), None);
-        assert_eq!(storage.get(7), None);
+        assert_eq!(storage.get(&7), None);
     }
 
     #[test]
@@ -226,8 +233,8 @@ mod tests {
             slice[2] = 50;
         }
 
-        assert_eq!(storage.get(3), Some(&30));
-        assert_eq!(storage.get(5), Some(&50));
+        assert_eq!(storage.get(&3), Some(&30));
+        assert_eq!(storage.get(&5), Some(&50));
     }
 
     #[test]
@@ -236,7 +243,7 @@ mod tests {
 
         assert_eq!(storage.len(), 0);
         assert_eq!(storage.page_count(), 0);
-        assert_eq!(storage.get(0), None);
+        assert_eq!(storage.get(&0), None);
         assert_eq!(storage.contiguous_len(0), Some(0));
         assert_eq!(storage.slice(0, 0), Some(&[][..]));
         assert_eq!(storage.contiguous_len(1), None);

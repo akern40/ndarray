@@ -1,6 +1,8 @@
 use nd_layout::{AxisOps, IndexSpace, Layout, Ranked};
 
-use crate::storage::{PositionSpace, SliceStorage, SliceStorageMut, validate_slice_layout};
+use crate::storage::{
+    PositionSpace, RefAccess, SliceStorage, SliceStorageMut, validate_slice_layout,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SliceView<'a, T, L: Layout> {
@@ -25,7 +27,7 @@ impl<'a, T, L: Layout> SliceView<'a, T, L> {
     pub fn get(&self, index: &L::Index) -> Option<&'a T> {
         let offset = self.layout.offset(index)?;
         let position = self.storage.displace(&self.origin, offset)?;
-        self.storage.get(position)
+        self.storage.get(&position)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &'a T> + '_ {
@@ -45,7 +47,7 @@ impl<'a, T, L: Layout> SliceView<'a, T, L> {
         let Some(position) = self.storage.displace(&self.origin, offset) else {
             unreachable!()
         };
-        let Some(value) = self.storage.get(position) else {
+        let Some(value) = self.storage.get(&position) else {
             unreachable!()
         };
         value
@@ -195,7 +197,7 @@ impl<'a, T, L: Layout> SliceViewMut<'a, T, L> {
     pub fn get(&self, index: &L::Index) -> Option<&T> {
         let offset = self.layout.offset(index)?;
         let position = self.storage.displace(&self.origin, offset)?;
-        self.storage.get(position)
+        self.storage.get(&position)
     }
 
     #[must_use]
@@ -239,7 +241,7 @@ impl<'a, T, L: Layout> SliceViewMut<'a, T, L> {
         let Some(position) = self.storage.displace(&self.origin, offset) else {
             unreachable!()
         };
-        let Some(value) = self.storage.get(position) else {
+        let Some(value) = self.storage.get(&position) else {
             unreachable!()
         };
         value
